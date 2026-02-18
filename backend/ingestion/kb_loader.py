@@ -6,8 +6,8 @@ PDF: page-by-page with 500-token sliding window and 50-token overlap.
 """
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from bs4 import BeautifulSoup, Tag
 from pypdf import PdfReader

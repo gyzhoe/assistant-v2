@@ -9,7 +9,6 @@ Usage:
   python -m ingestion.cli clear --confirm
 """
 
-import sys
 from pathlib import Path
 
 import typer
@@ -24,8 +23,9 @@ app = typer.Typer(
 
 
 def _make_pipeline() -> IngestionPipeline:
-    from app.config import settings
     import chromadb
+
+    from app.config import settings
 
     client = chromadb.PersistentClient(path=settings.chroma_path)
     return IngestionPipeline(chroma_client=client)

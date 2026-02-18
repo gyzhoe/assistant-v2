@@ -21,8 +21,8 @@ CSV format: header row with the same field names (case-insensitive).
 import csv
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 
 def _content_id(content: str) -> str:

@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ingestion.ticket_loader import load_tickets_json, load_tickets_csv, load_tickets
-
+from ingestion.ticket_loader import load_tickets, load_tickets_csv, load_tickets_json
 
 # ── Ticket loader ─────────────────────────────────────────────────────────────
 

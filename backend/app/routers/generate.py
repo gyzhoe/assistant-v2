@@ -3,7 +3,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 
 from app.models.request_models import GenerateRequest
-from app.models.response_models import ContextDoc, GenerateResponse
+from app.models.response_models import GenerateResponse
 from app.services.llm_service import LLMService
 from app.services.rag_service import RAGService
 

@@ -1,6 +1,7 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 @pytest.mark.asyncio
@@ -22,16 +23,16 @@ async def test_generate_missing_description_returns_422(client: AsyncClient) -> 
 @pytest.mark.asyncio
 async def test_generate_returns_reply(client: AsyncClient) -> None:
     with (
-        patch("app.routers.generate.RAGService") as MockRAG,
-        patch("app.routers.generate.LLMService") as MockLLM,
+        patch("app.routers.generate.RAGService") as mock_rag_cls,
+        patch("app.routers.generate.LLMService") as mock_llm_cls,
     ):
         mock_rag = MagicMock()
         mock_rag.retrieve = AsyncMock(return_value=[])
-        MockRAG.return_value = mock_rag
+        mock_rag_cls.return_value = mock_rag
 
         mock_llm = MagicMock()
         mock_llm.generate = AsyncMock(return_value="Hi Alex, here is the fix...")
-        MockLLM.return_value = mock_llm
+        mock_llm_cls.return_value = mock_llm
 
         response = await client.post("/generate", json={
             "ticket_subject": "Cannot access network drive",
@@ -52,18 +53,18 @@ async def test_generate_returns_reply(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_generate_ollama_down_returns_503(client: AsyncClient) -> None:
     with (
-        patch("app.routers.generate.RAGService") as MockRAG,
-        patch("app.routers.generate.LLMService") as MockLLM,
+        patch("app.routers.generate.RAGService") as mock_rag_cls,
+        patch("app.routers.generate.LLMService") as mock_llm_cls,
     ):
         mock_rag = MagicMock()
         mock_rag.retrieve = AsyncMock(return_value=[])
-        MockRAG.return_value = mock_rag
+        mock_rag_cls.return_value = mock_rag
 
         mock_llm = MagicMock()
         mock_llm.generate = AsyncMock(
             side_effect=ConnectionError("Ollama service unreachable at http://localhost:11434")
         )
-        MockLLM.return_value = mock_llm
+        mock_llm_cls.return_value = mock_llm
 
         response = await client.post("/generate", json={
             "ticket_subject": "Test",

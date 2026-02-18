@@ -10,8 +10,8 @@ Provides:
 
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from threading import Lock
-from typing import Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -19,7 +19,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.config import settings
-
 
 # ---------------------------------------------------------------------------
 # API Token Authentication Middleware

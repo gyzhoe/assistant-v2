@@ -1,7 +1,7 @@
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.models.response_models import ContextDoc
+import pytest
+
 from app.services.rag_service import RAGService
 
 
@@ -15,7 +15,7 @@ def make_mock_chroma() -> MagicMock:
 @pytest.mark.asyncio
 async def test_retrieve_returns_empty_when_no_collections() -> None:
     chroma = make_mock_chroma()
-    with patch.object(RAGService, "embed_svc") as mock_embed:
+    with patch.object(RAGService, "embed_svc"):
         svc = RAGService(chroma_client=chroma)
         svc.embed_svc = MagicMock()
         svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)

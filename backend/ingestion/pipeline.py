@@ -2,8 +2,8 @@
 Ingestion pipeline — orchestrates loading, embedding, and upserting into ChromaDB.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import chromadb
 import httpx
