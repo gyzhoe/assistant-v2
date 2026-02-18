@@ -1,0 +1,20 @@
+{
+  "name": "ai-helpdesk-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local AI assistant for SolarWinds Web Help Desk — Edge browser extension",
+  "workspaces": [
+    "extension"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=extension",
+    "test": "npm run test --workspace=extension",
+    "typecheck": "npm run typecheck --workspace=extension",
+    "lint": "npm run lint --workspace=extension",
+    "dev": "npm run dev --workspace=extension"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

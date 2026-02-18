@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fluent Design base styles */
+:root {
+  --accent: #0078d4;
+  --accent-hover: #106ebe;
+  --accent-dark: #005a9e;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  background: #faf9f8;
+  color: #201f1e;
+}
+
+/* Skeleton shimmer animation */
+.skeleton {
+  background: linear-gradient(90deg, #edebe9 25%, #d2d0ce 50%, #edebe9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

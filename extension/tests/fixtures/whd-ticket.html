@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ticket #1042 — Cannot access network drive</title>
+</head>
+<body>
+  <!-- Ticket detection: contains "Ticket #" and "Tech Notes" -->
+  <h2>Ticket #1042</h2>
+
+  <form id="ticketDetailForm" action="/helpdesk/ticketDetail">
+    <!-- Subject -->
+    <input id="subject" type="text" value="Cannot access network drive after password reset" />
+
+    <!-- Description -->
+    <textarea id="problemDescription">
+User Alex Johnson reports she cannot access the \\fileserver\shared drive after her password was reset yesterday. She can log into her workstation but the mapped drive shows as disconnected.
+    </textarea>
+
+    <!-- Requester -->
+    <span id="requestorName">Alex Johnson</span>
+
+    <!-- Category -->
+    <select id="categoryName">
+      <option value="1" selected>Network</option>
+      <option value="2">Hardware</option>
+    </select>
+
+    <!-- Status -->
+    <select id="statusTypeId">
+      <option value="1" selected>Open</option>
+      <option value="2">In Progress</option>
+    </select>
+
+    <!-- Tech Notes (reply textarea) -->
+    <div id="techNotesDiv">
+      <label>Tech Notes</label>
+      <textarea id="techNotes" name="techNote" placeholder="Enter reply here…"></textarea>
+    </div>
+  </form>
+</body>
+</html>
