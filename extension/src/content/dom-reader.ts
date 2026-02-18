@@ -8,7 +8,6 @@ import {
 } from '../shared/constants'
 
 export class DOMReader {
-  private selectors: typeof DEFAULT_SELECTORS = DEFAULT_SELECTORS
   private overrides: Partial<SelectorConfig> = {}
 
   constructor() {

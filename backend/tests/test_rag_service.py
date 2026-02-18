@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -15,12 +15,11 @@ def make_mock_chroma() -> MagicMock:
 @pytest.mark.asyncio
 async def test_retrieve_returns_empty_when_no_collections() -> None:
     chroma = make_mock_chroma()
-    with patch.object(RAGService, "embed_svc"):
-        svc = RAGService(chroma_client=chroma)
-        svc.embed_svc = MagicMock()
-        svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
-        results = await svc.retrieve("test query", max_docs=5)
-        assert results == []
+    svc = RAGService(chroma_client=chroma)
+    svc.embed_svc = MagicMock()
+    svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
+    results = await svc.retrieve("test query", max_docs=5)
+    assert results == []
 
 
 @pytest.mark.asyncio

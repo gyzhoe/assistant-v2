@@ -1,5 +1,4 @@
 import { DOMReader } from './dom-reader'
-import { SidebarHost } from './sidebar-host'
 import type { SidebarToContentMessage } from '../shared/messages'
 import type { DOMInserter } from './dom-inserter'
 

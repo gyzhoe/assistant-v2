@@ -24,4 +24,4 @@ class EmbedService:
                 timeout=30.0,
             )
             resp.raise_for_status()
-            return resp.json()["embedding"]
+            return list(resp.json()["embedding"])

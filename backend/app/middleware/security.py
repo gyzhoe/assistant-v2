@@ -10,7 +10,7 @@ Provides:
 
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from threading import Lock
 
 from fastapi import Request, Response
@@ -41,7 +41,7 @@ class APITokenMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._token = settings.api_token
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)
 
@@ -78,7 +78,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._counts: dict[str, list[float]] = defaultdict(list)
         self._lock = Lock()
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if request.url.path not in self.RATE_LIMITED_PATHS:
             return await call_next(request)
 
@@ -119,7 +119,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._max_bytes = max_bytes
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > self._max_bytes:
             return JSONResponse(
@@ -139,12 +139,13 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Adds defensive HTTP security headers to all responses."""
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
         # Remove server version banner
-        response.headers.pop("server", None)
+        if "server" in response.headers:
+            del response.headers["server"]
         return response

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock chrome APIs
-const mockGet = vi.fn((keys, callback) => {
+const mockGet = vi.fn((_keys, callback) => {
   callback({})
 })
 

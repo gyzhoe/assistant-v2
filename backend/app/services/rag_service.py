@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any
 
-import chromadb
+from chromadb.api import ClientAPI
 
 from app.models.response_models import ContextDoc
 from app.services.embed_service import EmbedService
@@ -13,7 +13,7 @@ class RAGService:
     TICKET_COLLECTION = "whd_tickets"
     KB_COLLECTION = "kb_articles"
 
-    def __init__(self, chroma_client: chromadb.ClientAPI) -> None:
+    def __init__(self, chroma_client: ClientAPI) -> None:
         self.client = chroma_client
         self.embed_svc = EmbedService()
 
@@ -49,7 +49,7 @@ class RAGService:
 
         n_results = min(n_results, count)
         results: Any = col.query(
-            query_embeddings=[embedding],
+            query_embeddings=[embedding],  # type: ignore[arg-type]
             n_results=n_results,
             include=["documents", "metadatas", "distances"],
         )

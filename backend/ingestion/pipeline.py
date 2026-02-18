@@ -5,8 +5,9 @@ Ingestion pipeline — orchestrates loading, embedding, and upserting into Chrom
 from collections.abc import Iterator
 from pathlib import Path
 
-import chromadb
 import httpx
+from chromadb import Collection
+from chromadb.api import ClientAPI
 
 from app.config import settings
 from ingestion.kb_loader import load_kb_html_dir, load_kb_pdf_dir
@@ -20,7 +21,7 @@ _BATCH_SIZE = 50
 
 
 class IngestionPipeline:
-    def __init__(self, chroma_client: chromadb.ClientAPI) -> None:
+    def __init__(self, chroma_client: ClientAPI) -> None:
         self.client = chroma_client
 
     # ── Ticket ingestion ─────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ class IngestionPipeline:
 
     def _upsert_stream(
         self,
-        col: chromadb.Collection,
+        col: Collection,
         stream: Iterator[tuple[str, str, dict[str, str]]],
     ) -> int:
         total = 0
@@ -85,8 +86,8 @@ class IngestionPipeline:
                 col.upsert(
                     ids=batch_ids,
                     documents=batch_docs,
-                    embeddings=batch_embeds,
-                    metadatas=batch_metas,
+                    embeddings=batch_embeds,  # type: ignore[arg-type]
+                    metadatas=batch_metas,  # type: ignore[arg-type]
                 )
                 total += len(batch_ids)
                 batch_ids, batch_docs, batch_embeds, batch_metas = [], [], [], []
@@ -96,8 +97,8 @@ class IngestionPipeline:
             col.upsert(
                 ids=batch_ids,
                 documents=batch_docs,
-                embeddings=batch_embeds,
-                metadatas=batch_metas,
+                embeddings=batch_embeds,  # type: ignore[arg-type]
+                metadatas=batch_metas,  # type: ignore[arg-type]
             )
             total += len(batch_ids)
 

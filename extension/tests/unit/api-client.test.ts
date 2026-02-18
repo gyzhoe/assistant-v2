@@ -4,10 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.stubGlobal('chrome', {
   storage: {
     sync: {
-      get: vi.fn((keys, cb) => cb({})),
+      get: vi.fn((_keys, cb) => cb({})),
     },
     local: {
-      get: vi.fn((keys, cb) => cb({})),
+      get: vi.fn((_keys, cb) => cb({})),
     },
   },
 })
