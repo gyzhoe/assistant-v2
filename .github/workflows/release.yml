@@ -20,15 +20,13 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: extension/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: extension
         run: npm ci
 
       - name: Build extension
-        working-directory: extension
-        run: npm run build
+        run: npm run build --workspace=extension
 
       - name: Zip extension artifact
         run: |
