@@ -7,6 +7,7 @@ node_modules/
 dist/
 build/
 *.zip
+release/
 
 # Python
 __pycache__/

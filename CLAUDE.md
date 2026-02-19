@@ -134,6 +134,9 @@ git branch -d feat/phase-1-backend
 - No backwards-compatibility shims — if something is removed, remove it completely
 - Comments only where logic is non-obvious
 - New logic always accompanied by tests before the task is marked `completed`
+- **Never bypass warnings or lint errors** — fix the root cause, don't suppress or ignore
+- **Never use placeholders or stubs** — implement the real thing or don't commit it
+- **Never hide bugs** — if something is broken, fix it; don't work around it or paper over it
 
 ---
 
