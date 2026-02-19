@@ -17,7 +17,7 @@ from app.routers import generate, health, ingest, models
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Initialize ChromaDB client and verify Ollama on startup."""
     app.state.chroma_client = chromadb.PersistentClient(path=settings.chroma_path)
     app.state.ollama_reachable = False
