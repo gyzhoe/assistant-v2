@@ -16,7 +16,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppSupportURL={#MyAppURL}
-DefaultDirName={localappdata}\{#MyAppName}
+DefaultDirName={localappdata}\AIHelpdeskAssistant
 DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
@@ -107,8 +107,8 @@ Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; StatusM
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""; StatusMsg: "Downloading LLM models (this may take several minutes)..."; Components: models; Flags: waituntilterminated shellexec
 
 ; Post-install: open extension folder and Edge extensions page
-Filename: "explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
-Filename: "msedge.exe"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked
+Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
+Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
 [UninstallRun]
 ; Stop and remove the Windows Service
@@ -118,17 +118,53 @@ Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskBackend confirm"
 [Code]
 function IsOllamaInstalled: Boolean;
 var
-  OllamaPath: String;
+  ResultCode: Integer;
 begin
-  OllamaPath := ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe');
-  Result := FileExists(OllamaPath);
+  // Check common install locations
+  Result :=
+    FileExists(ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe')) or
+    FileExists(ExpandConstant('{pf}\Ollama\ollama.exe')) or
+    FileExists(ExpandConstant('{pf32}\Ollama\ollama.exe'));
+
+  // Also check if ollama is on PATH (covers custom installs)
+  if not Result then
+  begin
+    Result := Exec('cmd.exe', '/c where ollama >nul 2>nul', '', SW_HIDE,
+                   ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  end;
+end;
+
+function GetEdgePath(Param: String): String;
+var
+  EdgePath: String;
+begin
+  // Check registry for Edge install path (works for all install types)
+  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe',
+                         '', EdgePath) then
+    Result := EdgePath
+  else if RegQueryStringValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe',
+                              '', EdgePath) then
+    Result := EdgePath
+  else
+    // Fallback to common locations
+    if FileExists(ExpandConstant('{pf32}\Microsoft\Edge\Application\msedge.exe')) then
+      Result := ExpandConstant('{pf32}\Microsoft\Edge\Application\msedge.exe')
+    else if FileExists(ExpandConstant('{pf}\Microsoft\Edge\Application\msedge.exe')) then
+      Result := ExpandConstant('{pf}\Microsoft\Edge\Application\msedge.exe')
+    else
+      Result := 'msedge.exe';
+end;
+
+function EdgeExists: Boolean;
+begin
+  Result := GetEdgePath('') <> 'msedge.exe';
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpSelectComponents then
   begin
-    // Auto-deselect Ollama if already installed
+    // Auto-deselect Ollama component if already installed
     if IsOllamaInstalled then
     begin
       WizardForm.ComponentsList.Checked[2] := False;
