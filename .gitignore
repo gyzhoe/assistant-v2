@@ -10,6 +10,7 @@ build/
 release/
 
 # Python
+uv.lock
 __pycache__/
 *.py[cod]
 *$py.class
@@ -65,3 +66,4 @@ test-results/
 *.tmp
 *.bak
 .claude/
+CLAUDE.md
