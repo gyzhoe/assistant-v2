@@ -65,21 +65,23 @@ jobs:
           Copy-Item $uvExe.FullName "installer/deps/uv.exe"
           Remove-Item "installer/deps/uv.zip", "installer/deps/uv-extract" -Recurse -Force
 
-      - name: Install NSSM via winget
+      - name: Download NSSM
         shell: pwsh
         run: |
-          winget install --id NSSM.NSSM --accept-package-agreements --accept-source-agreements 2>$null
-          # winget installs to Program Files; find and copy it
-          $nssmExe = Get-ChildItem -Path "$env:ProgramFiles", "${env:ProgramFiles(x86)}", "$env:LOCALAPPDATA" -Recurse -Filter "nssm.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '64' -or $_.Directory.Name -eq 'win64' } |
-            Select-Object -First 1
-          if (-not $nssmExe) {
-            $nssmExe = Get-Command nssm.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-            if ($nssmExe) { $nssmExe = Get-Item $nssmExe }
+          New-Item -ItemType Directory -Force -Path installer/nssm | Out-Null
+          # winget installs NSSM and adds it to PATH
+          winget install --id NSSM.NSSM --accept-package-agreements --accept-source-agreements --silent
+          # Refresh PATH so we can find the binary
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+          $nssmPath = (Get-Command nssm -ErrorAction SilentlyContinue).Source
+          if (-not $nssmPath) {
+            # Fallback: search the winget install location
+            $nssmPath = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Links\nssm.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
           }
-          if (-not $nssmExe) { throw "NSSM not found after install" }
-          Copy-Item $nssmExe.FullName "installer/nssm/nssm.exe"
-          Write-Host "NSSM copied from: $($nssmExe.FullName)"
+          if (-not $nssmPath) { throw "NSSM not found after winget install" }
+          Copy-Item $nssmPath "installer/nssm/nssm.exe"
+          Write-Host "NSSM copied from: $nssmPath"
 
       - name: Set version from tag
         shell: pwsh
