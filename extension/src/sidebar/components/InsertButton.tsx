@@ -68,6 +68,10 @@ export function InsertButton(): React.ReactElement {
       >
         {label}
       </button>
+      <div aria-live="polite" className="sr-only">
+        {insertState === 'success' && 'Reply inserted successfully.'}
+        {insertState === 'error' && `Insert failed: ${errorMsg}`}
+      </div>
       {insertState === 'error' && errorMsg && (
         <p className="text-xs text-red-600" role="alert">{errorMsg}</p>
       )}

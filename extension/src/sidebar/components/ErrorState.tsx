@@ -17,7 +17,8 @@ export function ErrorState({ message, onRetry }: ErrorStateProps): React.ReactEl
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-xs text-accent hover:text-accent-dark underline"
+          className="text-xs text-accent hover:text-accent-dark underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          aria-label="Retry generating reply"
         >
           Try again
         </button>

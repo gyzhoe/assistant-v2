@@ -38,7 +38,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
           </p>
           <button
             onClick={this.handleCopyError}
-            className="text-xs underline text-accent hover:text-accent-dark text-left"
+            className="text-xs underline text-accent hover:text-accent-dark text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            aria-label="Copy error details to clipboard"
           >
             Copy error details
           </button>
