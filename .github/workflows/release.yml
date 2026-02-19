@@ -65,35 +65,21 @@ jobs:
           Copy-Item $uvExe.FullName "installer/deps/uv.exe"
           Remove-Item "installer/deps/uv.zip", "installer/deps/uv-extract" -Recurse -Force
 
-      - name: Download NSSM
+      - name: Install NSSM via winget
         shell: pwsh
         run: |
-          # Try primary source, fallback to Chocolatey CDN
-          $urls = @(
-            "https://nssm.cc/release/nssm-2.24.zip",
-            "https://community.chocolatey.org/api/v2/package/NSSM/2.24.101.20180116"
-          )
-          $downloaded = $false
-          foreach ($url in $urls) {
-            try {
-              Invoke-WebRequest -Uri $url -OutFile "installer/nssm-pkg.zip" -TimeoutSec 30 -ErrorAction Stop
-              $downloaded = $true
-              Write-Host "Downloaded NSSM from $url"
-              break
-            } catch {
-              Write-Host "Failed to download from $url, trying next..."
-            }
-          }
-          if (-not $downloaded) { throw "Failed to download NSSM from all sources" }
-          Expand-Archive -Path "installer/nssm-pkg.zip" -DestinationPath "installer/nssm-extract" -Force
-          $nssmExe = Get-ChildItem -Path "installer/nssm-extract" -Recurse -Filter "nssm.exe" |
-            Where-Object { $_.Directory.Name -eq "win64" -or $_.Directory.Name -eq "tools" } |
+          winget install --id NSSM.NSSM --accept-package-agreements --accept-source-agreements 2>$null
+          # winget installs to Program Files; find and copy it
+          $nssmExe = Get-ChildItem -Path "$env:ProgramFiles", "${env:ProgramFiles(x86)}", "$env:LOCALAPPDATA" -Recurse -Filter "nssm.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '64' -or $_.Directory.Name -eq 'win64' } |
             Select-Object -First 1
           if (-not $nssmExe) {
-            $nssmExe = Get-ChildItem -Path "installer/nssm-extract" -Recurse -Filter "nssm.exe" | Select-Object -First 1
+            $nssmExe = Get-Command nssm.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+            if ($nssmExe) { $nssmExe = Get-Item $nssmExe }
           }
+          if (-not $nssmExe) { throw "NSSM not found after install" }
           Copy-Item $nssmExe.FullName "installer/nssm/nssm.exe"
-          Remove-Item "installer/nssm-pkg.zip", "installer/nssm-extract" -Recurse -Force
+          Write-Host "NSSM copied from: $($nssmExe.FullName)"
 
       - name: Set version from tag
         shell: pwsh
