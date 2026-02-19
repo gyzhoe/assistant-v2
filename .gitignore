@@ -62,6 +62,10 @@ coverage/
 playwright-report/
 test-results/
 
+# Installer build deps (downloaded at CI time)
+installer/nssm/
+installer/deps/
+
 # Temporary
 *.tmp
 *.bak
