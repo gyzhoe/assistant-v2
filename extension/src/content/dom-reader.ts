@@ -1,23 +1,24 @@
-import type { TicketData, SelectorConfig } from '../shared/types'
+import type { TicketData, SelectorConfig, AppSettings } from '../shared/types'
 import {
   DEFAULT_SELECTORS,
   TICKET_URL_PATTERNS,
   TICKET_DOM_MARKERS,
   TICKET_CONTENT_SENTINELS,
-  STORAGE_KEY_SELECTOR_OVERRIDES,
+  STORAGE_KEY_SETTINGS,
 } from '../shared/constants'
 
 export class DOMReader {
   private overrides: Partial<SelectorConfig> = {}
 
   constructor() {
-    // Load overrides from storage asynchronously; extraction uses defaults until loaded
+    // Load overrides from app settings asynchronously; extraction uses defaults until loaded
     this.loadOverrides()
   }
 
   private loadOverrides(): void {
-    chrome.storage.sync.get(STORAGE_KEY_SELECTOR_OVERRIDES, (result) => {
-      this.overrides = (result[STORAGE_KEY_SELECTOR_OVERRIDES] as Partial<SelectorConfig>) ?? {}
+    chrome.storage.sync.get(STORAGE_KEY_SETTINGS, (result) => {
+      const saved = result[STORAGE_KEY_SETTINGS] as Partial<AppSettings> | undefined
+      this.overrides = saved?.selectorOverrides ?? {}
     })
   }
 

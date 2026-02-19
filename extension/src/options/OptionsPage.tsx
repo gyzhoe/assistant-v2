@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from 'react'
 import { storage, DEFAULT_SETTINGS } from '../lib/storage'
 import { apiClient } from '../lib/api-client'
-import type { AppSettings } from '../shared/types'
-import { STORAGE_KEY_SECRETS } from '../shared/constants'
+import type { AppSettings, SelectorConfig } from '../shared/types'
+import { STORAGE_KEY_SECRETS, DEFAULT_SELECTORS } from '../shared/constants'
+
+const SELECTOR_FIELDS: { key: keyof SelectorConfig; label: string }[] = [
+  { key: 'subject', label: 'Subject' },
+  { key: 'description', label: 'Description' },
+  { key: 'requesterName', label: 'Requester Name' },
+  { key: 'category', label: 'Category' },
+  { key: 'status', label: 'Status' },
+  { key: 'techNotes', label: 'Tech Notes' },
+]
 
 export default function OptionsPage(): React.ReactElement {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
@@ -10,6 +19,7 @@ export default function OptionsPage(): React.ReactElement {
   const [isSaving, setIsSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const [models, setModels] = useState<string[]>([])
+  const [selectorsExpanded, setSelectorsExpanded] = useState(false)
 
   useEffect(() => {
     storage.getSettings().then(setSettings)
@@ -23,6 +33,18 @@ export default function OptionsPage(): React.ReactElement {
 
   const handleChange = (field: keyof AppSettings, value: string) => {
     setSettings((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSelectorChange = (field: keyof SelectorConfig, value: string) => {
+    setSettings((prev) => {
+      const overrides = { ...prev.selectorOverrides }
+      if (value.trim()) {
+        overrides[field] = value.trim()
+      } else {
+        delete overrides[field]
+      }
+      return { ...prev, selectorOverrides: overrides }
+    })
   }
 
   const handleSave = async () => {
@@ -149,6 +171,44 @@ export default function OptionsPage(): React.ReactElement {
             Stored only on this device — never synced to other browsers.
             Leave blank if token auth is disabled on the backend.
           </p>
+        </div>
+
+        {/* DOM Selector Overrides */}
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSelectorsExpanded((v) => !v)}
+            className="flex items-center gap-1 text-sm font-medium text-neutral-700 hover:text-neutral-900"
+            aria-expanded={selectorsExpanded ? 'true' : 'false'}
+            aria-controls="selector-overrides"
+          >
+            <span className="text-xs">{selectorsExpanded ? '▾' : '▸'}</span>
+            DOM Selector Overrides
+          </button>
+          <p className="text-xs text-neutral-500">
+            Override the CSS selectors used to read ticket fields from the WHD page.
+            Leave blank to use the default selector.
+          </p>
+
+          {selectorsExpanded && (
+            <div id="selector-overrides" className="flex flex-col gap-3 mt-2 pl-2 border-l-2 border-neutral-200">
+              {SELECTOR_FIELDS.map(({ key, label }) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label htmlFor={`selector-${key}`} className="text-xs font-medium text-neutral-600">
+                    {label}
+                  </label>
+                  <input
+                    id={`selector-${key}`}
+                    type="text"
+                    value={settings.selectorOverrides[key] ?? ''}
+                    onChange={(e) => handleSelectorChange(key, e.target.value)}
+                    className="border border-neutral-300 rounded px-3 py-1 text-xs text-neutral-800 bg-white focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+                    placeholder={DEFAULT_SELECTORS[key]}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Save */}
