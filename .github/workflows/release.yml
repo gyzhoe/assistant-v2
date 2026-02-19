@@ -9,10 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and Release Extension
+  # Job 1: Build the extension on Ubuntu (fast, has Node)
+  extension-build:
+    name: Build Extension
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
 
@@ -22,30 +22,98 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
+      - run: npm run build --workspace=extension
 
-      - name: Build extension
-        run: npm run build --workspace=extension
+      - name: Upload extension dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-dist
+          path: extension/dist/
 
-      - name: Zip extension artifact
+  # Job 2: Build the Inno Setup installer on Windows
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: extension-build
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download extension dist
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-dist
+          path: extension/dist/
+
+      - name: Download Ollama installer
+        shell: pwsh
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          cd extension/dist
-          zip -r "../../assistant-extension-${TAG}.zip" .
-          echo "ARTIFACT=assistant-extension-${TAG}.zip" >> $GITHUB_ENV
+          New-Item -ItemType Directory -Force -Path installer/deps | Out-Null
+          Invoke-WebRequest -Uri "https://ollama.com/download/OllamaSetup.exe" `
+            -OutFile "installer/deps/OllamaSetup.exe"
+          $size = [math]::Round((Get-Item installer/deps/OllamaSetup.exe).Length / 1MB, 1)
+          Write-Host "Ollama installer: $size MB"
+
+      - name: Download uv standalone
+        shell: pwsh
+        run: |
+          $uvUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $uvUrl -OutFile "installer/deps/uv.zip"
+          Expand-Archive -Path "installer/deps/uv.zip" -DestinationPath "installer/deps/uv-extract" -Force
+          # uv.exe may be nested inside a directory
+          $uvExe = Get-ChildItem -Path "installer/deps/uv-extract" -Recurse -Filter "uv.exe" | Select-Object -First 1
+          Copy-Item $uvExe.FullName "installer/deps/uv.exe"
+          Remove-Item "installer/deps/uv.zip", "installer/deps/uv-extract" -Recurse -Force
+
+      - name: Download NSSM
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "installer/nssm.zip"
+          Expand-Archive -Path "installer/nssm.zip" -DestinationPath "installer/nssm-extract" -Force
+          Copy-Item "installer/nssm-extract/nssm-2.24/win64/nssm.exe" "installer/nssm/nssm.exe"
+          Remove-Item "installer/nssm.zip", "installer/nssm-extract" -Recurse -Force
+
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          Write-Host "Version: $version"
+          echo "APP_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Compile Inno Setup installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.5
+        with:
+          path: installer/setup.iss
+          options: /DMyAppVersion=${{ env.APP_VERSION }}
+
+      - name: Zip extension standalone
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          Compress-Archive -Path "extension/dist/*" -DestinationPath "assistant-extension-${tag}.zip"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARTIFACT }}
+          files: |
+            installer/output/AIHelpdeskAssistant-Setup-*.exe
+            assistant-extension-*.zip
           generate_release_notes: true
           body: |
             ## AI Helpdesk Assistant ${{ github.ref_name }}
 
-            ### Installation
-            1. Download `assistant-extension-*.zip` below
-            2. Extract to a local folder
-            3. Open Edge → `edge://extensions` → Enable Developer mode
-            4. Click "Load unpacked" and select the extracted folder
-            5. Ensure the Python backend is running: `uv run uvicorn app.main:app --port 8765`
+            ### Downloads
+            - **`AIHelpdeskAssistant-Setup-*.exe`** — Full Windows installer (Ollama + backend + extension)
+            - **`assistant-extension-*.zip`** — Standalone Edge extension only
+
+            ### Installation (Recommended)
+            1. Download and run the `.exe` installer
+            2. Follow the wizard — all defaults are fine
+            3. Model download (~2.3 GB) will start automatically after install
+            4. When prompted, load the extension in Edge: `edge://extensions` → Load unpacked → select the extension folder
+
+            ### Manual Setup
+            1. Install [Ollama](https://ollama.com) and pull models: `ollama pull llama3.2:3b && ollama pull nomic-embed-text`
+            2. Install [uv](https://docs.astral.sh/uv/): `pip install uv`
+            3. Clone the repo and run: `cd backend && uv sync && uv run uvicorn app.main:app --port 8765`
+            4. Extract the extension zip and load unpacked in Edge
