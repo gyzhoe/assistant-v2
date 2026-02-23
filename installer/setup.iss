@@ -87,6 +87,7 @@ Source: "scripts\stop-backend.ps1";   DestDir: "{app}\scripts";          Flags: 
 Source: "scripts\pull-models.ps1";    DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\import-models.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\check-health.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\tray-monitor.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
 
 [Icons]
 ; Start/Stop use NSSM directly — instant, no terminal window
@@ -100,9 +101,8 @@ Name: "{group}\Setup LLM Models";    Filename: "powershell.exe"; Parameters: "-E
 Name: "{group}\Health Check";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\check-health.ps1"""
 Name: "{group}\Extension Folder";    Filename: "{app}\extension"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-; Desktop shortcuts — use PowerShell scripts (no admin needed)
-Name: "{userdesktop}\AI Helpdesk — Start"; Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\start-backend.ps1"""; WorkingDir: "{app}\backend"; IconFilename: "{app}\extension\icons\icon48.png"
-Name: "{userdesktop}\AI Helpdesk — Stop";  Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\stop-backend.ps1"""; IconFilename: "{app}\extension\icons\icon48.png"
+; Auto-start tray monitor at Windows login
+Name: "{userstartup}\AI Helpdesk Monitor"; Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\tray-monitor.ps1"""; WorkingDir: "{app}"
 
 [Run]
 ; Install Ollama silently
@@ -146,11 +146,20 @@ Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; StatusM
 ; Import bundled LLM models (copies pre-downloaded model files)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
 
+; Launch tray monitor after install
+Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\tray-monitor.ps1"""; Description: "Launch system tray monitor"; Flags: postinstall nowait skipifsilent
+
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
+[UninstallDelete]
+; Remove startup shortcut
+Type: files; Name: "{userstartup}\AI Helpdesk Monitor.lnk"
+
 [UninstallRun]
+; Kill tray monitor process before uninstall (match by command line)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*tray-monitor*' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"""; Flags: runhidden waituntilterminated
 ; Stop and remove backend service
 Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend"; Flags: runhidden waituntilterminated
 Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskBackend confirm"; Flags: runhidden waituntilterminated
