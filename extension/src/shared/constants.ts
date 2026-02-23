@@ -7,6 +7,8 @@ export const DEFAULT_SELECTORS = {
     'td.subject > span',
     'h1',
     '.pageTitle',
+    // WHD table-layout: first ProblemType select is often the effective subject
+    'select[id^="ProblemType_"] option:checked',
   ],
 
   description: 'textarea#problemDescription',
@@ -24,13 +26,26 @@ export const DEFAULT_SELECTORS = {
     'td[data-label="Requester"] span',
     'td[data-label="Client"] a',
     'a[href*="ClientActions"]',
+    // WHD table-layout: client name in .defaultFont cell
+    'td.defaultFont',
   ],
 
   category: 'select#categoryName option:checked',
-  categoryFallbacks: ['span.categoryName', 'select#requestTypeName option:checked'],
+  categoryFallbacks: [
+    'span.categoryName',
+    'select#requestTypeName option:checked',
+    // WHD table-layout: ProblemType selects with dynamic IDs
+    'select[id^="ProblemType_"] option:checked',
+  ],
 
   status: 'select#statusTypeId option:checked',
-  statusFallbacks: ['span.statusName', 'select#statustype option:checked', 'select[name*="status"] option:checked'],
+  statusFallbacks: [
+    'span.statusName',
+    'select#statustype option:checked',
+    'select[name*="status"] option:checked',
+    // WHD table-layout: status search popup
+    'select#statusSearchPopup option:checked',
+  ],
 
   techNotes: 'textarea#techNotes',
   techNotesFallbacks: ['textarea[name="techNote"]', '#techNotesDiv textarea'],

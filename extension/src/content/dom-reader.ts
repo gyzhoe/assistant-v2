@@ -7,11 +7,24 @@ import {
   STORAGE_KEY_SETTINGS,
 } from '../shared/constants'
 
+/**
+ * WHD label-text → field mapping.
+ * Used as a last-resort fallback when CSS selectors don't match.
+ * The reader scans `td.labelStandard` cells for these labels,
+ * then extracts the value from the adjacent cell in the same row.
+ */
+const WHD_LABELS: Record<string, readonly string[]> = {
+  subject: ['Subject', 'Short Subject'],
+  description: ['Request Detail', 'Problem Description', 'Detail'],
+  requesterName: ['Client', 'Requester', 'Requested By'],
+  category: ['Request Type', 'Category', 'Problem Type'],
+  status: ['Status'],
+}
+
 export class DOMReader {
   private overrides: Partial<SelectorConfig> = {}
 
   constructor() {
-    // Load overrides from app settings asynchronously; extraction uses defaults until loaded
     this.loadOverrides()
   }
 
@@ -26,13 +39,9 @@ export class DOMReader {
   isTicketPage(): boolean {
     const url = window.location.href
 
-    // Tier 1: URL pattern
     if (TICKET_URL_PATTERNS.some((p) => p.test(url))) return true
-
-    // Tier 2: DOM marker
     if (TICKET_DOM_MARKERS.some((sel) => document.querySelector(sel) !== null)) return true
 
-    // Tier 3: Content sentinel
     const bodyText = document.body?.innerText ?? ''
     if (TICKET_CONTENT_SENTINELS.every((sentinel) => bodyText.includes(sentinel))) return true
 
@@ -43,11 +52,15 @@ export class DOMReader {
   extract(): TicketData | null {
     if (!this.isTicketPage()) return null
 
+    const subject = this.readField('subject', DEFAULT_SELECTORS.subject, DEFAULT_SELECTORS.subjectFallbacks)
+    const category = this.readField('category', DEFAULT_SELECTORS.category, DEFAULT_SELECTORS.categoryFallbacks)
+
     return {
-      subject: this.readField('subject', DEFAULT_SELECTORS.subject, DEFAULT_SELECTORS.subjectFallbacks),
+      // If no explicit subject field exists, use the request type (common in WHD)
+      subject: subject || category || this.extractSubjectFromTitle(),
       description: this.readField('description', DEFAULT_SELECTORS.description, DEFAULT_SELECTORS.descriptionFallbacks),
       requesterName: this.readField('requesterName', DEFAULT_SELECTORS.requesterName, DEFAULT_SELECTORS.requesterNameFallbacks),
-      category: this.readField('category', DEFAULT_SELECTORS.category, DEFAULT_SELECTORS.categoryFallbacks),
+      category,
       status: this.readField('status', DEFAULT_SELECTORS.status, DEFAULT_SELECTORS.statusFallbacks),
       ticketUrl: window.location.href,
     }
@@ -61,6 +74,7 @@ export class DOMReader {
     const override = this.overrides[field]
     const selectors = override ? [override, primary, ...fallbacks] : [primary, ...fallbacks]
 
+    // Tier 1: CSS selectors
     for (const sel of selectors) {
       const el = document.querySelector(sel)
       if (el) {
@@ -68,7 +82,88 @@ export class DOMReader {
         if (text) return text
       }
     }
+
+    // Tier 2: WHD label-based extraction (table layout)
+    const labels = WHD_LABELS[field]
+    if (labels) {
+      const result = this.readByLabel(labels)
+      if (result) return result
+    }
+
     return ''
+  }
+
+  /**
+   * Label-based extraction for WHD's table layout.
+   * Finds `td.labelStandard` cells matching the target text,
+   * then reads the value from the adjacent data cell.
+   */
+  private readByLabel(labelTexts: readonly string[]): string {
+    const allLabels = document.querySelectorAll('td.labelStandard')
+
+    for (const labelCell of allLabels) {
+      const cellText = labelCell.textContent?.trim()
+      if (!cellText || !labelTexts.some((t) => cellText === t)) continue
+
+      // Strategy 1: scan sibling TDs in the same row
+      const row = labelCell.closest('tr')
+      if (row) {
+        const cells = row.querySelectorAll('td:not(.labelStandard)')
+        for (const cell of cells) {
+          const val = this.extractValueFromCell(cell)
+          if (val) return val
+        }
+      }
+
+      // Strategy 2: next sibling elements (for non-standard row layouts)
+      let sibling = labelCell.nextElementSibling
+      while (sibling) {
+        if (sibling.tagName === 'TD' || sibling.tagName === 'DIV') {
+          const val = this.extractValueFromCell(sibling)
+          if (val) return val
+        }
+        sibling = sibling.nextElementSibling
+      }
+
+      // Strategy 3: look at the next table row (some WHD layouts split label/value across rows)
+      const nextRow = row?.nextElementSibling
+      if (nextRow?.tagName === 'TR') {
+        const cells = nextRow.querySelectorAll('td')
+        for (const cell of cells) {
+          const val = this.extractValueFromCell(cell)
+          if (val) return val
+        }
+      }
+    }
+    return ''
+  }
+
+  /** Extract a meaningful value from a table cell, preferring interactive elements. */
+  private extractValueFromCell(cell: Element): string {
+    // Prefer interactive elements inside the cell
+    const select = cell.querySelector('select')
+    if (select) return this.extractText(select)
+
+    const textarea = cell.querySelector('textarea')
+    if (textarea) return this.extractText(textarea)
+
+    const input = cell.querySelector('input:not([type="hidden"]):not([type="submit"])')
+    if (input) return this.extractText(input)
+
+    // Fall back to the cell's own text, ignoring label-like cells
+    const text = cell.textContent?.trim() ?? ''
+    if (text && !cell.classList.contains('labelStandard')) return text
+
+    return ''
+  }
+
+  /** Try to extract a ticket subject from document.title. */
+  private extractSubjectFromTitle(): string {
+    const title = document.title?.trim() ?? ''
+    // Common WHD title formats: "Web Help Desk - Ticket #105733 - Subject Here"
+    const match = title.match(/(?:ticket\s*#?\d+\s*[-–—]\s*)(.+)/i)
+      ?? title.match(/[-–—]\s*(.+)$/)
+    return match?.[1]?.trim() ?? ''
   }
 
   private extractText(el: Element): string {

@@ -96,4 +96,40 @@ describe('DOMReader — extract', () => {
     const reader = new DOMReader()
     expect(reader.extract()).toBeNull()
   })
+
+  it('extracts fields from WHD table layout via label-based fallback', async () => {
+    document.body.innerHTML = `
+      <table>
+        <tr>
+          <td class="labelStandard">Client</td>
+          <td class="defaultFont">Hannelore Hendrickx - u0156011</td>
+        </tr>
+        <tr>
+          <td class="labelStandard">Request Type</td>
+          <td>
+            <select id="ProblemType_123"><option value="0">Account</option><option selected value="14">NEED A PHONE NUMBER</option></select>
+          </td>
+        </tr>
+        <tr>
+          <td class="labelStandard">Request Detail</td>
+          <td>Please set up a new phone line for the department.</td>
+        </tr>
+        <tr>
+          <td class="labelStandard">Status</td>
+          <td><select><option selected>Open</option><option>Closed</option></select></td>
+        </tr>
+      </table>
+    `
+    vi.resetModules()
+    const { DOMReader } = await import('../../src/content/dom-reader')
+    const reader = new DOMReader()
+    const data = reader.extract()
+    expect(data).not.toBeNull()
+    expect(data?.requesterName).toBe('Hannelore Hendrickx - u0156011')
+    expect(data?.category).toBe('NEED A PHONE NUMBER')
+    expect(data?.description).toBe('Please set up a new phone line for the department.')
+    expect(data?.status).toBe('Open')
+    // Subject falls back to category when no explicit subject field exists
+    expect(data?.subject).toBe('NEED A PHONE NUMBER')
+  })
 })
