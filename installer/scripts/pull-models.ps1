@@ -1,8 +1,21 @@
-# pull-models.ps1 — Download required Ollama LLM models
+# pull-models.ps1 — Download or import required Ollama LLM models
 param([switch]$NonInteractive)
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== Pulling Ollama Models ===" -ForegroundColor Cyan
+Write-Host "=== Setting Up Ollama Models ===" -ForegroundColor Cyan
+
+# Check for bundled offline models first
+$AppDir = Split-Path -Parent $PSScriptRoot
+$bundledModels = Join-Path $AppDir "deps\ollama-models"
+
+if (Test-Path (Join-Path $bundledModels "blobs")) {
+    Write-Host "Found bundled models — importing offline..." -ForegroundColor Yellow
+    & powershell.exe -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "import-models.ps1") -AppDir $AppDir -NonInteractive:$NonInteractive
+    exit $LASTEXITCODE
+}
+
+# Online fallback: pull models from Ollama registry
+Write-Host "No bundled models found — pulling from internet..." -ForegroundColor Yellow
 
 # Wait for Ollama to be available
 $maxRetries = 30

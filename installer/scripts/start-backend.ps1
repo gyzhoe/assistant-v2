@@ -1,8 +1,15 @@
 # start-backend.ps1 — Start the FastAPI backend server
 $AppDir = Split-Path -Parent $PSScriptRoot
-$uvPath = Join-Path $AppDir "tools\uv.exe"
 $backendDir = Join-Path $AppDir "backend"
+$venvPython = Join-Path $backendDir ".venv\Scripts\python.exe"
+$uvPath = Join-Path $AppDir "tools\uv.exe"
 
 Push-Location $backendDir
-& $uvPath run uvicorn app.main:app --host 127.0.0.1 --port 8765
+if (Test-Path $venvPython) {
+    # Use venv directly (works offline — no resolution step)
+    & $venvPython -m uvicorn app.main:app --host 127.0.0.1 --port 8765
+} else {
+    # Fallback to uv run (requires uv sync to have been run)
+    & $uvPath run uvicorn app.main:app --host 127.0.0.1 --port 8765
+}
 Pop-Location

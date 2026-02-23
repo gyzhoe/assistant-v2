@@ -42,7 +42,7 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
 Name: "ollama";    Description: "Ollama LLM Runtime (~100 MB)";                 Types: full custom
-Name: "models";    Description: "Download LLM models after install (~2.3 GB)";  Types: full custom
+Name: "models";    Description: "LLM models — llama3.2:3b + nomic-embed-text (~2.2 GB)"; Types: full custom
 Name: "service";   Description: "Register backend as Windows Service (auto-start)"; Types: full custom
 Name: "ollamasvc"; Description: "Run Ollama as hidden service (no tray icon)";     Types: full custom
 
@@ -68,11 +68,24 @@ Source: "nssm\nssm.exe";             DestDir: "{app}\tools";             Flags: 
 ; Ollama installer (downloaded by CI)
 Source: "deps\OllamaSetup.exe";      DestDir: "{tmp}";                   Flags: ignoreversion deleteafterinstall; Components: ollama
 
+; Bundled Python 3.13 standalone (offline install)
+Source: "deps\python\*";             DestDir: "{app}\deps\python";       Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
+
+; Pre-downloaded Python wheels (offline install)
+Source: "deps\wheels\*";             DestDir: "{app}\deps\wheels";       Flags: ignoreversion; Components: backend
+
+; Requirements file for offline pip install
+Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: ignoreversion; Components: backend
+
+; Bundled Ollama models (offline install — ~2.2 GB)
+Source: "deps\ollama-models\*";      DestDir: "{app}\deps\ollama-models"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: models
+
 ; PowerShell helper scripts
 Source: "scripts\post-install.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\start-backend.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\stop-backend.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\pull-models.ps1";    DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\import-models.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\check-health.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
 
 [Icons]
@@ -83,13 +96,13 @@ Name: "{group}\Stop Backend";        Filename: "{app}\tools\nssm.exe"; Parameter
 Name: "{group}\Start Backend";       Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\start-backend.ps1"""; WorkingDir: "{app}\backend"; Components: not service
 Name: "{group}\Stop Backend";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\stop-backend.ps1"""; Components: not service
 ; Interactive diagnostic tools — keep visible PowerShell
-Name: "{group}\Pull LLM Models";     Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""
+Name: "{group}\Setup LLM Models";    Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""
 Name: "{group}\Health Check";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\check-health.ps1"""
 Name: "{group}\Extension Folder";    Filename: "{app}\extension"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-; Desktop shortcut for quick backend control
-Name: "{userdesktop}\AI Helpdesk — Start"; Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; Components: service; IconFilename: "{app}\extension\icons\icon48.png"
-Name: "{userdesktop}\AI Helpdesk — Stop";  Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend";  Components: service; IconFilename: "{app}\extension\icons\icon48.png"
+; Desktop shortcuts — use PowerShell scripts (no admin needed)
+Name: "{userdesktop}\AI Helpdesk — Start"; Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\start-backend.ps1"""; WorkingDir: "{app}\backend"; IconFilename: "{app}\extension\icons\icon48.png"
+Name: "{userdesktop}\AI Helpdesk — Stop";  Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\stop-backend.ps1"""; IconFilename: "{app}\extension\icons\icon48.png"
 
 [Run]
 ; Install Ollama silently
@@ -130,8 +143,8 @@ Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppRotateBy
 ; Start the service
 Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; StatusMsg: "Starting backend service..."; Components: service; Flags: waituntilterminated runhidden
 
-; Pull LLM models (hidden during install — progress shown in status bar)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\pull-models.ps1"" -NonInteractive"; StatusMsg: "Downloading LLM models (this may take several minutes)..."; Components: models; Flags: waituntilterminated runhidden
+; Import bundled LLM models (copies pre-downloaded model files)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
 
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
