@@ -20,8 +20,9 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     start = time.monotonic()
 
     # Retrieve context
+    query = f"{body.ticket_subject}\n\n{body.ticket_description}".strip()
     context_docs = await rag.retrieve(
-        query=f"{body.ticket_subject}\n\n{body.ticket_description}",
+        query=query or "general helpdesk inquiry",
         max_docs=body.max_context_docs,
     )
 
@@ -56,12 +57,14 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
 
 
 def _build_prompt(body: GenerateRequest, context_text: str) -> str:
+    subject = body.ticket_subject or "(not available)"
+    description = body.ticket_description or "(not available)"
     return f"""You are a helpful IT helpdesk assistant. Answer the technician's query based on the ticket context and retrieved knowledge below.
 
 TICKET
-Subject: {body.ticket_subject}
+Subject: {subject}
 Requester: {body.requester_name} | Category: {body.category} | Status: {body.status}
-Description: {body.ticket_description}
+Description: {description}
 
 RELEVANT CONTEXT
 {context_text if context_text else "No relevant context found in knowledge base."}

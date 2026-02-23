@@ -1,4 +1,5 @@
 # stop-backend.ps1 — Stop the AI Helpdesk Backend service
+param([switch]$NonInteractive)
 $AppDir = Split-Path -Parent $PSScriptRoot
 $nssmPath = Join-Path $AppDir "tools\nssm.exe"
 
@@ -10,4 +11,4 @@ if (Test-Path $nssmPath) {
     Get-Process -Name "uvicorn" -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 
-Read-Host "Press Enter to close"
+if (-not $NonInteractive) { Read-Host "Press Enter to close" }

@@ -5,19 +5,45 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_generate_missing_subject_returns_422(client: AsyncClient) -> None:
-    response = await client.post("/generate", json={
-        "ticket_description": "Cannot login to VPN"
-    })
-    assert response.status_code == 422
+async def test_generate_without_subject_returns_200(client: AsyncClient) -> None:
+    with (
+        patch("app.routers.generate.RAGService") as mock_rag_cls,
+        patch("app.routers.generate.LLMService") as mock_llm_cls,
+    ):
+        mock_rag = MagicMock()
+        mock_rag.retrieve = AsyncMock(return_value=[])
+        mock_rag_cls.return_value = mock_rag
+
+        mock_llm = MagicMock()
+        mock_llm.generate = AsyncMock(return_value="VPN fix applied.")
+        mock_llm_cls.return_value = mock_llm
+
+        response = await client.post("/generate", json={
+            "ticket_description": "Cannot login to VPN",
+        })
+        assert response.status_code == 200
+        assert response.json()["reply"] == "VPN fix applied."
 
 
 @pytest.mark.asyncio
-async def test_generate_missing_description_returns_422(client: AsyncClient) -> None:
-    response = await client.post("/generate", json={
-        "ticket_subject": "VPN Issue"
-    })
-    assert response.status_code == 422
+async def test_generate_without_description_returns_200(client: AsyncClient) -> None:
+    with (
+        patch("app.routers.generate.RAGService") as mock_rag_cls,
+        patch("app.routers.generate.LLMService") as mock_llm_cls,
+    ):
+        mock_rag = MagicMock()
+        mock_rag.retrieve = AsyncMock(return_value=[])
+        mock_rag_cls.return_value = mock_rag
+
+        mock_llm = MagicMock()
+        mock_llm.generate = AsyncMock(return_value="VPN issue resolved.")
+        mock_llm_cls.return_value = mock_llm
+
+        response = await client.post("/generate", json={
+            "ticket_subject": "VPN Issue",
+        })
+        assert response.status_code == 200
+        assert response.json()["reply"] == "VPN issue resolved."
 
 
 @pytest.mark.asyncio

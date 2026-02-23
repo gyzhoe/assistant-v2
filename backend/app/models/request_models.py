@@ -10,10 +10,10 @@ _MODEL_MAX = 100
 
 class GenerateRequest(BaseModel):
     ticket_subject: str = Field(
-        ..., min_length=1, max_length=_SUBJECT_MAX, description="Ticket subject line"
+        default="", max_length=_SUBJECT_MAX, description="Ticket subject line"
     )
     ticket_description: str = Field(
-        ..., min_length=1, max_length=_DESCRIPTION_MAX, description="Full problem description"
+        default="", max_length=_DESCRIPTION_MAX, description="Full problem description"
     )
     requester_name: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="Requester's name")
     category: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="WHD ticket category")

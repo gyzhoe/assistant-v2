@@ -1,19 +1,36 @@
 /** Default selector config for WHD DOM fields */
 export const DEFAULT_SELECTORS = {
   subject: 'input#subject',
-  subjectFallbacks: ['td.subject > span', 'h1'],
+  subjectFallbacks: [
+    'input#shortSubject',
+    '#shortSubject',
+    'td.subject > span',
+    'h1',
+    '.pageTitle',
+  ],
 
   description: 'textarea#problemDescription',
-  descriptionFallbacks: ['div.problemDescription', '#ticketDescription'],
+  descriptionFallbacks: [
+    'textarea#requestDetail',
+    '#requestDetail',
+    'div.problemDescription',
+    '#ticketDescription',
+    'textarea#detail',
+    '#detail',
+  ],
 
   requesterName: 'span#requestorName',
-  requesterNameFallbacks: ['td[data-label="Requester"] span'],
+  requesterNameFallbacks: [
+    'td[data-label="Requester"] span',
+    'td[data-label="Client"] a',
+    'a[href*="ClientActions"]',
+  ],
 
   category: 'select#categoryName option:checked',
-  categoryFallbacks: ['span.categoryName'],
+  categoryFallbacks: ['span.categoryName', 'select#requestTypeName option:checked'],
 
   status: 'select#statusTypeId option:checked',
-  statusFallbacks: ['span.statusName'],
+  statusFallbacks: ['span.statusName', 'select#statustype option:checked', 'select[name*="status"] option:checked'],
 
   techNotes: 'textarea#techNotes',
   techNotesFallbacks: ['textarea[name="techNote"]', '#techNotesDiv textarea'],
@@ -41,10 +58,10 @@ export const DEFAULT_MODEL = 'llama3.2:3b'
 export const OBSERVER_DEBOUNCE_MS = 300
 
 /** Ticket URL detection patterns */
-export const TICKET_URL_PATTERNS = [/\/ticketDetail/, /\/tickets\/\d+/]
+export const TICKET_URL_PATTERNS = [/\/ticketDetail/, /\/tickets\/\d+/, /\/TicketActions\/view\?ticket=/]
 
 /** DOM markers that confirm we're on a ticket page */
-export const TICKET_DOM_MARKERS = ['#ticketDetailForm', 'form[action*="ticketDetail"]']
+export const TICKET_DOM_MARKERS = ['#ticketDetailForm', 'form[action*="ticketDetail"]', 'form[action*="TicketActions"]']
 
 /** Text sentinels that confirm ticket page content */
-export const TICKET_CONTENT_SENTINELS = ['Ticket #', 'Tech Notes']
+export const TICKET_CONTENT_SENTINELS = ['Ticket Details', 'Tech']

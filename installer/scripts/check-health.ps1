@@ -1,4 +1,5 @@
 # check-health.ps1 — Verify all components are working
+param([switch]$NonInteractive)
 $AppDir = Split-Path -Parent $PSScriptRoot
 $allGood = $true
 
@@ -47,4 +48,4 @@ if ($allGood) {
     Write-Host "Some components need attention." -ForegroundColor Yellow
 }
 
-Read-Host "`nPress Enter to close"
+if (-not $NonInteractive) { Read-Host "`nPress Enter to close" }

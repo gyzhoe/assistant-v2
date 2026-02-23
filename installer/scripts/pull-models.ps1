@@ -1,4 +1,5 @@
 # pull-models.ps1 — Download required Ollama LLM models
+param([switch]$NonInteractive)
 $ErrorActionPreference = "Stop"
 
 Write-Host "=== Pulling Ollama Models ===" -ForegroundColor Cyan
@@ -19,7 +20,7 @@ while ($retryCount -lt $maxRetries) {
 
 if ($retryCount -eq $maxRetries) {
     Write-Host "ERROR: Ollama is not running. Please start Ollama first." -ForegroundColor Red
-    Read-Host "Press Enter to exit"
+    if (-not $NonInteractive) { Read-Host "Press Enter to exit" }
     exit 1
 }
 
@@ -30,4 +31,4 @@ Write-Host "Pulling nomic-embed-text (~275 MB)..." -ForegroundColor Yellow
 & ollama pull nomic-embed-text
 
 Write-Host "Model download complete!" -ForegroundColor Green
-Read-Host "Press Enter to close"
+if (-not $NonInteractive) { Read-Host "Press Enter to close" }

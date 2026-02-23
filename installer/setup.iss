@@ -44,6 +44,7 @@ Name: "extension"; Description: "Edge Extension (pre-built)";                   
 Name: "ollama";    Description: "Ollama LLM Runtime (~100 MB)";                 Types: full custom
 Name: "models";    Description: "Download LLM models after install (~2.3 GB)";  Types: full custom
 Name: "service";   Description: "Register backend as Windows Service (auto-start)"; Types: full custom
+Name: "ollamasvc"; Description: "Run Ollama as hidden service (no tray icon)";     Types: full custom
 
 [Dirs]
 Name: "{app}\logs"
@@ -62,7 +63,7 @@ Source: "..\extension\dist\*";        DestDir: "{app}\extension";         Flags:
 Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
 ; NSSM for service registration (downloaded by CI)
-Source: "nssm\nssm.exe";             DestDir: "{app}\tools";             Flags: ignoreversion; Components: service
+Source: "nssm\nssm.exe";             DestDir: "{app}\tools";             Flags: ignoreversion; Components: service ollamasvc
 
 ; Ollama installer (downloaded by CI)
 Source: "deps\OllamaSetup.exe";      DestDir: "{tmp}";                   Flags: ignoreversion deleteafterinstall; Components: ollama
@@ -75,16 +76,42 @@ Source: "scripts\pull-models.ps1";    DestDir: "{app}\scripts";          Flags: 
 Source: "scripts\check-health.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Start Backend";       Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\start-backend.ps1"""; WorkingDir: "{app}\backend"
-Name: "{group}\Stop Backend";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\stop-backend.ps1"""
+; Start/Stop use NSSM directly — instant, no terminal window
+Name: "{group}\Start Backend";       Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; Components: service
+Name: "{group}\Stop Backend";        Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend";  Components: service
+; Fallback shortcuts when service component not selected
+Name: "{group}\Start Backend";       Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\start-backend.ps1"""; WorkingDir: "{app}\backend"; Components: not service
+Name: "{group}\Stop Backend";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\stop-backend.ps1"""; Components: not service
+; Interactive diagnostic tools — keep visible PowerShell
 Name: "{group}\Pull LLM Models";     Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""
 Name: "{group}\Health Check";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\check-health.ps1"""
 Name: "{group}\Extension Folder";    Filename: "{app}\extension"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+; Desktop shortcut for quick backend control
+Name: "{userdesktop}\AI Helpdesk — Start"; Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; Components: service; IconFilename: "{app}\extension\icons\icon48.png"
+Name: "{userdesktop}\AI Helpdesk — Stop";  Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend";  Components: service; IconFilename: "{app}\extension\icons\icon48.png"
 
 [Run]
 ; Install Ollama silently
 Filename: "{tmp}\OllamaSetup.exe"; Parameters: "/VERYSILENT /NORESTART"; StatusMsg: "Installing Ollama..."; Components: ollama; Flags: waituntilterminated
+
+; Kill Ollama desktop app (installer starts it automatically with tray icon)
+Filename: "taskkill.exe"; Parameters: "/F /IM ""Ollama.exe"""; Components: ollamasvc; Flags: waituntilterminated runhidden; StatusMsg: "Stopping Ollama desktop app..."
+
+; Remove Ollama auto-start entries (Startup folder shortcut + registry key)
+Filename: "cmd.exe"; Parameters: "/c del /q ""{userstartup}\Ollama.lnk"" 2>nul"; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "reg.exe"; Parameters: "delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v Ollama /f"; Components: ollamasvc; Flags: waituntilterminated runhidden
+
+; Register Ollama as hidden NSSM service (ollama serve on port 11434)
+Filename: "{app}\tools\nssm.exe"; Parameters: "install AIHelpdeskOllama ""{code:GetOllamaExePath}"" serve"; StatusMsg: "Registering Ollama service..."; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama DisplayName ""AI Helpdesk Ollama"""; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama Description ""Ollama LLM inference server for AI Helpdesk"""; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama Start SERVICE_DELAYED_AUTO_START"; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppStdout ""{app}\logs\ollama-stdout.log"""; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppStderr ""{app}\logs\ollama-stderr.log"""; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppRotateFiles 1"; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppRotateBytes 5242880"; Components: ollamasvc; Flags: waituntilterminated runhidden
+Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskOllama"; StatusMsg: "Starting Ollama service..."; Components: ollamasvc; Flags: waituntilterminated runhidden
 
 ; Run post-install script (installs Python 3.13 via uv, creates venv, installs deps)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\post-install.ps1"" -AppDir ""{app}"""; StatusMsg: "Setting up Python environment..."; Flags: waituntilterminated runhidden; Components: backend
@@ -103,19 +130,36 @@ Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppRotateBy
 ; Start the service
 Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; StatusMsg: "Starting backend service..."; Components: service; Flags: waituntilterminated runhidden
 
-; Pull LLM models (optional, shown to user — this is the longest step)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""; StatusMsg: "Downloading LLM models (this may take several minutes)..."; Components: models; Flags: waituntilterminated shellexec
+; Pull LLM models (hidden during install — progress shown in status bar)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\pull-models.ps1"" -NonInteractive"; StatusMsg: "Downloading LLM models (this may take several minutes)..."; Components: models; Flags: waituntilterminated runhidden
 
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
 [UninstallRun]
-; Stop and remove the Windows Service
+; Stop and remove backend service
 Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend"; Flags: runhidden waituntilterminated
 Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskBackend confirm"; Flags: runhidden waituntilterminated
+; Stop and remove Ollama service
+Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskOllama"; Flags: runhidden waituntilterminated
+Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskOllama confirm"; Flags: runhidden waituntilterminated
 
 [Code]
+function GetOllamaExePath(Param: String): String;
+begin
+  // Check common Ollama install locations
+  if FileExists(ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe')) then
+    Result := ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe')
+  else if FileExists(ExpandConstant('{pf}\Ollama\ollama.exe')) then
+    Result := ExpandConstant('{pf}\Ollama\ollama.exe')
+  else if FileExists(ExpandConstant('{pf32}\Ollama\ollama.exe')) then
+    Result := ExpandConstant('{pf32}\Ollama\ollama.exe')
+  else
+    // Fallback — assume it's on PATH
+    Result := 'ollama.exe';
+end;
+
 function IsOllamaInstalled: Boolean;
 var
   ResultCode: Integer;

@@ -28,9 +28,9 @@
     }
   ],
   "side_panel": {
-    "default_path": "sidebar.html"
+    "default_path": "src/sidebar/index.html"
   },
-  "options_page": "options.html",
+  "options_page": "src/options/index.html",
   "action": {
     "default_title": "AI Helpdesk Assistant",
     "default_icon": {

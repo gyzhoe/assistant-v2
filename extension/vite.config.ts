@@ -9,9 +9,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        // MV3 multi-entry build
+        // MV3 multi-entry build (content script built separately as IIFE)
         'background/service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
-        'content/index': resolve(__dirname, 'src/content/index.ts'),
         sidebar: resolve(__dirname, 'src/sidebar/index.html'),
         options: resolve(__dirname, 'src/options/index.html'),
       },
