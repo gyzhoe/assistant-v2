@@ -4,6 +4,14 @@
 
 $AppDir = Split-Path -Parent $PSScriptRoot
 
+# --- Single-instance guard using a named mutex ---
+$mutex = New-Object System.Threading.Mutex($false, "Global\AIHelpdeskTrayMonitor")
+if (-not $mutex.WaitOne(0, $false)) {
+    # Another instance is already running
+    $mutex.Dispose()
+    return
+}
+
 # --- Hide the console window ---
 Add-Type @"
 using System;
@@ -122,4 +130,9 @@ $timer.Add_Tick({
 $timer.Start()
 
 # --- Run the message loop (blocks until Application.Exit) ---
-[System.Windows.Forms.Application]::Run()
+try {
+    [System.Windows.Forms.Application]::Run()
+} finally {
+    $mutex.ReleaseMutex()
+    $mutex.Dispose()
+}
