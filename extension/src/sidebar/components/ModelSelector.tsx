@@ -17,15 +17,12 @@ export function ModelSelector(): React.ReactElement {
   }, [])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-neutral-100">
-      <label htmlFor="model-select" className="text-xs text-neutral-500 flex-shrink-0">
-        Model
-      </label>
+    <div className="control-row">
+      <label htmlFor="model-select">Model</label>
       <select
         id="model-select"
         value={selectedModel}
         onChange={(e) => setSelectedModel(e.target.value)}
-        className="text-xs border border-neutral-300 rounded px-1.5 py-0.5 bg-white text-neutral-800 flex-1 min-w-0"
         aria-label="Select LLM model"
       >
         {models.map((m) => (

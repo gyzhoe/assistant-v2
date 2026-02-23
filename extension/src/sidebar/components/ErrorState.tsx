@@ -8,16 +8,16 @@ interface ErrorStateProps {
 export function ErrorState({ message, onRetry }: ErrorStateProps): React.ReactElement {
   return (
     <div
-      className="mx-3 my-2 p-3 bg-red-50 border border-red-200 rounded text-sm"
+      className="alert-banner error"
       role="alert"
       aria-live="assertive"
     >
-      <p className="font-semibold text-red-700 mb-1">Error</p>
-      <p className="text-red-600 text-xs mb-2">{message}</p>
+      <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Error</p>
+      <p style={{ marginBottom: '0.5rem' }}>{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-xs text-accent hover:text-accent-dark underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', textDecoration: 'underline', cursor: 'pointer', fontSize: 'inherit' }}
           aria-label="Retry generating reply"
         >
           Try again

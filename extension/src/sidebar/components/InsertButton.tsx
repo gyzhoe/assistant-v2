@@ -42,20 +42,15 @@ export function InsertButton(): React.ReactElement {
   const disabled = !reply || isGenerating || insertState === 'loading'
 
   const buttonClass = clsx(
-    'w-full py-1.5 px-3 rounded text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-    {
-      'bg-accent text-white hover:bg-accent-hover': insertState === 'idle',
-      'bg-neutral-300 text-neutral-500 cursor-not-allowed': disabled && insertState !== 'success',
-      'bg-green-600 text-white': insertState === 'success',
-      'bg-red-600 text-white': insertState === 'error',
-    }
+    'secondary-btn',
+    { success: insertState === 'success', error: insertState === 'error' }
   )
 
   const label =
     insertState === 'loading' ? 'Inserting…' :
-    insertState === 'success' ? 'Inserted ✓' :
+    insertState === 'success' ? 'Inserted \u2713' :
     insertState === 'error' ? 'Insert failed' :
-    'Insert into reply'
+    'Insert into WHD reply'
 
   return (
     <div className="flex flex-col gap-1">
@@ -73,7 +68,7 @@ export function InsertButton(): React.ReactElement {
         {insertState === 'error' && `Insert failed: ${errorMsg}`}
       </div>
       {insertState === 'error' && errorMsg && (
-        <p className="text-xs text-red-600" role="alert">{errorMsg}</p>
+        <p className="support-text error-text" role="alert">{errorMsg}</p>
       )}
     </div>
   )
