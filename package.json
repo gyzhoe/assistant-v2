@@ -1,6 +1,6 @@
 {
   "name": "ai-helpdesk-assistant",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Local AI assistant for SolarWinds Web Help Desk — Edge browser extension",
   "workspaces": [
