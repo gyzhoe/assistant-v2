@@ -14,8 +14,8 @@ export default function App(): React.ReactElement {
   }, [])
 
   return (
-    <ErrorBoundary>
-      <div className="app-shell" data-theme={resolvedTheme}>
+    <div className="app-shell" data-theme={resolvedTheme}>
+      <ErrorBoundary>
         <header className="app-header" role="banner">
           <div className="brand-mark" aria-hidden="true">
             AI
@@ -34,7 +34,7 @@ export default function App(): React.ReactElement {
           <BackendControl />
           <ReplyPanel />
         </main>
-      </div>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </div>
   )
 }
