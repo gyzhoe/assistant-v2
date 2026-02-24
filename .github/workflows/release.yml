@@ -91,7 +91,7 @@ jobs:
           echo "APP_VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Compile Inno Setup installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.5
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: installer/setup.iss
           options: /DMyAppVersion=${{ env.APP_VERSION }}
