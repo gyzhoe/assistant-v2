@@ -61,8 +61,21 @@ $trayIcon.Icon = $iconGray
 $trayIcon.Text = "AI Helpdesk: Starting..."
 $trayIcon.Visible = $true
 
+# --- Helper to launch dashboard (reused by menu item and double-click) ---
+function Open-Dashboard {
+    $dashScript = Join-Path $AppDir "scripts\dashboard.ps1"
+    Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$dashScript`"" -WindowStyle Hidden
+}
+
+# --- Double-click opens dashboard ---
+$trayIcon.Add_DoubleClick({ Open-Dashboard })
+
 # --- Context menu ---
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
+
+$miDashboard = New-Object System.Windows.Forms.ToolStripMenuItem("Open Dashboard")
+$miDashboard.Font = New-Object System.Drawing.Font($miDashboard.Font, [System.Drawing.FontStyle]::Bold)
+$miDashboard.Add_Click({ Open-Dashboard })
 
 $miStart = New-Object System.Windows.Forms.ToolStripMenuItem("Start Backend")
 $miStart.Add_Click({
@@ -74,12 +87,6 @@ $miStop = New-Object System.Windows.Forms.ToolStripMenuItem("Stop Backend")
 $miStop.Add_Click({
     $script = Join-Path $AppDir "scripts\stop-backend.ps1"
     Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$script`" -NonInteractive" -WindowStyle Hidden
-})
-
-$miHealth = New-Object System.Windows.Forms.ToolStripMenuItem("Health Check")
-$miHealth.Add_Click({
-    $script = Join-Path $AppDir "scripts\check-health.ps1"
-    Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$script`""
 })
 
 $miFolder = New-Object System.Windows.Forms.ToolStripMenuItem("Open Extension Folder")
@@ -99,7 +106,7 @@ $miExit.Add_Click({
     [System.Windows.Forms.Application]::Exit()
 })
 
-$menu.Items.AddRange(@($miStart, $miStop, $miHealth, $miFolder, $miSep, $miExit))
+$menu.Items.AddRange(@($miDashboard, $miStart, $miStop, $miFolder, $miSep, $miExit))
 $trayIcon.ContextMenuStrip = $menu
 
 # --- Health polling timer ---

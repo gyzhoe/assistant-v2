@@ -65,6 +65,7 @@ test-results/
 # Installer build deps (downloaded at CI time)
 installer/nssm/
 installer/deps/
+installer/output/
 
 # Temporary
 *.tmp

@@ -87,9 +87,13 @@ Source: "scripts\stop-backend.ps1";   DestDir: "{app}\scripts";          Flags: 
 Source: "scripts\pull-models.ps1";    DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\import-models.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\check-health.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\tray-monitor.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\tray-monitor.ps1";       DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\dashboard.ps1";          DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\uninstall-cleanup.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
 
 [Icons]
+; Dashboard — main Start Menu entry
+Name: "{group}\AI Helpdesk Assistant"; Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\dashboard.ps1"""; WorkingDir: "{app}"; Comment: "Open the service dashboard"
 ; Start/Stop use NSSM directly — instant, no terminal window
 Name: "{group}\Start Backend";       Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; Components: service
 Name: "{group}\Stop Backend";        Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend";  Components: service
@@ -158,8 +162,10 @@ Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "O
 Type: files; Name: "{userstartup}\AI Helpdesk Monitor.lnk"
 
 [UninstallRun]
-; Kill tray monitor process before uninstall (match by command line)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*tray-monitor*' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"""; Flags: runhidden waituntilterminated
+; Cleanup dialog — offer Ollama/model removal before anything is torn down
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated
+; Kill tray monitor and dashboard processes before uninstall
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*tray-monitor*' -or $_.CommandLine -like '*dashboard*') -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"""; Flags: runhidden waituntilterminated
 ; Stop and remove backend service
 Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend"; Flags: runhidden waituntilterminated
 Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskBackend confirm"; Flags: runhidden waituntilterminated
