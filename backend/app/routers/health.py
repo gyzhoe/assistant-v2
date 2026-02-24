@@ -1,3 +1,9 @@
+import asyncio
+import os
+import signal
+import subprocess
+import sys
+
 import httpx
 from fastapi import APIRouter, Request
 
@@ -35,3 +41,58 @@ async def health_check(request: Request) -> dict[str, object]:
         "chroma_doc_counts": chroma_doc_counts,
         "version": settings.version,
     }
+
+
+@router.post("/shutdown")
+async def shutdown_backend() -> dict[str, str]:
+    """Gracefully shut down the backend server after a short delay."""
+
+    async def _delayed_kill() -> None:
+        await asyncio.sleep(0.5)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    asyncio.get_event_loop().create_task(_delayed_kill())
+    return {"status": "shutting_down"}
+
+
+@router.post("/ollama/start")
+async def start_ollama() -> dict[str, str]:
+    """Start the Ollama server as a detached background process."""
+    # Check if already running
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{settings.ollama_base_url}/api/tags", timeout=3.0)
+            if resp.status_code == 200:
+                return {"status": "already_running"}
+    except Exception:
+        pass
+
+    creation_flags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+    subprocess.Popen(
+        ["ollama", "serve"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creation_flags,
+    )
+    return {"status": "starting"}
+
+
+@router.post("/ollama/stop")
+async def stop_ollama() -> dict[str, str]:
+    """Stop the Ollama server process."""
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/IM", "ollama.exe", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        subprocess.run(
+            ["taskkill", "/IM", "ollama_llama_server.exe", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    else:
+        subprocess.run(["pkill", "-f", "ollama"], check=False)
+    return {"status": "stopping"}

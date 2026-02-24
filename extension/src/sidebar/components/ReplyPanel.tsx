@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useTicketData } from '../hooks/useTicketData'
 import { useGenerateReply } from '../hooks/useGenerateReply'
@@ -7,9 +7,6 @@ import { ModelSelector } from './ModelSelector'
 import { SkeletonLoader } from './SkeletonLoader'
 import { InsertButton } from './InsertButton'
 import { ErrorState } from './ErrorState'
-import { apiClient } from '../../lib/api-client'
-
-type HealthStatus = 'loading' | 'ready' | 'error'
 
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
@@ -20,57 +17,9 @@ export function ReplyPanel(): React.ReactElement {
   const reply = useSidebarStore((s) => s.reply)
   const isGenerating = useSidebarStore((s) => s.isGenerating)
   const generateError = useSidebarStore((s) => s.generateError)
-  const selectedModel = useSidebarStore((s) => s.selectedModel)
-
-  const [healthStatus, setHealthStatus] = useState<HealthStatus>('loading')
-  const [ollamaReachable, setOllamaReachable] = useState(true)
-
-  useEffect(() => {
-    apiClient.health().then((h) => {
-      setOllamaReachable(h.ollama_reachable)
-      setHealthStatus(h.ollama_reachable ? 'ready' : 'error')
-    }).catch(() => {
-      setOllamaReachable(false)
-      setHealthStatus('error')
-    })
-  }, [])
-
-  const readiness = useMemo(() => [
-    { label: 'Ticket detected', ok: Boolean(isTicketPage && ticketData) },
-    { label: 'Backend connected', ok: ollamaReachable },
-    { label: 'Model selected', ok: selectedModel.length > 0 },
-  ], [isTicketPage, ticketData, ollamaReachable, selectedModel])
-
-  const chipClass =
-    healthStatus === 'ready' ? 'ok' :
-    healthStatus === 'loading' ? 'pending' : 'error'
-
-  const chipLabel =
-    healthStatus === 'ready' ? 'Ready' :
-    healthStatus === 'loading' ? 'Checking' : 'Attention'
 
   return (
     <>
-      {/* Session readiness */}
-      <section className="panel" aria-label="Workflow readiness">
-        <div className="section-heading-row">
-          <h2 className="section-heading">Session readiness</h2>
-          <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
-        </div>
-        {!ollamaReachable && healthStatus === 'error' && (
-          <p className="support-text error-text" role="alert" aria-live="assertive">
-            <strong>Ollama is not reachable.</strong> Start Ollama and ensure the backend is running, then refresh.
-          </p>
-        )}
-        <div className="badge-grid">
-          {readiness.map((r) => (
-            <span key={r.label} className={`badge${r.ok ? ' ok' : ''}`}>
-              {r.ok ? '\u2713' : '\u2022'} {r.label}
-            </span>
-          ))}
-        </div>
-      </section>
-
       {/* Ticket context */}
       <section className="panel" aria-label="Ticket details">
         <h2 className="section-heading">Ticket context</h2>
@@ -89,7 +38,7 @@ export function ReplyPanel(): React.ReactElement {
           disabled={isGenerating || !ticketData}
           className="primary-btn"
           aria-label="Generate AI reply for this ticket"
-          aria-busy={isGenerating}
+          aria-busy={isGenerating ? 'true' : undefined}
         >
           {isGenerating ? 'Generating…' : 'Generate Reply'}
         </button>

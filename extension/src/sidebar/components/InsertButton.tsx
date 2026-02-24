@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import type { ContentToSidebarMessage } from '../../shared/messages'
 import { clsx } from 'clsx'
@@ -11,22 +11,28 @@ export function InsertButton(): React.ReactElement {
   const setIsInserted = useSidebarStore((s) => s.setIsInserted)
   const [insertState, setInsertState] = useState<InsertState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const listener = (message: ContentToSidebarMessage) => {
       if (message.type === 'INSERT_SUCCESS') {
         setInsertState('success')
         setIsInserted(true)
-        setTimeout(() => setInsertState('idle'), 2000)
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => setInsertState('idle'), 2000)
       } else if (message.type === 'INSERT_FAILED') {
         setInsertState('error')
         setErrorMsg(message.payload.reason)
-        setTimeout(() => setInsertState('idle'), 3000)
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => setInsertState('idle'), 3000)
       }
     }
 
     chrome.runtime.onMessage.addListener(listener)
-    return () => chrome.runtime.onMessage.removeListener(listener)
+    return () => {
+      chrome.runtime.onMessage.removeListener(listener)
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
   }, [setIsInserted])
 
   const handleInsert = () => {
@@ -59,7 +65,7 @@ export function InsertButton(): React.ReactElement {
         disabled={disabled}
         className={buttonClass}
         aria-label="Insert generated reply into WHD reply textarea"
-        aria-busy={insertState === 'loading'}
+        aria-busy={insertState === 'loading' ? 'true' : undefined}
       >
         {label}
       </button>

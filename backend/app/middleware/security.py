@@ -8,10 +8,10 @@ Provides:
 - Security headers
 """
 
+import asyncio
 import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from threading import Lock
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -35,7 +35,7 @@ class APITokenMiddleware(BaseHTTPMiddleware):
     /health is exempt so operators can monitor without the token.
     """
 
-    EXEMPT_PATHS = {"/health", "/docs", "/openapi.json"}
+    EXEMPT_PATHS = {"/health", "/shutdown", "/ollama/start", "/ollama/stop", "/docs", "/openapi.json"}
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -76,7 +76,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._max = max_per_minute
         self._window = 60.0  # seconds
         self._counts: dict[str, list[float]] = defaultdict(list)
-        self._lock = Lock()
+        self._lock = asyncio.Lock()
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if request.url.path not in self.RATE_LIMITED_PATHS:
@@ -85,7 +85,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         now = time.monotonic()
 
-        with self._lock:
+        async with self._lock:
             timestamps = self._counts[client_ip]
             # Remove timestamps outside the window
             self._counts[client_ip] = [t for t in timestamps if now - t < self._window]
@@ -121,15 +121,23 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > self._max_bytes:
-            return JSONResponse(
-                status_code=413,
-                content={
-                    "detail": f"Request body too large. Max {self._max_bytes} bytes.",
-                    "error_code": "PAYLOAD_TOO_LARGE",
-                },
-            )
+        if content_length:
+            if int(content_length) > self._max_bytes:
+                return self._too_large()
+        elif request.method in {"POST", "PUT", "PATCH"}:
+            body = await request.body()
+            if len(body) > self._max_bytes:
+                return self._too_large()
         return await call_next(request)
+
+    def _too_large(self) -> JSONResponse:
+        return JSONResponse(
+            status_code=413,
+            content={
+                "detail": f"Request body too large. Max {self._max_bytes} bytes.",
+                "error_code": "PAYLOAD_TOO_LARGE",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

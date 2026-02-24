@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { DEFAULT_MODEL } from '../../shared/constants'
 import type { TicketData, GenerateResponse } from '../../shared/types'
 
 interface SidebarState {
@@ -29,7 +30,7 @@ export const useSidebarStore = create<SidebarState>((set) => ({
   isGenerating: false,
   generateError: null,
   lastResponse: null,
-  selectedModel: 'llama3.2:3b',
+  selectedModel: DEFAULT_MODEL,
   isInserted: false,
 
   setTicketData: (data) => set({ ticketData: data }),

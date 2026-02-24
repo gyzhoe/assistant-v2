@@ -1,7 +1,5 @@
 import type { GenerateRequest, GenerateResponse, HealthResponse } from '../shared/types'
-import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS } from '../shared/constants'
-
-const STORAGE_KEY_SECRETS = 'localSecrets'
+import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
 
 async function getBackendUrl(): Promise<string> {
   return new Promise((resolve) => {
@@ -48,9 +46,27 @@ export const apiClient = {
   async health(): Promise<HealthResponse> {
     const base = await getBackendUrl()
     // /health is exempt from token auth — no token sent
-    const resp = await fetch(`${base}/health`)
+    const resp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) })
     if (!resp.ok) throw new ApiError(resp.status, { detail: 'Health check failed' })
     return resp.json() as Promise<HealthResponse>
+  },
+
+  async shutdown(): Promise<void> {
+    const base = await getBackendUrl()
+    // Server may die before responding — use a short timeout and ignore errors
+    await fetch(`${base}/shutdown`, { method: 'POST', signal: AbortSignal.timeout(2000) }).catch(() => {})
+  },
+
+  async ollamaStart(): Promise<{ status: string }> {
+    const base = await getBackendUrl()
+    const resp = await fetch(`${base}/ollama/start`, { method: 'POST' })
+    return resp.json() as Promise<{ status: string }>
+  },
+
+  async ollamaStop(): Promise<{ status: string }> {
+    const base = await getBackendUrl()
+    const resp = await fetch(`${base}/ollama/stop`, { method: 'POST' })
+    return resp.json() as Promise<{ status: string }>
   },
 
   async models(): Promise<string[]> {
@@ -60,6 +76,27 @@ export const apiClient = {
     const data = (await resp.json()) as { models: string[] }
     return data.models
   },
+}
+
+const NATIVE_HOST = 'com.assistant.backend_manager'
+
+interface NativeResponse {
+  ok: boolean
+  status?: string
+  error?: string
+}
+
+/** Send a command to the native messaging host to start a service. */
+export function sendNativeCommand(action: string): Promise<NativeResponse> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST, { action }, (response: NativeResponse) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, error: chrome.runtime.lastError.message })
+      } else {
+        resolve(response)
+      }
+    })
+  })
 }
 
 export class ApiError extends Error {

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { BackendControl } from './components/BackendControl'
 import { ReplyPanel } from './components/ReplyPanel'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ThemeToggle } from './components/ThemeToggle'
@@ -30,6 +31,7 @@ export default function App(): React.ReactElement {
           />
         </header>
         <main ref={mainRef} className="app-main" role="main" tabIndex={-1}>
+          <BackendControl />
           <ReplyPanel />
         </main>
       </div>

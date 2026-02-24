@@ -1,0 +1,9 @@
+{
+  "name": "com.assistant.backend_manager",
+  "description": "AI Helpdesk Assistant - Service Manager",
+  "path": "C:\\Playground\\git\\assistant-worktrees\\dark-mode\\backend\\native_host.cmd",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://mkhkabmndgmlmampkplmgdaaijjoaabl/"
+  ]
+}

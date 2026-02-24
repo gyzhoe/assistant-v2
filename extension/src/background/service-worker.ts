@@ -44,21 +44,22 @@ chrome.runtime.onMessage.addListener(
       // Forward from sidebar → active tab's content script
       const tabId = sender.tab?.id
       if (tabId !== undefined) {
-        chrome.tabs.sendMessage(tabId, msg as SidebarToContentMessage).catch(() => {
-          // Content script may not be injected — ignore
-        })
+        chrome.tabs.sendMessage(tabId, msg as SidebarToContentMessage)
+          .then(() => sendResponse({ ok: true }))
+          .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
       } else {
         // Sender is sidebar — query the active tab
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const activeTab = tabs[0]
           if (activeTab?.id !== undefined) {
-            chrome.tabs.sendMessage(activeTab.id, msg as SidebarToContentMessage).catch(() => {
-              // Ignore
-            })
+            chrome.tabs.sendMessage(activeTab.id, msg as SidebarToContentMessage)
+              .then(() => sendResponse({ ok: true }))
+              .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
+          } else {
+            sendResponse({ ok: false, reason: 'no active tab' })
           }
         })
       }
-      sendResponse({ ok: true })
       return true
     }
 

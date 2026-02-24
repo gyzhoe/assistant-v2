@@ -188,6 +188,49 @@ body {
   gap: 0.5rem;
 }
 
+/* ─── Collapsible panel ───────────────────────────── */
+.collapsible-trigger {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.collapsible-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 0.3rem;
+}
+
+.heading-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.chevron {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 0.25rem solid transparent;
+  border-right: 0.25rem solid transparent;
+  border-top: 0.3rem solid var(--muted);
+  transition: transform 0.15s;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.collapsible-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 /* ─── Status chip ──────────────────────────────────── */
 .status-chip {
   border-radius: 999px;
@@ -255,6 +298,11 @@ body {
   display: flex;
   gap: 0.25rem;
   flex-wrap: wrap;
+}
+
+.text-empty {
+  font-style: italic;
+  color: var(--muted);
 }
 
 .meta-row span {
@@ -397,6 +445,35 @@ body {
   color: var(--error-text);
 }
 
+.alert-title {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.alert-message {
+  margin: 0 0 0.5rem;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.link-btn:hover {
+  opacity: 0.8;
+}
+
+.link-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 0.15rem;
+}
+
 /* ─── Support text ─────────────────────────────────── */
 .support-text {
   margin: 0;
@@ -425,6 +502,96 @@ body {
 .error-fallback .hint {
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+/* ─── Backend control ─────────────────────────────── */
+.service-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.service-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.service-indicator.ok {
+  background: var(--ok-text);
+  box-shadow: 0 0 4px var(--ok-text);
+}
+
+.service-indicator.error {
+  background: var(--error-text);
+  box-shadow: 0 0 4px var(--error-text);
+}
+
+.service-label {
+  flex: 1;
+  font-size: 0.7rem;
+  font-weight: 550;
+  color: var(--text);
+}
+
+.backend-info {
+  font-weight: 400;
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
+.svc-btn {
+  border-radius: 0.35rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.svc-btn.danger {
+  border-color: var(--error-text);
+  background: transparent;
+  color: var(--error-text);
+}
+
+.svc-btn.danger:hover {
+  background: var(--error);
+}
+
+.svc-btn.success {
+  border-color: var(--ok-text);
+  background: transparent;
+  color: var(--ok-text);
+}
+
+.svc-btn.success:hover {
+  background: var(--ok);
+}
+
+.svc-btn.full-width {
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.7rem;
+}
+
+.svc-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.svc-action {
+  font-size: 0.62rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.offline-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 /* ─── Skeleton shimmer ─────────────────────────────── */

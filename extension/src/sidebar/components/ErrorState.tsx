@@ -12,12 +12,12 @@ export function ErrorState({ message, onRetry }: ErrorStateProps): React.ReactEl
       role="alert"
       aria-live="assertive"
     >
-      <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Error</p>
-      <p style={{ marginBottom: '0.5rem' }}>{message}</p>
+      <p className="alert-title">Error</p>
+      <p className="alert-message">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', textDecoration: 'underline', cursor: 'pointer', fontSize: 'inherit' }}
+          className="link-btn"
           aria-label="Retry generating reply"
         >
           Try again

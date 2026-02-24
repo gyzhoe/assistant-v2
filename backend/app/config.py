@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
     default_model: str = "llama3.2:3b"
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     prompt_template_path: str | None = None
 
     # Enterprise security

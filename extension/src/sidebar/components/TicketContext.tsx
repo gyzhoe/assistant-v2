@@ -9,7 +9,7 @@ export function TicketContext({ ticket }: TicketContextProps): React.ReactElemen
   return (
     <div className="context-card">
       <p className="subject" title={ticket.subject}>
-        {ticket.subject || <span style={{ fontStyle: 'italic', color: 'var(--muted)' }}>No subject</span>}
+        {ticket.subject || <span className="text-empty">No subject</span>}
       </p>
       <div className="meta-row">
         {ticket.category && <span>{ticket.category}</span>}
