@@ -23,16 +23,25 @@ const WHD_LABELS: Record<string, readonly string[]> = {
 
 export class DOMReader {
   private overrides: Partial<SelectorConfig> = {}
+  private readonly _ready: Promise<void>
 
   constructor() {
-    this.loadOverrides()
+    this._ready = this.loadOverrides()
   }
 
-  private loadOverrides(): void {
-    chrome.storage.sync.get(STORAGE_KEY_SETTINGS, (result) => {
-      const saved = result[STORAGE_KEY_SETTINGS] as Partial<AppSettings> | undefined
-      this.overrides = saved?.selectorOverrides ?? {}
+  private loadOverrides(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      chrome.storage.sync.get(STORAGE_KEY_SETTINGS, (result) => {
+        const saved = result[STORAGE_KEY_SETTINGS] as Partial<AppSettings> | undefined
+        this.overrides = saved?.selectorOverrides ?? {}
+        resolve()
+      })
     })
+  }
+
+  /** Wait until selector overrides are loaded from storage. */
+  async ready(): Promise<void> {
+    await this._ready
   }
 
   /** Returns true if the current page is a WHD ticket page. */

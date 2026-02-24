@@ -9,6 +9,7 @@ Provides:
 """
 
 import asyncio
+import secrets
 import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
@@ -35,7 +36,7 @@ class APITokenMiddleware(BaseHTTPMiddleware):
     /health is exempt so operators can monitor without the token.
     """
 
-    EXEMPT_PATHS = {"/health", "/shutdown", "/ollama/start", "/ollama/stop", "/docs", "/openapi.json"}
+    EXEMPT_PATHS = {"/health", "/docs", "/openapi.json"}
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -50,7 +51,7 @@ class APITokenMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         provided = request.headers.get("X-Extension-Token", "")
-        if not provided or provided != self._token:
+        if not provided or not secrets.compare_digest(provided, self._token):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Unauthorized. Missing or invalid X-Extension-Token header."},

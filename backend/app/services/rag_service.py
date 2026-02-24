@@ -61,7 +61,7 @@ class RAGService:
             results["distances"][0],
         ):
             source = "ticket" if name == self.TICKET_COLLECTION else "kb"
-            score = 1.0 - float(distance)
+            score = max(0.0, 1.0 - float(distance))
             docs.append(
                 ContextDoc(
                     content=content,

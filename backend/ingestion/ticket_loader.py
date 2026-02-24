@@ -27,7 +27,7 @@ from pathlib import Path
 
 def _content_id(content: str) -> str:
     """Stable SHA-256 document ID — re-ingesting same content is idempotent."""
-    return hashlib.sha256(content[:200].encode()).hexdigest()
+    return hashlib.sha256(content.encode()).hexdigest()
 
 
 def load_tickets_json(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:

@@ -1,4 +1,5 @@
 import { DOMReader } from './dom-reader'
+import { debugError } from '../shared/constants'
 import type { SidebarToContentMessage } from '../shared/messages'
 import type { DOMInserter } from './dom-inserter'
 
@@ -9,6 +10,7 @@ async function init(): Promise<void> {
   const { SidebarHost: SidebarHostClass } = await import('./sidebar-host')
 
   const reader = new DOMReader()
+  await reader.ready()
   inserter = new DOMInserterClass()
   const host = new SidebarHostClass(reader)
   host.start()
@@ -36,11 +38,15 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === 'REQUEST_TICKET_DATA') {
       const reader = new DOMReader()
-      const data = reader.extract()
-      if (data) {
-        chrome.runtime.sendMessage({ type: 'TICKET_DATA_UPDATED', payload: data }).catch(() => {})
-      }
-      sendResponse({ ok: true })
+      reader.ready().then(() => {
+        const data = reader.extract()
+        if (data) {
+          chrome.runtime.sendMessage({ type: 'TICKET_DATA_UPDATED', payload: data }).catch(() => {})
+        }
+        sendResponse({ ok: true })
+      }).catch(() => {
+        sendResponse({ ok: false })
+      })
       return true
     }
 
@@ -48,4 +54,4 @@ chrome.runtime.onMessage.addListener(
   }
 )
 
-init().catch(console.error)
+init().catch(debugError)

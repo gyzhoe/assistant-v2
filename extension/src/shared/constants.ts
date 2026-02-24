@@ -80,3 +80,17 @@ export const TICKET_DOM_MARKERS = ['#ticketDetailForm', 'form[action*="ticketDet
 
 /** Text sentinels that confirm ticket page content */
 export const TICKET_CONTENT_SENTINELS = ['Ticket Details', 'Tech']
+
+/** Gated debug logger — silent in production builds */
+export function debugLog(...args: unknown[]): void {
+  if (import.meta.env.DEV) {
+    console.log('[AI-HD]', ...args)
+  }
+}
+
+/** Gated error logger — silent in production builds */
+export function debugError(...args: unknown[]): void {
+  if (import.meta.env.DEV) {
+    console.error('[AI-HD]', ...args)
+  }
+}

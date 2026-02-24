@@ -6,6 +6,7 @@ PDF: page-by-page with 500-token sliding window and 50-token overlap.
 """
 
 import hashlib
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,10 +15,12 @@ from pypdf import PdfReader
 
 from app.utils.chunker import chunk_by_tokens
 
+logger = logging.getLogger(__name__)
+
 
 def _content_id(content: str) -> str:
     """Stable SHA-256 document ID — re-ingesting same content is idempotent."""
-    return hashlib.sha256(content[:200].encode()).hexdigest()
+    return hashlib.sha256(content.encode()).hexdigest()
 
 
 # ── HTML loader ───────────────────────────────────────────────────────────────
@@ -79,7 +82,7 @@ def load_kb_html_dir(directory: Path) -> Iterator[tuple[str, str, dict[str, str]
             yield from load_kb_html(html_path)
         except Exception as exc:
             # Log and continue — one bad file shouldn't abort the batch
-            print(f"[WARN] Skipping {html_path.name}: {exc}")
+            logger.warning("Skipping %s: %s", html_path.name, exc)
 
 
 # ── PDF loader ────────────────────────────────────────────────────────────────
@@ -120,4 +123,4 @@ def load_kb_pdf_dir(directory: Path) -> Iterator[tuple[str, str, dict[str, str]]
         try:
             yield from load_kb_pdf(pdf_path)
         except Exception as exc:
-            print(f"[WARN] Skipping {pdf_path.name}: {exc}")
+            logger.warning("Skipping %s: %s", pdf_path.name, exc)

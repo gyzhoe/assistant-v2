@@ -51,7 +51,7 @@ async def shutdown_backend() -> dict[str, str]:
         await asyncio.sleep(0.5)
         os.kill(os.getpid(), signal.SIGTERM)
 
-    asyncio.get_event_loop().create_task(_delayed_kill())
+    asyncio.create_task(_delayed_kill())
     return {"status": "shutting_down"}
 
 
@@ -67,7 +67,7 @@ async def start_ollama() -> dict[str, str]:
     except Exception:
         pass
 
-    creation_flags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+    creation_flags = subprocess.CREATE_NO_WINDOW
     subprocess.Popen(
         ["ollama", "serve"],
         stdout=subprocess.DEVNULL,
