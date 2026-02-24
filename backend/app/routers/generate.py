@@ -1,3 +1,4 @@
+import logging
 import time
 
 from fastapi import APIRouter, HTTPException, Request
@@ -6,6 +7,8 @@ from app.models.request_models import GenerateRequest
 from app.models.response_models import GenerateResponse
 from app.services.llm_service import LLMService
 from app.services.rag_service import RAGService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["generate"])
 
@@ -17,6 +20,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     rag = RAGService(chroma_client=chroma_client)
     llm = LLMService()
 
+    logger.info("Generate request: model=%s subject=%s", body.model, body.ticket_subject[:80])
     start = time.monotonic()
 
     # Retrieve context
@@ -33,6 +37,8 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     )
 
     prompt = _build_prompt(body, context_text)
+    if body.prompt_suffix.strip():
+        prompt += f"\n\nAdditional instructions: {body.prompt_suffix.strip()}"
 
     # Generate
     try:
@@ -47,6 +53,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         ) from exc
 
     latency_ms = int((time.monotonic() - start) * 1000)
+    logger.info("Generate complete: model=%s latency=%dms docs=%d", body.model, latency_ms, len(context_docs))
 
     return GenerateResponse(
         reply=reply,

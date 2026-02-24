@@ -9,6 +9,7 @@ Provides:
 """
 
 import asyncio
+import logging
 import secrets
 import time
 from collections import defaultdict
@@ -20,6 +21,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # API Token Authentication Middleware
@@ -52,6 +55,7 @@ class APITokenMiddleware(BaseHTTPMiddleware):
 
         provided = request.headers.get("X-Extension-Token", "")
         if not provided or not secrets.compare_digest(provided, self._token):
+            logger.warning("Auth failure on %s from %s", request.url.path, request.client.host if request.client else "unknown")
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Unauthorized. Missing or invalid X-Extension-Token header."},
@@ -92,6 +96,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._counts[client_ip] = [t for t in timestamps if now - t < self._window]
 
             if len(self._counts[client_ip]) >= self._max:
+                logger.warning("Rate limit exceeded for %s on %s", client_ip, request.url.path)
                 return JSONResponse(
                     status_code=429,
                     content={

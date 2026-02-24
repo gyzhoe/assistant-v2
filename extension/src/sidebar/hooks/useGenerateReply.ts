@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
+import { useSettings } from './useSettings'
 import { apiClient } from '../../lib/api-client'
 
 export function useGenerateReply() {
@@ -12,6 +13,7 @@ export function useGenerateReply() {
   const setIsInserted = useSidebarStore((s) => s.setIsInserted)
   const setAbortController = useSidebarStore((s) => s.setAbortController)
   const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
+  const { settings } = useSettings()
 
   const generate = useCallback(async () => {
     if (!ticketData) return
@@ -34,6 +36,7 @@ export function useGenerateReply() {
         model: selectedModel,
         max_context_docs: 5,
         stream: false,
+        prompt_suffix: settings.promptSuffix,
       }, ctrl.signal)
       setReply(response.reply)
       setLastResponse(response)
@@ -47,7 +50,7 @@ export function useGenerateReply() {
       setIsGenerating(false)
       setAbortController(null)
     }
-  }, [ticketData, selectedModel, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply])
+  }, [ticketData, selectedModel, settings.promptSuffix, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply])
 
   return { generate }
 }

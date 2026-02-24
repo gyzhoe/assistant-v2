@@ -1,8 +1,14 @@
 import asyncio
+import logging
 
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 2
+RETRY_DELAY = 1.0
 
 
 class LLMService:
@@ -12,8 +18,24 @@ class LLMService:
         self.base_url = settings.ollama_base_url
 
     async def generate(self, prompt: str, model: str) -> str:
-        """Generate a completion. Raises ConnectionError if Ollama is unreachable."""
-        return await asyncio.to_thread(self._generate_sync, prompt, model)
+        """Generate a completion with retry logic. Raises ConnectionError if Ollama is unreachable."""
+        last_error: ConnectionError | None = None
+        for attempt in range(1 + MAX_RETRIES):
+            try:
+                result = await asyncio.to_thread(self._generate_sync, prompt, model)
+                if attempt > 0:
+                    logger.info("Ollama generate succeeded on attempt %d", attempt + 1)
+                return result
+            except ConnectionError as exc:
+                last_error = exc
+                if attempt < MAX_RETRIES:
+                    logger.warning(
+                        "Ollama generate attempt %d failed, retrying in %.1fs: %s",
+                        attempt + 1, RETRY_DELAY, exc,
+                    )
+                    await asyncio.sleep(RETRY_DELAY)
+        logger.error("Ollama generate failed after %d attempts", 1 + MAX_RETRIES)
+        raise last_error  # type: ignore[misc]
 
     def _generate_sync(self, prompt: str, model: str) -> str:
         try:
@@ -28,6 +50,10 @@ class LLMService:
         except httpx.ConnectError as exc:
             raise ConnectionError(
                 f"Ollama service unreachable at {self.base_url}"
+            ) from exc
+        except httpx.TimeoutException as exc:
+            raise ConnectionError(
+                f"Ollama request timed out after 120s at {self.base_url}"
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ConnectionError(

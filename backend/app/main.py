@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.logging_config import setup_logging
 from app.middleware.security import (
     APITokenMiddleware,
     RateLimitMiddleware,
@@ -15,11 +17,18 @@ from app.middleware.security import (
 )
 from app.routers import generate, health, ingest, models
 
+setup_logging()
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Initialize ChromaDB client and verify Ollama on startup."""
+    logger.info("Starting AI Helpdesk Assistant backend v%s", settings.version)
+
     app.state.chroma_client = chromadb.PersistentClient(path=settings.chroma_path)
+    logger.info("ChromaDB initialized at %s", settings.chroma_path)
+
     app.state.ollama_reachable = False
     try:
         async with httpx.AsyncClient() as client:
@@ -27,6 +36,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             app.state.ollama_reachable = resp.status_code == 200
     except Exception:
         app.state.ollama_reachable = False
+
+    if app.state.ollama_reachable:
+        logger.info("Ollama reachable at %s", settings.ollama_base_url)
+    else:
+        logger.warning("Ollama not reachable at %s", settings.ollama_base_url)
+
     yield
 
 

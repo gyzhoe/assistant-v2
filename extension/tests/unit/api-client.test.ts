@@ -42,6 +42,7 @@ describe('apiClient.generate', () => {
       model: 'llama3.2:3b',
       max_context_docs: 5,
       stream: false,
+      prompt_suffix: '',
     })
 
     expect(mockFetch).toHaveBeenCalledWith(
@@ -69,6 +70,7 @@ describe('apiClient.generate', () => {
         model: 'llama3.2:3b',
         max_context_docs: 5,
         stream: false,
+        prompt_suffix: '',
       })
     ).rejects.toBeInstanceOf(ApiError)
   })

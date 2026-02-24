@@ -46,6 +46,7 @@ export interface GenerateRequest {
   model: string
   max_context_docs: number
   stream: boolean
+  prompt_suffix: string
 }
 
 /** Single retrieved context document */

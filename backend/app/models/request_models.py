@@ -21,3 +21,6 @@ class GenerateRequest(BaseModel):
     model: str = Field(default="llama3.2:3b", max_length=_MODEL_MAX, description="Ollama model to use")
     max_context_docs: int = Field(default=5, ge=1, le=20)
     stream: bool = Field(default=False)
+    prompt_suffix: str = Field(
+        default="", max_length=2000, description="Custom instructions appended to the prompt"
+    )
