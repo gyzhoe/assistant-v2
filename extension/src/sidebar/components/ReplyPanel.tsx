@@ -17,6 +17,11 @@ export function ReplyPanel(): React.ReactElement {
   const reply = useSidebarStore((s) => s.reply)
   const isGenerating = useSidebarStore((s) => s.isGenerating)
   const generateError = useSidebarStore((s) => s.generateError)
+  const isInserted = useSidebarStore((s) => s.isInserted)
+  const cancelGeneration = useSidebarStore((s) => s.cancelGeneration)
+  const isEditingReply = useSidebarStore((s) => s.isEditingReply)
+  const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
+  const setReply = useSidebarStore((s) => s.setReply)
 
   return (
     <>
@@ -40,8 +45,18 @@ export function ReplyPanel(): React.ReactElement {
           aria-label="Generate AI reply for this ticket"
           aria-busy={isGenerating ? 'true' : undefined}
         >
-          {isGenerating ? 'Generating…' : 'Generate Reply'}
+          {isGenerating ? 'Generating\u2026' : 'Generate Reply'}
         </button>
+        {isGenerating && (
+          <button
+            type="button"
+            className="secondary-btn cancel-btn"
+            onClick={cancelGeneration}
+            aria-label="Cancel reply generation"
+          >
+            Cancel
+          </button>
+        )}
         {generateError && !isGenerating && (
           <ErrorState message={generateError} onRetry={generate} />
         )}
@@ -61,12 +76,34 @@ export function ReplyPanel(): React.ReactElement {
         )}
 
         {reply && !isGenerating && (
-          <div className="reply-box" aria-live="polite" aria-label="Generated reply">
-            {reply}
+          <div className="draft-panel">
+            <div className="draft-header">
+              <span className="draft-label">Draft Reply</span>
+              <button
+                type="button"
+                className="secondary-btn draft-toggle"
+                onClick={() => setIsEditingReply(!isEditingReply)}
+                aria-label={isEditingReply ? 'Preview reply' : 'Edit reply'}
+              >
+                {isEditingReply ? 'Preview' : 'Edit'}
+              </button>
+            </div>
+            {isEditingReply ? (
+              <textarea
+                className="reply-edit"
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                rows={8}
+                aria-label="Edit generated reply"
+              />
+            ) : (
+              <div className="reply-box" aria-live="polite" aria-label="Generated reply">
+                {reply}
+              </div>
+            )}
+            {!isInserted && <InsertButton />}
           </div>
         )}
-
-        <InsertButton />
       </section>
     </>
   )

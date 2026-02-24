@@ -29,12 +29,13 @@ async function buildHeaders(extra: Record<string, string> = {}): Promise<Record<
 }
 
 export const apiClient = {
-  async generate(req: GenerateRequest): Promise<GenerateResponse> {
+  async generate(req: GenerateRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
     const resp = await fetch(`${base}/generate`, {
       method: 'POST',
       headers,
       body: JSON.stringify(req),
+      signal,
     })
     if (!resp.ok) {
       const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))

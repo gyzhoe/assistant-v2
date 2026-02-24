@@ -11,6 +11,8 @@ interface SidebarState {
   lastResponse: GenerateResponse | null
   selectedModel: string
   isInserted: boolean
+  abortController: AbortController | null
+  isEditingReply: boolean
 
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
@@ -20,10 +22,13 @@ interface SidebarState {
   setLastResponse: (resp: GenerateResponse | null) => void
   setSelectedModel: (model: string) => void
   setIsInserted: (val: boolean) => void
+  setAbortController: (ctrl: AbortController | null) => void
+  setIsEditingReply: (val: boolean) => void
+  cancelGeneration: () => void
   reset: () => void
 }
 
-export const useSidebarStore = create<SidebarState>((set) => ({
+export const useSidebarStore = create<SidebarState>((set, get) => ({
   ticketData: null,
   isTicketPage: false,
   reply: '',
@@ -32,6 +37,8 @@ export const useSidebarStore = create<SidebarState>((set) => ({
   lastResponse: null,
   selectedModel: DEFAULT_MODEL,
   isInserted: false,
+  abortController: null,
+  isEditingReply: false,
 
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
@@ -41,12 +48,24 @@ export const useSidebarStore = create<SidebarState>((set) => ({
   setLastResponse: (resp) => set({ lastResponse: resp }),
   setSelectedModel: (model) => set({ selectedModel: model }),
   setIsInserted: (val) => set({ isInserted: val }),
-  reset: () =>
+  setAbortController: (ctrl) => set({ abortController: ctrl }),
+  setIsEditingReply: (val) => set({ isEditingReply: val }),
+  cancelGeneration: () => {
+    const { abortController } = get()
+    if (abortController) abortController.abort()
+    set({ isGenerating: false, abortController: null })
+  },
+  reset: () => {
+    const { abortController } = get()
+    if (abortController) abortController.abort()
     set({
       reply: '',
       isGenerating: false,
       generateError: null,
       lastResponse: null,
       isInserted: false,
-    }),
+      abortController: null,
+      isEditingReply: false,
+    })
+  },
 }))
