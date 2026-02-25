@@ -165,7 +165,7 @@ Type: files; Name: "{userstartup}\AI Helpdesk Monitor.lnk"
 ; Cleanup dialog — offer Ollama/model removal before anything is torn down
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated
 ; Kill tray monitor and dashboard processes before uninstall
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*tray-monitor*' -or $_.CommandLine -like '*dashboard*') -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"""; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ ($_.CommandLine -like '*tray-monitor*' -or $_.CommandLine -like '*dashboard*') -and $_.ProcessId -ne $PID }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"""; Flags: runhidden waituntilterminated
 ; Stop and remove backend service
 Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend"; Flags: runhidden waituntilterminated
 Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskBackend confirm"; Flags: runhidden waituntilterminated

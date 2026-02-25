@@ -67,13 +67,13 @@ async def start_ollama() -> dict[str, str]:
     except Exception:
         pass
 
-    creation_flags = subprocess.CREATE_NO_WINDOW
-    subprocess.Popen(
-        ["ollama", "serve"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=creation_flags,
-    )
+    kwargs: dict[str, object] = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    subprocess.Popen(["ollama", "serve"], **kwargs)  # type: ignore[arg-type]
     return {"status": "starting"}
 
 
