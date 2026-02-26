@@ -1,3 +1,7 @@
+import warnings
+from typing import Self
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +30,31 @@ class Settings(BaseSettings):
 
     # Request body size limit in bytes (default 64 KB)
     max_request_bytes: int = 65_536
+
+    @model_validator(mode="after")
+    def reject_wildcard_cors_with_token(self) -> Self:
+        """Reject CORS_ORIGIN=* when API_TOKEN is set.
+
+        Combining a wildcard CORS origin with token-based authentication is a
+        security misconfiguration: any website can issue credentialed requests
+        against the backend, making the token the only line of defence.  In
+        production (api_token non-empty) a specific extension origin must be
+        provided instead.
+        """
+        if self.api_token and self.cors_origin == "*":
+            raise ValueError(
+                "CORS_ORIGIN='*' is not allowed when API_TOKEN is set. "
+                "Set CORS_ORIGIN to your extension origin "
+                "(e.g. chrome-extension://<ID>) to secure the backend."
+            )
+        if not self.api_token and self.cors_origin == "*":
+            warnings.warn(
+                "CORS_ORIGIN='*' is set with no API_TOKEN — acceptable for "
+                "local development only. Never use this configuration in "
+                "production.",
+                stacklevel=2,
+            )
+        return self
 
 
 settings = Settings()
