@@ -1,4 +1,4 @@
-import type { ExtensionMessage, SidebarToContentMessage } from '../shared/messages'
+import type { ExtensionMessage } from '../shared/messages'
 
 // Open side panel when toolbar button is clicked
 chrome.action.onClicked.addListener((tab) => {
@@ -24,7 +24,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
  */
 chrome.runtime.onMessage.addListener(
   (message: ExtensionMessage, sender, sendResponse: (response?: unknown) => void) => {
-    const msg = message as ExtensionMessage
+    const msg = message
 
     if (
       msg.type === 'TICKET_DATA_UPDATED' ||
@@ -44,7 +44,7 @@ chrome.runtime.onMessage.addListener(
       // Forward from sidebar → active tab's content script
       const tabId = sender.tab?.id
       if (tabId !== undefined) {
-        chrome.tabs.sendMessage(tabId, msg as SidebarToContentMessage)
+        chrome.tabs.sendMessage(tabId, msg)
           .then(() => sendResponse({ ok: true }))
           .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
       } else {
@@ -52,7 +52,7 @@ chrome.runtime.onMessage.addListener(
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const activeTab = tabs[0]
           if (activeTab?.id !== undefined) {
-            chrome.tabs.sendMessage(activeTab.id, msg as SidebarToContentMessage)
+            chrome.tabs.sendMessage(activeTab.id, msg)
               .then(() => sendResponse({ ok: true }))
               .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
           } else {

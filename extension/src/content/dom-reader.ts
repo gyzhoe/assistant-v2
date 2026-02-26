@@ -5,6 +5,7 @@ import {
   TICKET_DOM_MARKERS,
   TICKET_CONTENT_SENTINELS,
   STORAGE_KEY_SETTINGS,
+  debugError,
 } from '../shared/constants'
 
 /**
@@ -19,6 +20,23 @@ const WHD_LABELS: Record<string, readonly string[]> = {
   requesterName: ['Client', 'Requester', 'Requested By'],
   category: ['Request Type', 'Category', 'Problem Type'],
   status: ['Status'],
+}
+
+/**
+ * Safe wrapper around document.querySelector that catches SyntaxError
+ * thrown by invalid CSS selectors (e.g. user-supplied overrides from options page).
+ * Returns null and logs the error instead of crashing the content script.
+ */
+function safeQuerySelector(selector: string): Element | null {
+  try {
+    return document.querySelector(selector)
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      debugError('Invalid CSS selector skipped:', selector, err.message)
+      return null
+    }
+    throw err
+  }
 }
 
 export class DOMReader {
@@ -49,7 +67,7 @@ export class DOMReader {
     const url = window.location.href
 
     if (TICKET_URL_PATTERNS.some((p) => p.test(url))) return true
-    if (TICKET_DOM_MARKERS.some((sel) => document.querySelector(sel) !== null)) return true
+    if (TICKET_DOM_MARKERS.some((sel) => safeQuerySelector(sel) !== null)) return true
 
     const bodyText = document.body?.innerText ?? ''
     if (TICKET_CONTENT_SENTINELS.every((sentinel) => bodyText.includes(sentinel))) return true
@@ -85,7 +103,7 @@ export class DOMReader {
 
     // Tier 1: CSS selectors
     for (const sel of selectors) {
-      const el = document.querySelector(sel)
+      const el = safeQuerySelector(sel)
       if (el) {
         const text = this.extractText(el)
         if (text) return text

@@ -61,12 +61,14 @@ export const apiClient = {
   async ollamaStart(): Promise<{ status: string }> {
     const base = await getBackendUrl()
     const resp = await fetch(`${base}/ollama/start`, { method: 'POST' })
+    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to start Ollama' })
     return resp.json() as Promise<{ status: string }>
   },
 
   async ollamaStop(): Promise<{ status: string }> {
     const base = await getBackendUrl()
     const resp = await fetch(`${base}/ollama/stop`, { method: 'POST' })
+    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to stop Ollama' })
     return resp.json() as Promise<{ status: string }>
   },
 
