@@ -5,6 +5,26 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-27
+
+### Added
+- Unit tests for LLMService and EmbedService (19 tests) (#47)
+- Security middleware tests for rate limiting and request size (17 tests) (#49)
+- CORS wildcard validation — rejects `CORS_ORIGIN=*` when `API_TOKEN` is set (#45)
+- Config validation tests for CORS + token combinations (#45)
+
+### Fixed
+- Unhandled exceptions in RAG retrieve path now return 503 instead of 500 (#44)
+- JSON parse error handling in LLM service, embed service, and models router (#44)
+- querySelector crash from invalid user-supplied selectors in content script (#46)
+- Missing `resp.ok` checks in api-client `health()`, `ollamaStart()`, `ollamaStop()` (#46)
+- Memory leak in RateLimitMiddleware — stale IP entries now evicted (#43)
+- Redundant type assertions removed in service-worker.ts (#46)
+
+### Security
+- Pinned Ollama, uv, and NSSM versions in release workflow with SHA256 checksums (#48)
+- Supply chain hardening: all downloaded binaries verified before use (#48)
+
 ## [1.2.0] - 2026-02-24
 
 ### Added
@@ -85,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend middleware and models router tests
 - Extension sidebar store, DOM inserter, and storage tests
 
+[1.3.0]: https://github.com/gyzhoe/assistant/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/gyzhoe/assistant/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/gyzhoe/assistant/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/gyzhoe/assistant/compare/v1.0.0...v1.0.1

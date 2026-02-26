@@ -1,9 +1,9 @@
 ; setup.iss — AI Helpdesk Assistant Inno Setup Script
 ; Builds a per-user installer for Windows 10/11 x64.
-; Compile with: iscc /DMyAppVersion=1.2.0 setup.iss
+; Compile with: iscc /DMyAppVersion=1.3.0 setup.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.2.0"
+  #define MyAppVersion "1.3.0"
 #endif
 
 #define MyAppName     "AI Helpdesk Assistant"
