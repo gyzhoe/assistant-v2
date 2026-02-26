@@ -1,3 +1,5 @@
+import json
+
 import httpx
 from fastapi import APIRouter, HTTPException
 
@@ -16,7 +18,7 @@ async def list_models() -> dict[str, list[str]]:
             data = resp.json()
             model_names = [m["name"] for m in data.get("models", [])]
             return {"models": model_names}
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
         raise HTTPException(
             status_code=503,
             detail={"detail": "Cannot reach Ollama to list models.", "error_code": "OLLAMA_DOWN"},

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 
 import httpx
@@ -64,4 +65,8 @@ class EmbedService:
         except httpx.HTTPStatusError as exc:
             raise ConnectionError(
                 f"Ollama embed returned error {exc.response.status_code}"
+            ) from exc
+        except (json.JSONDecodeError, KeyError) as exc:
+            raise ConnectionError(
+                f"Ollama embed response invalid or missing expected key: {exc}"
             ) from exc
