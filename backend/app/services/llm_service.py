@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 
 import httpx
@@ -58,4 +59,8 @@ class LLMService:
         except httpx.HTTPStatusError as exc:
             raise ConnectionError(
                 f"Ollama returned error {exc.response.status_code}"
+            ) from exc
+        except (json.JSONDecodeError, KeyError) as exc:
+            raise ConnectionError(
+                f"Ollama generate response invalid or missing 'response' key: {exc}"
             ) from exc

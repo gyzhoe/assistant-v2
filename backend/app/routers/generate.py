@@ -25,10 +25,19 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
 
     # Retrieve context
     query = f"{body.ticket_subject}\n\n{body.ticket_description}".strip()
-    context_docs = await rag.retrieve(
-        query=query or "general helpdesk inquiry",
-        max_docs=body.max_context_docs,
-    )
+    try:
+        context_docs = await rag.retrieve(
+            query=query or "general helpdesk inquiry",
+            max_docs=body.max_context_docs,
+        )
+    except ConnectionError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "detail": str(exc),
+                "error_code": "OLLAMA_DOWN",
+            },
+        ) from exc
 
     # Build prompt
     context_text = "\n\n---\n\n".join(
