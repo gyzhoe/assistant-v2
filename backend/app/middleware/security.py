@@ -72,6 +72,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Simple in-process rate limiter.
     Limits /generate to max_per_minute requests per client IP.
+
+    Memory management: a periodic sweep (at most once per window) evicts entries
+    for IPs whose most-recent request is older than the window.  This prevents
+    unbounded growth of ``_counts`` when the server receives traffic from many
+    distinct source IPs over time.
     """
 
     RATE_LIMITED_PATHS = {"/generate"}
@@ -82,6 +87,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._window = 60.0  # seconds
         self._counts: dict[str, list[float]] = defaultdict(list)
         self._lock = asyncio.Lock()
+        self._last_sweep: float = 0.0  # monotonic timestamp of the most-recent cleanup sweep
+
+    def _evict_stale_entries(self, now: float) -> None:
+        """Remove IPs whose most-recent request falls outside the current window.
+
+        Must be called while ``self._lock`` is held.  A full sweep is performed
+        at most once per window period so that the amortised cost per request is
+        negligible even under high load.
+        """
+        if now - self._last_sweep < self._window:
+            return
+
+        stale_ips = [ip for ip, ts in self._counts.items() if not ts or now - ts[-1] >= self._window]
+        for ip in stale_ips:
+            del self._counts[ip]
+
+        self._last_sweep = now
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if request.url.path not in self.RATE_LIMITED_PATHS:
@@ -91,6 +113,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
 
         async with self._lock:
+            # Periodic cleanup: evict stale IP entries to bound memory usage.
+            self._evict_stale_entries(now)
+
             timestamps = self._counts[client_ip]
             # Remove timestamps outside the window
             self._counts[client_ip] = [t for t in timestamps if now - t < self._window]
