@@ -48,17 +48,44 @@ jobs:
       - name: Download Ollama installer
         shell: pwsh
         run: |
+          # Ollama v0.17.0 — pinned 2026-02-26
+          # SHA256 sourced from: https://github.com/ollama/ollama/releases/download/v0.17.0/sha256sum.txt
+          $ollamaVersion = "v0.17.0"
+          $ollamaUrl = "https://github.com/ollama/ollama/releases/download/${ollamaVersion}/OllamaSetup.exe"
+          $ollamaSha256 = "beea6a1e5eb7658ef0ad7789295f310ef59dc4c7e7d3651d03993bf3a4687e3e"
+
           New-Item -ItemType Directory -Force -Path installer/deps | Out-Null
-          Invoke-WebRequest -Uri "https://ollama.com/download/OllamaSetup.exe" `
-            -OutFile "installer/deps/OllamaSetup.exe"
+          Write-Host "Downloading Ollama ${ollamaVersion}..."
+          Invoke-WebRequest -Uri $ollamaUrl -OutFile "installer/deps/OllamaSetup.exe"
+
+          $actual = (Get-FileHash -Path "installer/deps/OllamaSetup.exe" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $ollamaSha256) {
+            Write-Error "Ollama SHA256 mismatch! Expected: $ollamaSha256 | Got: $actual"
+            exit 1
+          }
+          Write-Host "Ollama SHA256 verified OK"
           $size = [math]::Round((Get-Item installer/deps/OllamaSetup.exe).Length / 1MB, 1)
           Write-Host "Ollama installer: $size MB"
 
       - name: Download uv standalone
         shell: pwsh
         run: |
-          $uvUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+          # uv v0.10.6 — pinned 2026-02-26
+          # SHA256 sourced from: https://github.com/astral-sh/uv/releases/download/0.10.6/uv-x86_64-pc-windows-msvc.zip.sha256
+          $uvVersion = "0.10.6"
+          $uvUrl = "https://github.com/astral-sh/uv/releases/download/${uvVersion}/uv-x86_64-pc-windows-msvc.zip"
+          $uvSha256 = "b27eb789f281e398a82197477de727fc8faf08605152115686da2c3cba0d25f7"
+
+          Write-Host "Downloading uv ${uvVersion}..."
           Invoke-WebRequest -Uri $uvUrl -OutFile "installer/deps/uv.zip"
+
+          $actual = (Get-FileHash -Path "installer/deps/uv.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $uvSha256) {
+            Write-Error "uv SHA256 mismatch! Expected: $uvSha256 | Got: $actual"
+            exit 1
+          }
+          Write-Host "uv SHA256 verified OK"
+
           Expand-Archive -Path "installer/deps/uv.zip" -DestinationPath "installer/deps/uv-extract" -Force
           # uv.exe may be nested inside a directory
           $uvExe = Get-ChildItem -Path "installer/deps/uv-extract" -Recurse -Filter "uv.exe" | Select-Object -First 1
@@ -68,20 +95,37 @@ jobs:
       - name: Download NSSM
         shell: pwsh
         run: |
+          # NSSM 2.24 (stable) — pinned 2026-02-26
+          # SHA256 computed from: https://nssm.cc/release/nssm-2.24.zip
+          $nssmVersion = "2.24"
+          $nssmUrl = "https://nssm.cc/release/nssm-${nssmVersion}.zip"
+          $nssmSha256 = "09ddbc5abc1fb5abfd2be27a60462b6c8240f1f921eb70d1199982ddca9c736b"
+
           New-Item -ItemType Directory -Force -Path installer/nssm | Out-Null
-          # winget installs NSSM and adds it to PATH
-          winget install --id NSSM.NSSM --accept-package-agreements --accept-source-agreements --silent
-          # Refresh PATH so we can find the binary
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-          $nssmPath = (Get-Command nssm -ErrorAction SilentlyContinue).Source
-          if (-not $nssmPath) {
-            # Fallback: search the winget install location
-            $nssmPath = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Links\nssm.exe" -ErrorAction SilentlyContinue |
-              Select-Object -First 1 -ExpandProperty FullName
+          Write-Host "Downloading NSSM ${nssmVersion}..."
+          Invoke-WebRequest -Uri $nssmUrl -OutFile "installer/nssm/nssm.zip"
+
+          $actual = (Get-FileHash -Path "installer/nssm/nssm.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $nssmSha256) {
+            Write-Error "NSSM SHA256 mismatch! Expected: $nssmSha256 | Got: $actual"
+            exit 1
           }
-          if (-not $nssmPath) { throw "NSSM not found after winget install" }
-          Copy-Item $nssmPath "installer/nssm/nssm.exe"
-          Write-Host "NSSM copied from: $nssmPath"
+          Write-Host "NSSM SHA256 verified OK"
+
+          Expand-Archive -Path "installer/nssm/nssm.zip" -DestinationPath "installer/nssm/extract" -Force
+          # nssm.exe is under win64/ inside the zip
+          $nssmExe = Get-ChildItem -Path "installer/nssm/extract" -Recurse -Filter "nssm.exe" |
+            Where-Object { $_.DirectoryName -match "win64" } |
+            Select-Object -First 1
+          if (-not $nssmExe) {
+            # Fallback: take any nssm.exe found
+            $nssmExe = Get-ChildItem -Path "installer/nssm/extract" -Recurse -Filter "nssm.exe" |
+              Select-Object -First 1
+          }
+          if (-not $nssmExe) { throw "nssm.exe not found after extraction" }
+          Copy-Item $nssmExe.FullName "installer/nssm/nssm.exe"
+          Remove-Item "installer/nssm/nssm.zip", "installer/nssm/extract" -Recurse -Force
+          Write-Host "NSSM extracted to installer/nssm/nssm.exe"
 
       - name: Set version from tag
         shell: pwsh
