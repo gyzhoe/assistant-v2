@@ -1,4 +1,4 @@
-import type { GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse } from '../shared/types'
+import type { GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
 
 async function getBackendUrl(): Promise<string> {
@@ -109,6 +109,21 @@ export const apiClient = {
       const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
       throw new ApiError(resp.status, error)
     }
+  },
+
+  async ingestUrl(url: string, signal?: AbortSignal): Promise<IngestUrlResponse> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/ingest/url`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url }),
+      signal,
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<IngestUrlResponse>
   },
 }
 

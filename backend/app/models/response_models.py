@@ -21,3 +21,12 @@ class IngestUploadResponse(BaseModel):
     chunks_ingested: int
     processing_time_ms: int
     warning: str | None = None  # e.g., "No text content extracted"
+
+
+class IngestUrlResponse(BaseModel):
+    url: str
+    collection: str
+    chunks_ingested: int
+    processing_time_ms: int
+    title: str | None = None
+    warning: str | None = None
