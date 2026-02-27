@@ -10,6 +10,13 @@ When a technician opens a WHD ticket, the assistant:
 3. **Generates** a professional reply suggestion using a local LLM (default: `llama3.2:3b`)
 4. **Inserts** the reply into the WHD reply textarea with one click
 
+### Knowledge Import
+
+The sidebar includes a **Knowledge Base** panel for importing documents directly into ChromaDB — no CLI required:
+- Drag-and-drop file upload (PDF, HTML, JSON, CSV)
+- Progress tracking with per-file status and cancel support
+- Collection management: view document counts and clear collections
+
 ## Architecture
 
 ```
@@ -25,7 +32,7 @@ FastAPI Backend
 | Tool | Version | Purpose |
 |---|---|---|
 | [Node.js](https://nodejs.org) | ≥ 20 | Extension build |
-| [Python](https://python.org) | 3.11+ | Backend |
+| [Python](https://python.org) | 3.13 | Backend (3.14 not supported) |
 | [uv](https://docs.astral.sh/uv/) | latest | Python package manager |
 | [Ollama](https://ollama.com) | latest | Local LLM inference |
 | Microsoft Edge | latest | Extension host |
@@ -36,17 +43,17 @@ FastAPI Backend
 # Clone and setup
 git clone <repo-url>
 cd assistant
-bash scripts/dev-setup.sh
+npm install
 
 # Terminal 1: Start Ollama
 ollama serve
 
 # Terminal 2: Start backend
 cd backend
-uv run uvicorn app.main:app --port 8765 --reload
+python -m uv sync --dev --python 3.13
+python -m uv run uvicorn app.main:app --port 8765 --reload
 
 # Terminal 3: Build extension
-cd extension
 npm run build
 
 # Load extension in Edge:
@@ -58,35 +65,46 @@ npm run build
 
 ## Ingest Your Data
 
+### Via Sidebar (recommended)
+
+1. Open the sidebar (`Alt+Shift+H`) on any WHD ticket
+2. Expand the **Knowledge Base** panel
+3. Drag-and-drop files (PDF, HTML, JSON, CSV) into the Import tab
+4. Click **Import** and wait for processing to complete
+
+### Via CLI
+
 ```bash
 cd backend
 
 # Import resolved tickets (WHD JSON/CSV export)
-uv run python -m ingestion.cli ingest-tickets export.json
+python -m uv run python -m ingestion.cli ingest-tickets export.json
 
 # Import KB articles
-uv run python -m ingestion.cli ingest-kb-html ./kb_articles/
-uv run python -m ingestion.cli ingest-kb-pdf ./kb_pdfs/
+python -m uv run python -m ingestion.cli ingest-kb-html ./kb_articles/
+python -m uv run python -m ingestion.cli ingest-kb-pdf ./kb_pdfs/
 
 # Check ingestion status
-uv run python -m ingestion.cli status
+python -m uv run python -m ingestion.cli status
 ```
 
 ## Development
 
 ```bash
 # Run all tests
-cd extension && npm test          # Vitest unit tests
-cd backend && uv run pytest -v    # Python tests
-cd extension && npx playwright test  # E2E tests
+npx --workspace=extension vitest run    # Extension unit tests (55 tests)
+cd backend && python -m uv run pytest tests/ -v  # Backend tests (96 tests)
 
 # Type checking
-cd extension && npm run typecheck
-cd backend && uv run mypy app/ ingestion/
+npm run typecheck
+cd backend && python -m uv run mypy app/ ingestion/
 
 # Linting
-cd extension && npm run lint
-cd backend && uv run ruff check .
+npm run lint
+cd backend && python -m uv run ruff check .
+
+# Production build
+npm run build
 ```
 
 ## Project Structure
@@ -94,10 +112,10 @@ cd backend && uv run ruff check .
 ```
 assistant/
 ├── extension/      TypeScript + React 18 + Vite + Manifest V3
-├── backend/        Python FastAPI + LangChain + ChromaDB
+├── backend/        Python FastAPI + ChromaDB + Ollama (httpx)
 ├── docs/           Architecture docs, API contract, WHD DOM selectors
 ├── scripts/        Developer setup script
-└── .github/        CI workflows, issue/PR templates, Dependabot
+└── .github/        CI workflows (backend + extension + Claude review)
 ```
 
 ## Configuration
@@ -115,14 +133,20 @@ OLLAMA_BASE_URL=http://localhost:11434
 CHROMA_PATH=./chroma_data
 CORS_ORIGIN=chrome-extension://<your-extension-id>
 DEFAULT_MODEL=llama3.2:3b
+API_TOKEN=<generated-secret>
+MAX_UPLOAD_BYTES=52428800
 ```
 
 ## Security
 
 - All inference is local — no data sent to external services
 - CORS is locked to your specific extension origin (not `*`)
-- No API keys or credentials are stored in the extension
+- API token authentication via `X-Extension-Token` header
+- Rate limiting: 20 req/min for generation, 5 req/min for file uploads
+- Request size limits: 64 KB for API calls, 50 MB for file uploads
+- Concurrency control: single upload at a time (409 on concurrent attempts)
 - Backend validates all inputs via Pydantic
+- See [Security Guide](docs/security.md) for production hardening
 
 ## License
 

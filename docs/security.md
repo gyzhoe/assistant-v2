@@ -15,8 +15,11 @@ in place and the steps required to harden the deployment.
 | All inference local | Enforced | Ollama only — no cloud calls anywhere in the codebase |
 | CORS restricted to extension origin | Enforced | `CORSMiddleware` locks to `chrome-extension://<ID>` |
 | API token auth | Configurable | Set `API_TOKEN` in `.env` — required in production |
-| Request size limit | Enforced | Default 64 KB; configurable via `MAX_REQUEST_BYTES` |
-| Rate limiting | Enforced | Default 20 req/min per IP; configurable via `RATE_LIMIT_PER_MINUTE` |
+| Request size limit | Enforced | Default 64 KB for API; 50 MB for file uploads (`MAX_UPLOAD_BYTES`) |
+| Rate limiting | Enforced | 20 req/min for `/generate`; 5 req/min for `/ingest/upload` |
+| Upload concurrency | Enforced | Single concurrent upload via `asyncio.Semaphore(1)`; 409 on conflict |
+| Filename sanitization | Enforced | `PurePosixPath(filename).name` strips directory traversal |
+| File type allowlist | Enforced | Only `.json`, `.csv`, `.html`, `.htm`, `.pdf` accepted |
 | Input length caps | Enforced | Pydantic `max_length` on all fields; prevents prompt injection via oversized input |
 | Security headers | Enforced | `X-Content-Type-Options`, `X-Frame-Options`, `Cache-Control: no-store`, `Referrer-Policy` |
 | No secrets in code | Enforced | `.env` gitignored; all config via `pydantic-settings` |
@@ -103,8 +106,11 @@ If your security policy requires audit logs, add structured logging middleware t
 | Threat | Mitigation |
 |---|---|
 | Malicious local process calling the backend | API token header (`X-Extension-Token`) |
-| Oversized payload to Ollama (DoS) | Request size limit (64 KB), input `max_length` |
-| Rate abuse (runaway extension) | Rate limiting (20 req/min) |
+| Oversized payload to Ollama (DoS) | Request size limit (64 KB API, 50 MB upload), input `max_length` |
+| Rate abuse (runaway extension) | Rate limiting (20 req/min generate, 5 req/min upload) |
+| Concurrent upload exhaustion | Semaphore limits to 1 active ingestion; 409 on conflict |
+| Path traversal via filename | Filename sanitized with `PurePosixPath().name` |
+| Malicious file type upload | Extension allowlist: `.json`, `.csv`, `.html`, `.htm`, `.pdf` only |
 | Ticket data leak via prompt injection | Input truncation, no external calls |
 | Ticket data leak via browser extension | Extension only stores data in memory; nothing persisted to cloud |
 | Unauthorized extension calling backend | CORS + API token combination |
