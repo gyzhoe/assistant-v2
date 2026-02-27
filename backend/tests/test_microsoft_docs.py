@@ -6,6 +6,7 @@ import pytest
 
 from app.services.microsoft_docs import (
     CACHE_TTL_SECONDS,
+    MAX_CACHE_ENTRIES,
     MicrosoftDocsService,
     WebContextDoc,
     _cache,
@@ -137,7 +138,9 @@ async def test_cache_hit() -> None:
     call_count = 0
 
     mock_search_resp = MagicMock()
-    mock_search_resp.json.return_value = {"results": [{"title": "T1", "url": "https://example.com"}]}
+    mock_search_resp.json.return_value = {
+        "results": [{"title": "T1", "url": "https://learn.microsoft.com/en-us/test"}],
+    }
     mock_search_resp.raise_for_status = MagicMock()
 
     mock_article_resp = MagicMock()
@@ -200,3 +203,53 @@ async def test_config_disabled_returns_empty() -> None:
         result = await svc.search("802.1X setup")
 
     assert result == []
+
+
+def test_fetch_article_rejects_non_learn_domain() -> None:
+    """URLs not on learn.microsoft.com should be skipped (SSRF prevention)."""
+    svc = MicrosoftDocsService()
+    result = svc._fetch_article("https://evil.com/malicious")
+    assert result == ""
+
+
+def test_search_api_filters_non_learn_urls() -> None:
+    """Search results with URLs outside learn.microsoft.com should be dropped."""
+    mixed_results = {
+        "results": [
+            {"title": "Legit", "url": "https://learn.microsoft.com/en-us/legit"},
+            {"title": "Evil", "url": "https://evil.com/phish"},
+            {"title": "Also Legit", "url": "https://learn.microsoft.com/en-us/also"},
+        ]
+    }
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = mixed_results
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.get.return_value = mock_resp
+
+    with patch("app.services.microsoft_docs.httpx.Client", return_value=mock_client):
+        svc = MicrosoftDocsService()
+        results = svc._search_api("test")
+
+    assert len(results) == 2
+    assert all(url.startswith("https://learn.microsoft.com") for _, url in results)
+
+
+def test_cache_evicts_oldest_when_full() -> None:
+    """Cache should evict the oldest entry when MAX_CACHE_ENTRIES is reached."""
+    now = time.monotonic()
+    # Fill cache to capacity
+    for i in range(MAX_CACHE_ENTRIES):
+        _cache[f"key_{i}"] = (now + i, [])
+
+    assert len(_cache) == MAX_CACHE_ENTRIES
+
+    # Adding one more should evict key_0 (oldest timestamp)
+    from app.services.microsoft_docs import _set_cached
+    _set_cached("overflow_query", [WebContextDoc(title="T", url="u", content="c")])
+
+    assert len(_cache) == MAX_CACHE_ENTRIES
+    assert "key_0" not in _cache

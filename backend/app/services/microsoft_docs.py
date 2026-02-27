@@ -8,6 +8,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -21,6 +22,8 @@ REQUEST_TIMEOUT = 10.0
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024  # 2 MB
 MAX_CONTENT_CHARS = 3000  # max chars per article to include as context
 CACHE_TTL_SECONDS = 300  # 5 minutes
+MAX_CACHE_ENTRIES = 128  # evict oldest entries when exceeded
+ALLOWED_ARTICLE_DOMAIN = "learn.microsoft.com"
 
 
 @dataclass
@@ -51,6 +54,10 @@ def _get_cached(keywords: str) -> list[WebContextDoc] | None:
 
 
 def _set_cached(keywords: str, docs: list[WebContextDoc]) -> None:
+    # Evict oldest entries when cache exceeds max size
+    if len(_cache) >= MAX_CACHE_ENTRIES:
+        oldest_key = min(_cache, key=lambda k: _cache[k][0])
+        del _cache[oldest_key]
     _cache[_cache_key(keywords)] = (time.monotonic(), docs)
 
 
@@ -98,14 +105,14 @@ class MicrosoftDocsService:
             if isinstance(result, Exception):
                 logger.debug("Failed to fetch article %s: %s", search_results[i][1], result)
                 continue
-            assert isinstance(result, str)
+            if not isinstance(result, str) or not result:
+                continue
             title = search_results[i][0]
-            if result:
-                docs.append(WebContextDoc(
-                    title=title,
-                    url=search_results[i][1],
-                    content=result[:MAX_CONTENT_CHARS],
-                ))
+            docs.append(WebContextDoc(
+                title=title,
+                url=search_results[i][1],
+                content=result[:MAX_CONTENT_CHARS],
+            ))
         return docs
 
     def _search_api(self, keywords: str) -> list[tuple[str, str]]:
@@ -125,7 +132,7 @@ class MicrosoftDocsService:
             for item in data.get("results", []):
                 title = item.get("title", "")
                 url = item.get("url", "")
-                if title and url:
+                if title and url and urlparse(url).hostname == ALLOWED_ARTICLE_DOMAIN:
                     results.append((title, url))
             return results
         except (httpx.HTTPError, KeyError, ValueError):
@@ -134,6 +141,12 @@ class MicrosoftDocsService:
 
     def _fetch_article(self, url: str) -> str:
         """Fetch and extract text content from a Microsoft Learn article."""
+        # Validate URL domain to prevent SSRF via malicious search results
+        parsed = urlparse(url)
+        if parsed.hostname != ALLOWED_ARTICLE_DOMAIN:
+            logger.debug("Skipping non-Learn URL: %s", url)
+            return ""
+
         try:
             with httpx.Client(follow_redirects=True, max_redirects=3) as client:
                 resp = client.get(
