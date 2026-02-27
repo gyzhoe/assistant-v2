@@ -14,8 +14,13 @@ When a technician opens a WHD ticket, the assistant:
 
 The sidebar includes a **Knowledge Base** panel for importing documents directly into ChromaDB — no CLI required:
 - Drag-and-drop file upload (PDF, HTML, JSON, CSV)
+- URL ingestion: paste a URL and the backend fetches, extracts, and chunks it
 - Progress tracking with per-file status and cancel support
 - Collection management: view document counts and clear collections
+
+### Microsoft Learn Live Search
+
+When generating a reply, the backend searches [Microsoft Learn](https://learn.microsoft.com) for documentation matching the ticket's subject and category. Results are included alongside your local KB articles as additional RAG context — no pre-ingestion required. This runs in parallel with the local ChromaDB lookup, so it adds no latency when the network is fast. Gracefully degrades if the search fails.
 
 ## Architecture
 
@@ -92,8 +97,8 @@ python -m uv run python -m ingestion.cli status
 
 ```bash
 # Run all tests
-npx --workspace=extension vitest run    # Extension unit tests (55 tests)
-cd backend && python -m uv run pytest tests/ -v  # Backend tests (96 tests)
+npx --workspace=extension vitest run    # Extension unit tests (60 tests)
+cd backend && python -m uv run pytest tests/ -v  # Backend tests (152 tests)
 
 # Type checking
 npm run typecheck
@@ -139,12 +144,13 @@ MAX_UPLOAD_BYTES=52428800
 
 ## Security
 
-- All inference is local — no data sent to external services
+- All inference is local — no data sent to external services (Microsoft Learn search is opt-in)
 - CORS is locked to your specific extension origin (not `*`)
 - API token authentication via `X-Extension-Token` header
-- Rate limiting: 20 req/min for generation, 5 req/min for file uploads
-- Request size limits: 64 KB for API calls, 50 MB for file uploads
-- Concurrency control: single upload at a time (409 on concurrent attempts)
+- Rate limiting: 20 req/min for generation, 5 req/min for file/URL ingestion
+- Request size limits: 64 KB for API calls, 50 MB for file uploads, 5 MB for URL fetch
+- Concurrency control: single ingestion at a time (409 on concurrent attempts)
+- SSRF prevention for URL ingestion: private IP blocking, redirect re-validation, scheme whitelist
 - Backend validates all inputs via Pydantic
 - See [Security Guide](docs/security.md) for production hardening
 

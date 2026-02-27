@@ -5,6 +5,30 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-02-27
+
+### Added
+- **Microsoft Learn Live Search**: at generation time, searches Microsoft Learn for relevant documentation and includes results as additional RAG context (#57)
+  - Runs in parallel with local ChromaDB retrieval via `asyncio.gather()` — no added latency
+  - `MicrosoftDocsService` with in-memory cache (5 min TTL, 128 max entries)
+  - Domain-locked fetching: only `learn.microsoft.com` articles are fetched
+  - Privacy-conscious: only ticket subject + category used as search keywords
+  - Configurable via `microsoft_docs_enabled` config and `include_web_context` request field
+  - Graceful degradation: search failures return empty list, generation continues with local context only
+- **URL Ingestion**: `POST /ingest/url` endpoint to fetch a URL, extract content, and store in ChromaDB (#56)
+  - BeautifulSoup extraction: strips script, style, nav, footer, header, aside elements
+  - Chunks with existing `chunk_by_tokens()` (500 tokens, 50 overlap)
+  - Shares concurrency semaphore with file upload (one ingestion at a time)
+  - Sidebar URL input in Import tab with loading/success/error states
+  - `apiClient.ingestUrl()` method in extension
+- CI concurrency group on Claude Code Review workflow to prevent duplicate runs (#58)
+- `web_docs` count in generate log line for observability (#59)
+- 56 new tests: 11 MS Learn service, 33 URL loader (including SSRF vectors), 8 ingest endpoint, 4 extension API client
+
+### Security
+- **SSRF prevention for URL ingestion**: private IP blocking (IPv4/IPv6/IPv4-mapped), DNS resolution before connection, redirect re-validation per hop, scheme whitelist (http/https), 5 MB response cap, Content-Type whitelist (#56)
+- Domain validation for Microsoft Learn article fetching — only `learn.microsoft.com` URLs are fetched (#57)
+
 ## [1.4.0] - 2026-02-27
 
 ### Added
@@ -126,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend middleware and models router tests
 - Extension sidebar store, DOM inserter, and storage tests
 
+[1.5.0]: https://github.com/gyzhoe/assistant/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/gyzhoe/assistant/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/gyzhoe/assistant/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/gyzhoe/assistant/compare/v1.1.0...v1.2.0
