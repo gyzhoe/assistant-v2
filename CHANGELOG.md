@@ -5,6 +5,27 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-27
+
+### Added
+- **Knowledge Import GUI**: sidebar panel with Import/Manage tabs for uploading documents (PDF, HTML, JSON, CSV) directly into ChromaDB (#51)
+  - Drag-and-drop file upload with progress tracking and cancel support
+  - Collection management: view document counts, clear collections with inline confirmation
+  - `useKnowledgeImport` hook with file staging, sequential upload, abort, auto-dismiss
+  - `KnowledgePanel`, `ImportTab`, `ManageTab` components following Fluent Design system
+- Backend `POST /ingest/upload` endpoint with multipart file upload, streaming size check, and concurrency semaphore (#51)
+- Backend `POST /ingest/collections/{name}/clear` endpoint for idempotent collection reset (#51)
+- `IngestionPipeline.ingest_file()` method with auto-routing by file extension (#51)
+- `embed_fn` injection into `IngestionPipeline` for reusable embedding logic (#51)
+- Batch logging in `_upsert_stream` for ingestion progress visibility (#51)
+- PDF 500-page cap in `load_kb_pdf` to prevent memory issues (#51)
+- `max_upload_bytes` config setting (default 50 MB) (#51)
+- Middleware `exempt_paths` for upload endpoint size limit bypass (#51)
+- Per-path rate limiting: `/ingest/upload` at 5 req/min (#51)
+- 27 new backend tests: upload endpoint, collection clear, pipeline routing, middleware exemption (#51)
+- 18 new extension tests: API client ingest methods, hook logic, component rendering (#51)
+- Claude Code Review as required CI check with write permissions (#52)
+
 ## [1.3.0] - 2026-02-27
 
 ### Added
@@ -105,6 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend middleware and models router tests
 - Extension sidebar store, DOM inserter, and storage tests
 
+[1.4.0]: https://github.com/gyzhoe/assistant/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/gyzhoe/assistant/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/gyzhoe/assistant/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/gyzhoe/assistant/compare/v1.0.1...v1.1.0

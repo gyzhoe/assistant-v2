@@ -119,6 +119,75 @@ Lists available Ollama models (proxies Ollama's `/api/tags`).
 
 ---
 
+## `POST /ingest/upload`
+
+Uploads a single file for ingestion into ChromaDB. Accepts multipart/form-data.
+
+### Request
+- Content-Type: `multipart/form-data`
+- Field: `file` — the file to ingest
+- Supported extensions: `.json`, `.csv`, `.html`, `.htm`, `.pdf`
+- Max file size: 50 MB (configurable via `MAX_UPLOAD_BYTES`)
+
+### Response `200 OK`
+```json
+{
+  "filename": "kb-article.pdf",
+  "collection": "kb_articles",
+  "chunks_ingested": 42,
+  "processing_time_ms": 12340,
+  "warning": null
+}
+```
+
+### Response fields
+| Field | Type | Description |
+|---|---|---|
+| `filename` | string | Sanitized filename |
+| `collection` | string | Target ChromaDB collection (`whd_tickets` or `kb_articles`) |
+| `chunks_ingested` | integer | Number of text chunks stored |
+| `processing_time_ms` | integer | Total processing time |
+| `warning` | string \| null | Warning message (e.g., zero chunks extracted) |
+
+### Error responses
+| Status | Condition |
+|---|---|
+| `409 Conflict` | Another upload is already in progress |
+| `413 Payload Too Large` | File exceeds `MAX_UPLOAD_BYTES` |
+| `422 Unprocessable Entity` | Invalid extension, empty file, or corrupt content |
+| `503 Service Unavailable` | Ollama is not reachable for embedding |
+
+### Rate limit
+5 requests per minute per IP.
+
+---
+
+## `POST /ingest/collections/{name}/clear`
+
+Clears all documents from a ChromaDB collection. Idempotent.
+
+### Path parameters
+| Parameter | Type | Description |
+|---|---|---|
+| `name` | string | Collection name: `whd_tickets` or `kb_articles` |
+
+### Response `200 OK`
+```json
+{
+  "status": "ok",
+  "collection": "kb_articles"
+}
+```
+
+### Response `404 Not Found` — Invalid collection name
+```json
+{
+  "detail": "Unknown collection: foo"
+}
+```
+
+---
+
 ## Chrome Runtime Message Types
 
 Defined in `extension/src/shared/messages.ts`.
