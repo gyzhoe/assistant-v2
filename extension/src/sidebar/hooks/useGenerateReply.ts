@@ -36,7 +36,9 @@ export function useGenerateReply() {
         model: selectedModel,
         max_context_docs: 5,
         stream: false,
+        include_web_context: true,
         prompt_suffix: settings.promptSuffix,
+        custom_fields: ticketData.customFields,
       }, ctrl.signal)
       setReply(response.reply)
       setLastResponse(response)

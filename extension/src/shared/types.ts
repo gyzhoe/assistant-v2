@@ -6,6 +6,7 @@ export interface TicketData {
   category: string
   status: string
   ticketUrl: string
+  customFields: Record<string, string>
 }
 
 /** Settings persisted to chrome.storage.sync */
@@ -46,7 +47,9 @@ export interface GenerateRequest {
   model: string
   max_context_docs: number
   stream: boolean
+  include_web_context: boolean
   prompt_suffix: string
+  custom_fields: Record<string, string>
 }
 
 /** Single retrieved context document */
