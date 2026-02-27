@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 # Enterprise input limits — prevents oversized payloads reaching Ollama
 # and mitigates prompt injection via extremely long ticket content.
@@ -21,6 +21,14 @@ class GenerateRequest(BaseModel):
     model: str = Field(default="llama3.2:3b", max_length=_MODEL_MAX, description="Ollama model to use")
     max_context_docs: int = Field(default=5, ge=1, le=20)
     stream: bool = Field(default=False)
+    custom_fields: dict[str, str] = Field(
+        default_factory=dict, description="WHD custom fields (e.g., Network Connection Label, Building, Room, Mac address)"
+    )
+    include_web_context: bool = Field(default=True, description="Include Microsoft Learn search results")
     prompt_suffix: str = Field(
         default="", max_length=2000, description="Custom instructions appended to the prompt"
     )
+
+
+class IngestUrlRequest(BaseModel):
+    url: HttpUrl = Field(description="URL to fetch and ingest")

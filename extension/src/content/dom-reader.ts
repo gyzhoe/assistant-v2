@@ -90,6 +90,7 @@ export class DOMReader {
       category,
       status: this.readField('status', DEFAULT_SELECTORS.status, DEFAULT_SELECTORS.statusFallbacks),
       ticketUrl: window.location.href,
+      customFields: this.readCustomFields(),
     }
   }
 
@@ -191,6 +192,40 @@ export class DOMReader {
     const match = title.match(/(?:ticket\s*#?\d+\s*[-–—]\s*)(.+)/i)
       ?? title.match(/[-–—]\s*(.+)$/)
     return match?.[1]?.trim() ?? ''
+  }
+
+  /**
+   * Extract all custom fields from the WHD "Custom Fields" section.
+   * Scans for label/value pairs in the table layout.
+   */
+  private readCustomFields(): Record<string, string> {
+    const fields: Record<string, string> = {}
+    const allLabels = document.querySelectorAll('td.labelStandard')
+
+    let inCustomSection = false
+    for (const labelCell of allLabels) {
+      const cellText = labelCell.textContent?.trim() ?? ''
+
+      if (cellText === 'Custom Fields') {
+        inCustomSection = true
+        continue
+      }
+
+      if (!inCustomSection || !cellText) continue
+
+      const row = labelCell.closest('tr')
+      if (!row) continue
+      const cells = row.querySelectorAll('td:not(.labelStandard)')
+      for (const cell of cells) {
+        const val = this.extractValueFromCell(cell)
+        if (val) {
+          fields[cellText] = val
+          break
+        }
+      }
+    }
+
+    return fields
   }
 
   private extractText(el: Element): string {

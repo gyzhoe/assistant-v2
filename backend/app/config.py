@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Max upload file size in bytes (default 50 MB)
     max_upload_bytes: int = 52_428_800
 
+    # Microsoft Learn live search at generation time
+    microsoft_docs_enabled: bool = True
+
     @model_validator(mode="after")
     def reject_wildcard_cors_with_token(self) -> Self:
         """Reject CORS_ORIGIN=* when API_TOKEN is set.
