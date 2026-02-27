@@ -98,7 +98,7 @@ def load_kb_pdf(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
     article_id = _content_id(article_title + path.name)
 
     full_text_parts: list[str] = []
-    for page in reader.pages:
+    for page in reader.pages[:500]:
         page_text = page.extract_text() or ""
         full_text_parts.append(page_text)
 

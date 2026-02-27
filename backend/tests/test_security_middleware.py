@@ -7,6 +7,9 @@ Middleware execution order for a request (outermost → innermost):
   SecurityHeaders → CORS → RequestSizeLimit → RateLimit → APIToken → router
 """
 
+from __future__ import annotations
+
+import io
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -476,3 +479,83 @@ async def test_rate_limit_middleware_unit_sweep_throttled() -> None:
 
     # Because the sweep was throttled, the stale entry must still be present.
     assert "old-ip" in mw._counts
+
+
+# ---------------------------------------------------------------------------
+# /ingest/upload size limit exemption
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_ingest_upload_exempt_from_size_limit() -> None:
+    """/ingest/upload should bypass the 64KB request size limit."""
+    async with _AppClientContext(max_bytes=512) as ac:
+        with patch(
+            "app.routers.ingest.IngestionPipeline"
+        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+            mock_pipeline = MagicMock()
+            mock_pipeline.ingest_file.return_value = ("whd_tickets", 1)
+            mock_pipeline_cls.return_value = mock_pipeline
+
+            # Send a file larger than 512 bytes — should NOT get 413 from size middleware
+            big_content = b"x" * 1024
+            resp = await ac.post(
+                "/ingest/upload",
+                files={"file": ("data.json", io.BytesIO(big_content), "application/json")},
+            )
+            # Should reach the handler (200 from mocked pipeline)
+            assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_generate_still_size_limited() -> None:
+    """/generate must still be size-limited after adding /ingest/upload exemption."""
+    max_bytes = 512
+    async with _AppClientContext(max_bytes=max_bytes) as ac:
+        oversized = b"x" * (max_bytes + 1)
+        resp = await ac.post(
+            "/generate",
+            content=oversized,
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 413
+
+
+# ---------------------------------------------------------------------------
+# /ingest/upload rate limiting
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_ingest_upload_rate_limited_at_5_per_minute() -> None:
+    """/ingest/upload should be rate-limited at 5 requests per minute."""
+    async with _AppClientContext(max_per_minute=20) as ac:
+        with patch(
+            "app.routers.ingest.IngestionPipeline"
+        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+            mock_pipeline = MagicMock()
+            mock_pipeline.ingest_file.return_value = ("whd_tickets", 1)
+            mock_pipeline_cls.return_value = mock_pipeline
+
+            import asyncio
+
+            import app.routers.ingest as ingest_mod
+
+            ingest_mod._upload_semaphore = asyncio.Semaphore(1)
+
+            content = b'[{"id":"1","subject":"A","description":"B"}]'
+            # First 5 requests should succeed
+            for i in range(5):
+                resp = await ac.post(
+                    "/ingest/upload",
+                    files={"file": (f"f{i}.json", io.BytesIO(content), "application/json")},
+                )
+                assert resp.status_code == 200, f"Request {i + 1} should succeed"
+
+            # 6th request should be rate-limited
+            resp = await ac.post(
+                "/ingest/upload",
+                files={"file": ("f5.json", io.BytesIO(content), "application/json")},
+            )
+            assert resp.status_code == 429
+            assert "RATE_LIMITED" in resp.json().get("error_code", "")
