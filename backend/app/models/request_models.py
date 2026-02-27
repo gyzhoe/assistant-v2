@@ -32,3 +32,8 @@ class GenerateRequest(BaseModel):
 
 class IngestUrlRequest(BaseModel):
     url: HttpUrl = Field(description="URL to fetch and ingest")
+
+
+class CreateArticleRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200, description="Article title")
+    content: str = Field(min_length=1, max_length=100_000, description="Markdown content")

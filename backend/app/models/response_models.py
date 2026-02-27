@@ -30,3 +30,10 @@ class IngestUrlResponse(BaseModel):
     processing_time_ms: int
     title: str | None = None
     warning: str | None = None
+
+
+class CreateArticleResponse(BaseModel):
+    article_id: str
+    title: str
+    chunks_ingested: int
+    processing_time_ms: int

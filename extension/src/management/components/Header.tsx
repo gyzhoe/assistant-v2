@@ -2,6 +2,8 @@ interface HeaderProps {
   theme: 'light' | 'dark'
   onToggleTheme: () => void
   onImportClick: () => void
+  onNewArticle?: () => void
+  showNewArticle?: boolean
 }
 
 const SunIcon = () => (
@@ -23,7 +25,13 @@ const PlusIcon = () => (
   </svg>
 )
 
-export function Header({ theme, onToggleTheme, onImportClick }: HeaderProps): React.ReactElement {
+const PencilIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 2l2 2-8 8H2v-2l8-8z" />
+  </svg>
+)
+
+export function Header({ theme, onToggleTheme, onImportClick, onNewArticle, showNewArticle }: HeaderProps): React.ReactElement {
   return (
     <header className="mgmt-header">
       <div className="mgmt-header-left">
@@ -31,6 +39,16 @@ export function Header({ theme, onToggleTheme, onImportClick }: HeaderProps): Re
         <h1 className="mgmt-title">Knowledge Base Management</h1>
       </div>
       <div className="mgmt-header-right">
+        {showNewArticle && onNewArticle && (
+          <button
+            type="button"
+            className="secondary-btn mgmt-new-article-btn"
+            onClick={onNewArticle}
+          >
+            <PencilIcon />
+            New Article
+          </button>
+        )}
         <button
           type="button"
           className="primary-btn mgmt-import-btn"

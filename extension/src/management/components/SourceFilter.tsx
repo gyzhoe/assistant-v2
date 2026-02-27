@@ -12,6 +12,7 @@ const SOURCE_OPTIONS: { value: SourceType | '', label: string }[] = [
   { value: 'url', label: 'URL' },
   { value: 'json', label: 'JSON' },
   { value: 'csv', label: 'CSV' },
+  { value: 'manual', label: 'Manual' },
 ]
 
 export function SourceFilter({ value, onChange }: SourceFilterProps): React.ReactElement {

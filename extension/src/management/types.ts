@@ -70,8 +70,16 @@ export interface HealthResponse {
   version: string
 }
 
+/** Create article response */
+export interface CreateArticleResponse {
+  article_id: string
+  title: string
+  chunks_ingested: number
+  processing_time_ms: number
+}
+
 /** Source type literals */
-export type SourceType = 'pdf' | 'html' | 'url' | 'json' | 'csv'
+export type SourceType = 'pdf' | 'html' | 'url' | 'json' | 'csv' | 'manual'
 
 /** Article list query parameters */
 export interface ArticleListParams {
