@@ -89,7 +89,10 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         ) from exc
 
     latency_ms = int((time.monotonic() - start) * 1000)
-    logger.info("Generate complete: model=%s latency=%dms docs=%d", body.model, latency_ms, len(context_docs))
+    logger.info(
+        "Generate complete: model=%s latency=%dms docs=%d web_docs=%d",
+        body.model, latency_ms, len(context_docs), len(web_docs),
+    )
 
     return GenerateResponse(
         reply=reply,
