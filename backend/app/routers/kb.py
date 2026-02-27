@@ -22,8 +22,10 @@ from app.models.kb import (
     ArticleSummary,
     ChunkDetail,
     StatsResponse,
+    TagListResponse,
+    UpdateTagsResponse,
 )
-from app.models.request_models import CreateArticleRequest
+from app.models.request_models import CreateArticleRequest, UpdateTagsRequest
 from app.models.response_models import CreateArticleResponse
 from app.routers.shared import upload_semaphore
 from app.services.embed_service import EmbedService
@@ -70,6 +72,11 @@ def _build_article_index(
         if not aid:
             continue
 
+        tags_str = metadata.get("tags", "")
+        chunk_tags = (
+            [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+        )
+
         if aid not in index:
             # Determine source: source_file for html/pdf, source_url for url
             source = metadata.get("source_file") or metadata.get("source_url") or ""
@@ -80,7 +87,13 @@ def _build_article_index(
                 "source": source,
                 "chunk_count": 0,
                 "imported_at": metadata.get("imported_at"),
+                "tags": list(chunk_tags),
             }
+        else:
+            # Merge tags from additional chunks (union)
+            existing_tags: set[str] = set(index[aid].get("tags", []))
+            existing_tags.update(chunk_tags)
+            index[aid]["tags"] = sorted(existing_tags)
         index[aid]["chunk_count"] += 1
 
     return index, total
@@ -228,6 +241,7 @@ async def create_article(
                         "section": section_title,
                         "source_type": "manual",
                         "imported_at": now,
+                        "tags": ",".join(body.tags),
                     }
                     yield chunk_id, chunk_text, metadata
 
@@ -307,6 +321,13 @@ async def get_article(request: Request, article_id: str) -> ArticleDetailRespons
     first_meta = metadatas[0]
     source = first_meta.get("source_file") or first_meta.get("source_url") or ""
 
+    # Merge tags from all chunks (union)
+    all_tags: set[str] = set()
+    for meta in metadatas:
+        tags_str = meta.get("tags", "")
+        if tags_str:
+            all_tags.update(t.strip() for t in tags_str.split(",") if t.strip())
+
     chunks = [
         ChunkDetail(
             id=chunk_id,
@@ -324,8 +345,55 @@ async def get_article(request: Request, article_id: str) -> ArticleDetailRespons
         source=source,
         chunk_count=len(ids),
         imported_at=first_meta.get("imported_at"),
+        tags=sorted(all_tags),
         chunks=chunks,
     )
+
+
+@router.patch("/articles/{article_id}/tags", response_model=UpdateTagsResponse)
+async def update_tags(
+    request: Request, article_id: str, body: UpdateTagsRequest,
+) -> UpdateTagsResponse:
+    """Update tags on all chunks of an article."""
+    chroma_client = request.app.state.chroma_client
+    try:
+        col = await asyncio.to_thread(chroma_client.get_collection, "kb_articles")
+    except (ValueError, Exception):
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={"detail": f"Article not found: {article_id}"},
+        )
+
+    result = await asyncio.to_thread(
+        col.get, where={"article_id": article_id}, include=["metadatas"],
+    )
+    ids: list[str] = result.get("ids", [])
+    metadatas: list[dict[str, Any]] = result.get("metadatas", [])
+
+    if not ids:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={"detail": f"Article not found: {article_id}"},
+        )
+
+    tags_str = ",".join(body.tags)
+    updated_metas = [{**m, "tags": tags_str} for m in metadatas]
+    await asyncio.to_thread(col.update, ids=ids, metadatas=updated_metas)
+    invalidate_article_cache()
+
+    return UpdateTagsResponse(
+        article_id=article_id, tags=body.tags, chunks_updated=len(ids),
+    )
+
+
+@router.get("/tags", response_model=TagListResponse)
+async def get_tags(request: Request) -> TagListResponse:
+    """Return all unique tags across all articles."""
+    index, _ = await _get_article_index(request)
+    all_tags: set[str] = set()
+    for article in index.values():
+        all_tags.update(article.get("tags", []))
+    return TagListResponse(tags=sorted(all_tags))
 
 
 @router.delete("/articles/{article_id}", response_model=ArticleDeleteResponse)

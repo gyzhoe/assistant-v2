@@ -38,6 +38,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
                 rag.retrieve(
                     query=query or "general helpdesk inquiry",
                     max_docs=body.max_context_docs,
+                    category=body.category,
                 ),
                 ms_docs.search(web_search_keywords),
             )
@@ -45,6 +46,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
             context_docs = await rag.retrieve(
                 query=query or "general helpdesk inquiry",
                 max_docs=body.max_context_docs,
+                category=body.category,
             )
             web_docs = []
     except ConnectionError as exc:

@@ -1233,6 +1233,88 @@ body {
   gap: 0.35rem;
 }
 
+/* ─── Tag picker ─────────────────────────────────── */
+.tag-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tag-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 550;
+  border-radius: 1rem;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--chip-text);
+  white-space: nowrap;
+}
+
+.tag-pill-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.tag-pill-remove:hover {
+  color: var(--error-text);
+}
+
+.tag-input-wrapper {
+  position: relative;
+}
+
+.tag-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8125rem;
+  background: var(--surface-soft);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+
+.tag-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.tag-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tag-editor-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.tag-editor-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
 /* ─── Reduced motion ──────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }

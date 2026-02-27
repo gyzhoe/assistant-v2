@@ -8,6 +8,8 @@ import type {
   IngestUrlResponse,
   ArticleListParams,
   CreateArticleResponse,
+  UpdateTagsResponse,
+  TagListResponse,
 } from './types'
 
 /** API error with status code and optional body */
@@ -102,10 +104,21 @@ export const managementApi = {
     return fetchApi<HealthResponse>('/health')
   },
 
-  createArticle(title: string, content: string): Promise<CreateArticleResponse> {
+  createArticle(title: string, content: string, tags: string[] = []): Promise<CreateArticleResponse> {
     return fetchApi<CreateArticleResponse>('/kb/articles', {
       method: 'POST',
-      body: JSON.stringify({ title, content }),
+      body: JSON.stringify({ title, content, tags }),
     })
+  },
+
+  updateTags(articleId: string, tags: string[]): Promise<UpdateTagsResponse> {
+    return fetchApi<UpdateTagsResponse>(`/kb/articles/${encodeURIComponent(articleId)}/tags`, {
+      method: 'PATCH',
+      body: JSON.stringify({ tags }),
+    })
+  },
+
+  getTags(): Promise<TagListResponse> {
+    return fetchApi<TagListResponse>('/kb/tags')
   },
 }

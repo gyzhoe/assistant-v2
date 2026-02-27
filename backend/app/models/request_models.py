@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 # Enterprise input limits — prevents oversized payloads reaching Ollama
 # and mitigates prompt injection via extremely long ticket content.
@@ -34,6 +34,45 @@ class IngestUrlRequest(BaseModel):
     url: HttpUrl = Field(description="URL to fetch and ingest")
 
 
+def _validate_tag_list(v: list[str]) -> list[str]:
+    """Validate and normalize a list of tags.
+
+    Strips whitespace, drops empty strings, rejects commas (used as
+    delimiter in ChromaDB metadata) and enforces length limits.
+    """
+    cleaned: list[str] = []
+    for tag in v:
+        tag = tag.strip()
+        if not tag:
+            continue
+        if "," in tag:
+            msg = "Tags must not contain commas"
+            raise ValueError(msg)
+        if len(tag) > 100:
+            msg = "Each tag must be at most 100 characters"
+            raise ValueError(msg)
+        cleaned.append(tag)
+    if len(cleaned) > 20:
+        msg = "Maximum 20 tags allowed"
+        raise ValueError(msg)
+    return cleaned
+
+
 class CreateArticleRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200, description="Article title")
     content: str = Field(min_length=1, max_length=100_000, description="Markdown content")
+    tags: list[str] = Field(default_factory=list, description="Article tags (max 20)")
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: list[str]) -> list[str]:
+        return _validate_tag_list(v)
+
+
+class UpdateTagsRequest(BaseModel):
+    tags: list[str] = Field(default_factory=list, description="New tags for the article")
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: list[str]) -> list[str]:
+        return _validate_tag_list(v)
