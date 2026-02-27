@@ -58,7 +58,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
 
     # Build prompt
     context_text = "\n\n---\n\n".join(
-        f"[{doc.source.upper()} | score: {doc.score:.2f}]\n{doc.content}"
+        f"[{doc.source.upper()} | {_relevance_label(doc.score)} | score: {doc.score:.2f}]\n{doc.content}"
         for doc in context_docs
     )
 
@@ -102,6 +102,15 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     )
 
 
+def _relevance_label(score: float) -> str:
+    """Map a similarity score to a human-readable relevance label."""
+    if score >= 0.75:
+        return "HIGH relevance"
+    if score >= 0.50:
+        return "MODERATE relevance"
+    return "LOW relevance"
+
+
 def _build_prompt(body: GenerateRequest, context_text: str) -> str:
     subject = body.ticket_subject or "(not available)"
     description = body.ticket_description or "(not available)"
@@ -116,7 +125,7 @@ Custom Fields:
 {custom}
 
 KNOWLEDGE BASE
-{context_text if context_text else "(no matching articles)"}
+{context_text if context_text else "(no matching articles found)"}
 
 ENVIRONMENT
 - Managed university network using 802.1X authentication.
@@ -124,15 +133,48 @@ ENVIRONMENT
 - Personal devices must self-register for CampusNet. If self-registration fails, local IT (our department) registers the device manually.
 - Internal resources require wired or VPN connection — guest/CampusNet Wi-Fi has limited access.
 
-RULES
-1. Treat the TICKET fields as established facts. The Category tells you the connection type (e.g., "NETWORK CONNECTION" = wired Ethernet). Do NOT ask the user to confirm information already provided in the ticket.
-2. Focus ONLY on the specific problem described. Ignore KB steps that do not match.
-3. Do NOT repeat or summarize the problem back to the user. Go straight to the action.
-4. No apologies, no empathy, no filler ("Thank you for reaching out", "I'm happy to help", "We'll do our best"). Be direct and professional.
-5. Provide numbered troubleshooting steps the user can try. Only ask questions about things NOT already in the ticket.
-6. Write for non-technical end users. If a step is technical (e.g., "check root CA"), either skip it or include the exact click path (e.g., "Open Settings > ..."). Never assume the user knows IT terminology.
-7. Keep it short: 50-80 words max. Greeting by first name, steps, sign-off with just your name.
-8. Only use KB steps that directly apply. Otherwise use general IT knowledge.
-9. Do not invent software versions, ticket numbers, or links.
+GROUNDING RULES
+1. ONLY use information from the KNOWLEDGE BASE and ENVIRONMENT sections above. If neither contains a relevant answer, say so and escalate.
+2. NEVER invent software versions, URLs, KB article references, ticket numbers, or procedures not present in the context above.
+3. If the KNOWLEDGE BASE shows "(no matching articles found)", rely on ENVIRONMENT facts and general IT knowledge only. Do NOT fabricate KB references.
+4. Treat TICKET fields as established facts. The Category indicates the connection type (e.g., "NETWORK CONNECTION" = wired Ethernet). Do NOT ask the user to confirm information already in the ticket.
+5. Prefer HIGH relevance context over LOW relevance context. Ignore context that does not match the specific problem.
+
+FORMAT RULES
+1. Go straight to the action — do NOT repeat or summarize the problem.
+2. No apologies, no empathy, no filler ("Thank you for reaching out", "I'm happy to help").
+3. Numbered troubleshooting steps. Only ask questions about things NOT already in the ticket.
+4. Write for non-technical end users — include exact click paths (e.g., "Open Settings > Network > ...") instead of jargon.
+5. Keep it 60-120 words. Greeting by first name, steps, sign-off with just your name.
+
+EXAMPLES
+
+Example 1 (KB match available):
+Ticket: "VPN disconnects every 10 minutes"
+KB: [HIGH relevance] "VPN timeout is caused by stale credentials. Fix: open Credential Manager > Windows Credentials > remove VPN entries > reconnect."
+Reply:
+Hi Alex,
+
+1. Press Windows+R, type "control keymgr.dll", press Enter.
+2. Under Windows Credentials, delete any entries related to VPN.
+3. Reconnect to VPN.
+
+If it still disconnects after clearing credentials, let us know and we'll check your VPN profile server-side.
+
+— IT Support
+
+Example 2 (no KB match):
+Ticket: "Outlook keeps crashing on startup"
+KB: (no matching articles found)
+Reply:
+Hi Sarah,
+
+1. Open Outlook in safe mode: press Windows+R, type "outlook /safe", press Enter.
+2. If it opens, go to File > Options > Add-ins > Manage COM Add-ins > uncheck all > restart Outlook normally.
+3. If safe mode also crashes, open Control Panel > Mail > Show Profiles > create a new profile.
+
+If none of these work, we'll take a closer look at your machine remotely.
+
+— IT Support
 
 REPLY:"""

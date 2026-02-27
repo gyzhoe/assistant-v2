@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
-    default_model: str = "llama3.2:3b"
+    default_model: str = "qwen2.5:14b"
     version: str = "1.4.0"
     prompt_template_path: str | None = None
 
@@ -33,6 +33,16 @@ class Settings(BaseSettings):
 
     # Max upload file size in bytes (default 50 MB)
     max_upload_bytes: int = 52_428_800
+
+    # LLM sampling parameters — tuned for factual, grounded helpdesk replies
+    llm_temperature: float = 0.3
+    llm_top_p: float = 0.9
+    llm_top_k: int = 40
+    llm_repeat_penalty: float = 1.1
+    llm_num_predict: int = 300
+
+    # RAG minimum similarity threshold — docs below this score are noise
+    rag_min_similarity: float = 0.35
 
     # Microsoft Learn live search at generation time
     microsoft_docs_enabled: bool = True

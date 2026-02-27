@@ -43,7 +43,18 @@ class LLMService:
             with httpx.Client() as client:
                 resp = client.post(
                     f"{self.base_url}/api/generate",
-                    json={"model": model, "prompt": prompt, "stream": False},
+                    json={
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": settings.llm_temperature,
+                            "top_p": settings.llm_top_p,
+                            "top_k": settings.llm_top_k,
+                            "repeat_penalty": settings.llm_repeat_penalty,
+                            "num_predict": settings.llm_num_predict,
+                        },
+                    },
                     timeout=120.0,
                 )
                 resp.raise_for_status()

@@ -83,7 +83,7 @@ class TestLLMServiceGenerateSync:
         assert result == "Here is the fix."
 
     def test_successful_generation_posts_correct_payload(self) -> None:
-        """_generate_sync sends the right JSON body to Ollama."""
+        """_generate_sync sends the right JSON body to Ollama including options."""
         svc = self._svc()
         mock_resp = _make_response(json_data={"response": "ok"})
 
@@ -93,14 +93,22 @@ class TestLLMServiceGenerateSync:
             mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
             mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-            svc._generate_sync("my prompt", "llama3.2:3b")
+            svc._generate_sync("my prompt", "qwen2.5:14b")
 
         call_kwargs = mock_client.post.call_args
         assert call_kwargs is not None
         sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
-        assert sent_json["model"] == "llama3.2:3b"
+        assert sent_json["model"] == "qwen2.5:14b"
         assert sent_json["prompt"] == "my prompt"
         assert sent_json["stream"] is False
+
+        # Verify sampling options are included
+        options = sent_json["options"]
+        assert "temperature" in options
+        assert "top_p" in options
+        assert "top_k" in options
+        assert "repeat_penalty" in options
+        assert "num_predict" in options
 
     # --- connection errors ---
 
