@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **KB Article Tagging**: tag articles with WHD request types (e.g., NETWORK CONNECTION, MAILBOX) for category-filtered RAG retrieval
+  - `PATCH /kb/articles/{id}/tags` endpoint: update tags on all chunks of an article
+  - `GET /kb/tags` endpoint: returns all unique tags across articles (for autocomplete)
+  - `CreateArticleRequest` accepts optional `tags` array, stored as comma-separated string in ChromaDB chunk metadata
+  - Tag validation: rejects commas (storage delimiter), strips whitespace, max 20 tags / 100 chars each
+  - Two-phase RAG retrieval: when ticket category is set, phase 1 queries KB with `$contains` tag filter, phase 2 backfills remaining slots unfiltered with deduplication
+  - `category` parameter passed from `/generate` to RAG service in both web-context code paths
+  - Article index cache merges tags across chunks (set union)
+  - Tag picker UI in ArticleEditor: pill display, Enter/comma to add, paste support, datalist autocomplete from existing tags
+  - Inline tag editing in ArticleDetail: view/edit mode toggle with Save/Cancel and error toast
+  - 12 new backend tests (tag CRUD, validation, filtered RAG), 2 new frontend tests
 - **Create Article from Scratch**: full-page Markdown editor in KB Management page for authoring knowledge articles directly
   - `POST /kb/articles` endpoint: generates article ID, chunks by `##`/`###` headings, embeds via Ollama, stores in ChromaDB as `source_type: "manual"`
   - `chunk_by_markdown_headings()` utility: splits Markdown by headings, auto-creates "Introduction" section for pre-heading content, sub-splits oversized sections

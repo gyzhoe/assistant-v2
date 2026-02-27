@@ -12,6 +12,7 @@ class ArticleSummary(BaseModel):
     source: str
     chunk_count: int
     imported_at: str | None = None
+    tags: list[str] = []
 
 
 class ArticleListResponse(BaseModel):
@@ -35,6 +36,7 @@ class ArticleDetailResponse(BaseModel):
     source: str
     chunk_count: int
     imported_at: str | None = None
+    tags: list[str] = []
     chunks: list[ChunkDetail]
 
 
@@ -45,6 +47,16 @@ class ArticleDeleteResponse(BaseModel):
 
 class SourceTypeCount(BaseModel):
     """Count of articles per source type — used as dict values in StatsResponse."""
+
+
+class UpdateTagsResponse(BaseModel):
+    article_id: str
+    tags: list[str]
+    chunks_updated: int
+
+
+class TagListResponse(BaseModel):
+    tags: list[str]
 
 
 class StatsResponse(BaseModel):

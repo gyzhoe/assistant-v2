@@ -22,9 +22,11 @@ vi.stubGlobal('crypto', {
 
 // Mock the management API
 const mockCreateArticle = vi.fn()
+const mockGetTags = vi.fn()
 vi.mock('../../../src/management/api', () => ({
   managementApi: {
     createArticle: (...args: unknown[]) => mockCreateArticle(...args),
+    getTags: () => mockGetTags(),
   },
   ApiError: class ApiError extends Error {
     status: number
@@ -63,6 +65,7 @@ describe('ArticleEditor', () => {
     vi.clearAllMocks()
     uuidCounter = 0
     document.body.innerHTML = ''
+    mockGetTags.mockResolvedValue({ tags: ['NETWORK CONNECTION', 'MAILBOX', 'VPN'] })
   })
 
   it('renders title input and content textarea', () => {
@@ -121,7 +124,37 @@ describe('ArticleEditor', () => {
     await waitFor(() => {
       expect(onBack).toHaveBeenCalled()
     })
-    expect(mockCreateArticle).toHaveBeenCalledWith('My Article', 'Some content here')
+    expect(mockCreateArticle).toHaveBeenCalledWith('My Article', 'Some content here', [])
+  })
+
+  it('renders tags input field', () => {
+    renderEditor()
+    expect(screen.getByLabelText('Tags')).not.toBeNull()
+  })
+
+  it('tags are passed to createArticle', async () => {
+    const onBack = vi.fn()
+    mockCreateArticle.mockResolvedValue({
+      article_id: 'abc-123',
+      title: 'My Article',
+      chunks_ingested: 3,
+      processing_time_ms: 150,
+    })
+
+    renderEditor(onBack)
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My Article' } })
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'Content here' } })
+
+    // Add a tag
+    const tagInput = screen.getByLabelText('Tags')
+    fireEvent.change(tagInput, { target: { value: 'NETWORK CONNECTION' } })
+    fireEvent.keyDown(tagInput, { key: 'Enter' })
+
+    fireEvent.click(screen.getByRole('button', { name: /save article/i }))
+
+    await waitFor(() => {
+      expect(mockCreateArticle).toHaveBeenCalledWith('My Article', 'Content here', ['NETWORK CONNECTION'])
+    })
   })
 
   it('409 error displays duplicate title message', async () => {

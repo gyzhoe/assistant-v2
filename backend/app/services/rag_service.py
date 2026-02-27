@@ -21,16 +21,65 @@ class RAGService:
         self.client = chroma_client
         self.embed_svc = EmbedService()
 
-    async def retrieve(self, query: str, max_docs: int = 5) -> list[ContextDoc]:
-        """Embed query, search both collections, merge and rank by score."""
+    async def retrieve(
+        self, query: str, max_docs: int = 5, category: str = "",
+    ) -> list[ContextDoc]:
+        """Embed query, search both collections, merge and rank by score.
+
+        If *category* is non-empty, KB retrieval uses a two-phase approach:
+        phase 1 queries with a tag filter, phase 2 fills remaining slots
+        without a filter (deduplicating against phase 1).
+        """
         embedding = await self.embed_svc.embed(query)
 
-        ticket_docs, kb_docs = await asyncio.gather(
-            self._query_collection(self.TICKET_COLLECTION, embedding, max_docs // 2 + 1),
-            self._query_collection(self.KB_COLLECTION, embedding, max_docs - max_docs // 2),
-        )
+        kb_target = max_docs - max_docs // 2  # KB gets slightly more
+        ticket_target = max_docs // 2 + 1
 
-        all_docs = ticket_docs + kb_docs
+        if category:
+            # Two-phase: filtered + unfiltered KB
+            filtered_target = kb_target // 2 + 1
+            ticket_docs, kb_filtered = await asyncio.gather(
+                self._query_collection(
+                    self.TICKET_COLLECTION, embedding, ticket_target,
+                ),
+                self._query_collection(
+                    self.KB_COLLECTION, embedding, filtered_target,
+                    # NOTE: $contains does substring match on the comma-separated
+                    # tags string. Category "NET" will also match "NETWORK".
+                    # Acceptable for two-phase retrieval since phase 2 backfills
+                    # unfiltered results anyway.
+                    where={"tags": {"$contains": category}},
+                ),
+            )
+
+            # Phase 2: fill remaining KB slots with unfiltered results
+            remaining = kb_target - len(kb_filtered)
+            if remaining > 0:
+                kb_unfiltered = await self._query_collection(
+                    self.KB_COLLECTION, embedding, remaining + len(kb_filtered),
+                )
+                # Deduplicate by article_id + content prefix (200 chars
+                # to avoid collisions between chunks with similar openings)
+                seen_keys = {
+                    str(doc.metadata.get("article_id", "")) + doc.content[:200]
+                    for doc in kb_filtered
+                }
+                for doc in kb_unfiltered:
+                    key = str(doc.metadata.get("article_id", "")) + doc.content[:200]
+                    if key not in seen_keys and len(kb_filtered) < kb_target:
+                        kb_filtered.append(doc)
+                        seen_keys.add(key)
+
+            all_docs = ticket_docs + kb_filtered
+        else:
+            ticket_docs, kb_docs = await asyncio.gather(
+                self._query_collection(
+                    self.TICKET_COLLECTION, embedding, ticket_target,
+                ),
+                self._query_collection(self.KB_COLLECTION, embedding, kb_target),
+            )
+            all_docs = ticket_docs + kb_docs
+
         all_docs.sort(key=lambda d: d.score, reverse=True)
 
         threshold = settings.rag_min_similarity
@@ -45,12 +94,22 @@ class RAGService:
         return filtered[:max_docs]
 
     async def _query_collection(
-        self, name: str, embedding: list[float], n_results: int
+        self,
+        name: str,
+        embedding: list[float],
+        n_results: int,
+        where: dict[str, Any] | None = None,
     ) -> list[ContextDoc]:
-        return await asyncio.to_thread(self._query_sync, name, embedding, n_results)
+        return await asyncio.to_thread(
+            self._query_sync, name, embedding, n_results, where,
+        )
 
     def _query_sync(
-        self, name: str, embedding: list[float], n_results: int
+        self,
+        name: str,
+        embedding: list[float],
+        n_results: int,
+        where: dict[str, Any] | None = None,
     ) -> list[ContextDoc]:
         try:
             col = self.client.get_collection(name)
@@ -62,11 +121,14 @@ class RAGService:
             return []
 
         n_results = min(n_results, count)
-        results: Any = col.query(
-            query_embeddings=[embedding],  # type: ignore[arg-type]
-            n_results=n_results,
-            include=["documents", "metadatas", "distances"],
-        )
+        query_kwargs: dict[str, Any] = {
+            "query_embeddings": [embedding],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where is not None:
+            query_kwargs["where"] = where
+        results: Any = col.query(**query_kwargs)
 
         docs = []
         for content, meta, distance in zip(

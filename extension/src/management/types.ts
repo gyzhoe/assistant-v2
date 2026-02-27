@@ -6,6 +6,7 @@ export interface ArticleSummary {
   source: string
   chunk_count: number
   imported_at: string | null
+  tags?: string[]
 }
 
 /** Full article detail including chunks */
@@ -76,6 +77,18 @@ export interface CreateArticleResponse {
   title: string
   chunks_ingested: number
   processing_time_ms: number
+}
+
+/** Update tags response */
+export interface UpdateTagsResponse {
+  article_id: string
+  tags: string[]
+  chunks_updated: number
+}
+
+/** Tag list response */
+export interface TagListResponse {
+  tags: string[]
 }
 
 /** Source type literals */

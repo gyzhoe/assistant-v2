@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
 import { showToast } from './Toast'
 
@@ -10,10 +10,17 @@ interface ArticleEditorProps {
 export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElement {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [tags, setTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
   const titleRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
-  const isDirty = title.length > 0 || content.length > 0
+  const isDirty = title.length > 0 || content.length > 0 || tags.length > 0
+
+  const { data: existingTags } = useQuery({
+    queryKey: ['tags'],
+    queryFn: () => managementApi.getTags(),
+  })
 
   // Auto-focus title on mount
   useEffect(() => {
@@ -21,7 +28,7 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
   }, [])
 
   const mutation = useMutation({
-    mutationFn: () => managementApi.createArticle(title.trim(), content.trim()),
+    mutationFn: () => managementApi.createArticle(title.trim(), content.trim(), tags),
     onSuccess: (data) => {
       showToast(`Article created — ${data.chunks_ingested} chunks ingested`, 'success')
       queryClient.invalidateQueries({ queryKey: ['articles'] })
@@ -96,6 +103,72 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
             onChange={e => { setTitle(e.target.value); setError('') }}
             maxLength={200}
           />
+        </div>
+
+        <div className="editor-field">
+          <label className="editor-label" htmlFor="article-tags">Tags</label>
+          <div className="tag-picker">
+            <div className="tag-pills">
+              {tags.map(tag => (
+                <span key={tag} className="tag-pill">
+                  {tag}
+                  <button
+                    type="button"
+                    className="tag-pill-remove"
+                    onClick={() => setTags(prev => prev.filter(t => t !== tag))}
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    &times;
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="tag-input-wrapper">
+              <input
+                id="article-tags"
+                type="text"
+                className="tag-input"
+                placeholder={tags.length >= 20 ? 'Max tags reached' : 'Add tags (e.g., NETWORK CONNECTION, MAILBOX)'}
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
+                    e.preventDefault()
+                    const newTag = tagInput.trim().replace(/,$/g, '')
+                    if (newTag && !tags.includes(newTag) && tags.length < 20) {
+                      setTags(prev => [...prev, newTag])
+                    }
+                    setTagInput('')
+                  }
+                }}
+                onPaste={e => {
+                  const pasted = e.clipboardData.getData('text')
+                  if (pasted.includes(',')) {
+                    e.preventDefault()
+                    const newTags = pasted.split(',').map(t => t.trim()).filter(Boolean)
+                    setTags(prev => {
+                      const combined = [...prev, ...newTags.filter(t => !prev.includes(t))]
+                      return combined.slice(0, 20)
+                    })
+                    setTagInput('')
+                  }
+                }}
+                disabled={tags.length >= 20}
+                list="tag-suggestions"
+                maxLength={100}
+              />
+              {existingTags && existingTags.tags.length > 0 && (
+                <datalist id="tag-suggestions">
+                  {existingTags.tags
+                    .filter(t => !tags.includes(t) && t.toLowerCase().includes(tagInput.toLowerCase()))
+                    .map(t => <option key={t} value={t} />)}
+                </datalist>
+              )}
+            </div>
+          </div>
+          <p className="editor-hint">
+            WHD request types like NETWORK CONNECTION, MAILBOX, etc. Press Enter or comma to add.
+          </p>
         </div>
 
         <div className="editor-field">
