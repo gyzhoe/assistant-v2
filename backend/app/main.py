@@ -1,11 +1,13 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import chromadb
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.logging_config import setup_logging
@@ -15,7 +17,7 @@ from app.middleware.security import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
-from app.routers import generate, health, ingest, models
+from app.routers import generate, health, ingest, kb, models
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -61,7 +63,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[settings.cors_origin],
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type", "X-Extension-Token"],
     )
 
@@ -82,6 +84,17 @@ def create_app() -> FastAPI:
     app.include_router(generate.router)
     app.include_router(models.router)
     app.include_router(ingest.router)
+    app.include_router(kb.router)
+
+    # Static file serving for KB management SPA — must come AFTER API routes
+    # so /kb/* API endpoints take priority over static file catch-all.
+    _manage_dir = Path(__file__).resolve().parent.parent / "static" / "manage"
+    if _manage_dir.is_dir():
+        app.mount(
+            "/manage",
+            StaticFiles(directory=str(_manage_dir), html=True),
+            name="management",
+        )
 
     return app
 

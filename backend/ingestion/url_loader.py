@@ -10,6 +10,7 @@ import ipaddress
 import logging
 import socket
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import httpx
@@ -208,6 +209,7 @@ def load_url(url: str) -> Iterator[tuple[str, str, dict[str, str]]]:
         return
 
     article_id = _content_id(final_url)
+    imported_at = datetime.now(UTC).isoformat()
 
     for chunk in chunk_by_tokens(text, max_tokens=500, overlap_tokens=50):
         if not chunk.strip():
@@ -218,5 +220,6 @@ def load_url(url: str) -> Iterator[tuple[str, str, dict[str, str]]]:
             "title": title,
             "source_url": final_url,
             "source_type": "url",
+            "imported_at": imported_at,
         }
         yield doc_id, chunk, metadata

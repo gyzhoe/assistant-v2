@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
+from app.routers.kb import invalidate_article_cache
 from app.services.embed_service import EmbedService
 from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
 from ingestion.url_loader import (
@@ -98,6 +99,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
             )
 
             elapsed_ms = int((time.perf_counter() - start) * 1000)
+            invalidate_article_cache()
 
             warning: str | None = None
             if chunks == 0:
@@ -166,6 +168,7 @@ async def clear_collection(request: Request, name: str) -> dict[str, str]:
         # Collection doesn't exist — that's fine, idempotent
         pass
 
+    invalidate_article_cache()
     return {"status": "ok", "collection": name}
 
 
@@ -221,6 +224,7 @@ async def ingest_url(
             )
 
             elapsed_ms = int((time.perf_counter() - start) * 1000)
+            invalidate_article_cache()
 
             warning: str | None = None
             if total == 0:

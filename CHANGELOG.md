@@ -5,6 +5,22 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-27
+
+### Added
+- **KB Management Page**: standalone web UI at `localhost:8765/manage` for browsing, searching, importing, and deleting knowledge base articles
+  - 4 new backend endpoints: `GET /kb/articles` (paginated, filterable), `GET /kb/articles/{id}` (detail with chunks), `DELETE /kb/articles/{id}`, `GET /kb/stats`
+  - Server-side article index cache (5 min TTL) for fast list/stats queries, invalidated on mutations
+  - React SPA with 14 components: Header, StatCards, ArticleList, ArticleRow, ArticleDetail, ImportSection, SearchBar, SourceFilter, Pagination, ConfirmDialog, Toast, EmptyState, TokenGate, SkeletonTable
+  - React Query (`@tanstack/react-query`) for server state management with optimistic deletes
+  - Radix AlertDialog for accessible delete confirmations
+  - Full dark/light theme support using shared CSS design tokens
+  - sessionStorage-based auth reusing existing `X-Extension-Token` mechanism (zero backend auth changes)
+  - Served as static SPA via FastAPI `StaticFiles` at `/manage`
+- `imported_at` ISO 8601 timestamp added to chunk metadata for HTML, PDF, and URL ingestion
+- `DELETE` added to CORS `allow_methods`
+- 22 new backend tests for KB management endpoints
+
 ## [1.5.0] - 2026-02-27
 
 ### Added

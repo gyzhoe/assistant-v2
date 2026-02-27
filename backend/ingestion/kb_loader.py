@@ -8,6 +8,7 @@ PDF: page-by-page with 500-token sliding window and 50-token overlap.
 import hashlib
 import logging
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 from bs4 import BeautifulSoup, Tag
@@ -58,6 +59,7 @@ def load_kb_html(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
         sections.append((current_heading, " ".join(current_parts)))
 
     article_id = _content_id(article_title + path.name)
+    imported_at = datetime.now(UTC).isoformat()
 
     for heading, body in sections:
         if not body.strip():
@@ -71,6 +73,7 @@ def load_kb_html(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
                 "section": heading,
                 "source_file": path.name,
                 "source_type": "html",
+                "imported_at": imported_at,
             }
             yield doc_id, combined, metadata
 
@@ -96,6 +99,7 @@ def load_kb_pdf(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
     reader = PdfReader(str(path))
     article_title = path.stem.replace("-", " ").replace("_", " ").title()
     article_id = _content_id(article_title + path.name)
+    imported_at = datetime.now(UTC).isoformat()
 
     full_text_parts: list[str] = []
     for page in reader.pages[:500]:
@@ -113,6 +117,7 @@ def load_kb_pdf(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
             "title": article_title,
             "source_file": path.name,
             "source_type": "pdf",
+            "imported_at": imported_at,
         }
         yield doc_id, chunk, metadata
 
