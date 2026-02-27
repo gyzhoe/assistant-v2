@@ -7,6 +7,7 @@ import type {
   IngestUploadResponse,
   IngestUrlResponse,
   ArticleListParams,
+  CreateArticleResponse,
 } from './types'
 
 /** API error with status code and optional body */
@@ -99,5 +100,12 @@ export const managementApi = {
 
   getHealth(): Promise<HealthResponse> {
     return fetchApi<HealthResponse>('/health')
+  },
+
+  createArticle(title: string, content: string): Promise<CreateArticleResponse> {
+    return fetchApi<CreateArticleResponse>('/kb/articles', {
+      method: 'POST',
+      body: JSON.stringify({ title, content }),
+    })
   },
 }

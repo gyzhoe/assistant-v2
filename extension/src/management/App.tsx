@@ -5,6 +5,7 @@ import { Header } from './components/Header'
 import { StatCards } from './components/StatCards'
 import { ArticleList } from './components/ArticleList'
 import { ImportSection } from './components/ImportSection'
+import { ArticleEditor } from './components/ArticleEditor'
 import { TokenGate } from './components/TokenGate'
 import { ToastContainer } from './components/Toast'
 
@@ -22,6 +23,7 @@ export function App(): React.ReactElement {
   const [needsAuth, setNeedsAuth] = useState(false)
   const [authKey, setAuthKey] = useState(0)
   const [importOpen, setImportOpen] = useState(false)
+  const [view, setView] = useState<'list' | 'create'>('list')
   const importNodeRef = useRef<HTMLDivElement | null>(null)
 
   const toggleTheme = useCallback(() => {
@@ -75,6 +77,9 @@ export function App(): React.ReactElement {
     })
   }, [])
 
+  const handleNewArticle = useCallback(() => setView('create'), [])
+  const handleBackToList = useCallback(() => setView('list'), [])
+
   if (needsAuth) {
     return (
       <div className="app-shell" data-theme={theme}>
@@ -86,16 +91,28 @@ export function App(): React.ReactElement {
 
   return (
     <div className="app-shell" data-theme={theme}>
-      <Header theme={theme} onToggleTheme={toggleTheme} onImportClick={handleImportClick} />
-      <main className="mgmt-main">
-        <StatCards stats={stats} health={health} isLoading={statsLoading || healthLoading} />
-        <ArticleList onImportClick={handleImportClick} onAuthRequired={handleAuthRequired} />
-        <ImportSection
-          isOpen={importOpen}
-          onToggle={() => setImportOpen(prev => !prev)}
-          sectionRef={importRefCallback}
-        />
-      </main>
+      <Header
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onImportClick={handleImportClick}
+        onNewArticle={handleNewArticle}
+        showNewArticle={view === 'list'}
+      />
+      {view === 'create' ? (
+        <main className="mgmt-main">
+          <ArticleEditor onBack={handleBackToList} />
+        </main>
+      ) : (
+        <main className="mgmt-main">
+          <StatCards stats={stats} health={health} isLoading={statsLoading || healthLoading} />
+          <ArticleList onImportClick={handleImportClick} onAuthRequired={handleAuthRequired} />
+          <ImportSection
+            isOpen={importOpen}
+            onToggle={() => setImportOpen(prev => !prev)}
+            sectionRef={importRefCallback}
+          />
+        </main>
+      )}
       <ToastContainer />
     </div>
   )

@@ -5,6 +5,19 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Create Article from Scratch**: full-page Markdown editor in KB Management page for authoring knowledge articles directly
+  - `POST /kb/articles` endpoint: generates article ID, chunks by `##`/`###` headings, embeds via Ollama, stores in ChromaDB as `source_type: "manual"`
+  - `chunk_by_markdown_headings()` utility: splits Markdown by headings, auto-creates "Introduction" section for pre-heading content, sub-splits oversized sections
+  - `ArticleEditor` React component: title input + monospace textarea, Ctrl+S/Cmd+S save, unsaved-changes warning, inline error display for duplicates (409)
+  - "New Article" button with pencil icon in KB Management header
+  - "Manual" option in source type filter, teal badge for manual articles
+  - Shared ingestion semaphore extracted to `shared.py` (prevents concurrent ingestion across file upload, URL, and article creation)
+  - Request size exemption for `/kb/articles` (articles can exceed 64KB default limit)
+  - 20 new backend tests (chunker + endpoint), 7 new frontend tests
+
 ## [1.6.0] - 2026-02-27
 
 ### Added
@@ -166,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend middleware and models router tests
 - Extension sidebar store, DOM inserter, and storage tests
 
+[1.6.0]: https://github.com/gyzhoe/assistant/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/gyzhoe/assistant/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/gyzhoe/assistant/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/gyzhoe/assistant/compare/v1.2.0...v1.3.0

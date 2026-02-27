@@ -18,6 +18,7 @@ from app.config import settings
 from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.routers.kb import invalidate_article_cache
+from app.routers.shared import upload_semaphore
 from app.services.embed_service import EmbedService
 from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
 from ingestion.url_loader import (
@@ -34,9 +35,6 @@ router = APIRouter(tags=["ingest"])
 ALLOWED_EXTENSIONS = {".json", ".csv", ".html", ".htm", ".pdf"}
 ALLOWED_COLLECTIONS = {TICKET_COLLECTION, KB_COLLECTION}
 _CHUNK_SIZE = 8192  # 8 KB read chunks for streaming upload
-
-# Module-level semaphore: only one upload at a time
-_upload_semaphore = asyncio.Semaphore(1)
 
 
 @router.post("/ingest/upload", response_model=IngestUploadResponse)
@@ -65,13 +63,13 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
         )
 
     # Try to acquire the upload semaphore (non-blocking)
-    if not _upload_semaphore._value:  # noqa: SLF001
+    if not upload_semaphore._value:  # noqa: SLF001
         return JSONResponse(  # type: ignore[return-value]
             status_code=409,
             content={"detail": "Another upload is already in progress. Please wait."},
         )
 
-    async with _upload_semaphore:
+    async with upload_semaphore:
         tmp_path: Path | None = None
         try:
             start = time.perf_counter()
@@ -180,13 +178,13 @@ async def ingest_url(
     url_str = str(body.url)
 
     # Shared semaphore with file upload — one ingestion at a time
-    if not _upload_semaphore._value:  # noqa: SLF001
+    if not upload_semaphore._value:  # noqa: SLF001
         return JSONResponse(  # type: ignore[return-value]
             status_code=409,
             content={"detail": "Another ingestion is already in progress. Please wait."},
         )
 
-    async with _upload_semaphore:
+    async with upload_semaphore:
         try:
             start = time.perf_counter()
 

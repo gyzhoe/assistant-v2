@@ -5,8 +5,11 @@ KB management router — browse, search, and delete knowledge base articles.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import time
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -20,6 +23,12 @@ from app.models.kb import (
     ChunkDetail,
     StatsResponse,
 )
+from app.models.request_models import CreateArticleRequest
+from app.models.response_models import CreateArticleResponse
+from app.routers.shared import upload_semaphore
+from app.services.embed_service import EmbedService
+from app.utils.chunker import chunk_by_markdown_headings
+from ingestion.pipeline import KB_COLLECTION, IngestionPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +167,109 @@ async def list_articles(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post("/articles", response_model=CreateArticleResponse)
+async def create_article(
+    request: Request, body: CreateArticleRequest,
+) -> CreateArticleResponse:
+    """Create a new KB article from markdown content."""
+    # Generate article_id from title + source marker
+    article_id = hashlib.sha256(
+        (body.title + "manual").encode(),
+    ).hexdigest()[:16]
+
+    # Check for duplicate
+    chroma_client = request.app.state.chroma_client
+    try:
+        col = await asyncio.to_thread(
+            chroma_client.get_collection, KB_COLLECTION,
+        )
+        existing = await asyncio.to_thread(
+            col.get, where={"article_id": article_id}, limit=1,
+        )
+        if existing.get("ids"):
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=409,
+                content={"detail": "An article with this title already exists."},
+            )
+    except (ValueError, Exception):
+        pass  # Collection doesn't exist yet — fine
+
+    # Check semaphore (non-blocking)
+    if not upload_semaphore._value:  # noqa: SLF001
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=409,
+            content={"detail": "Another ingestion is already in progress. Please wait."},
+        )
+
+    async with upload_semaphore:
+        try:
+            start = time.perf_counter()
+
+            # Chunk content by markdown headings
+            sections = chunk_by_markdown_headings(body.content)
+
+            if not sections:
+                return JSONResponse(  # type: ignore[return-value]
+                    status_code=422,
+                    content={"detail": "No content to ingest after processing."},
+                )
+
+            # Build chunk stream: (chunk_id, text, metadata)
+            now = datetime.now(UTC).isoformat()
+
+            def chunk_stream() -> Iterator[tuple[str, str, dict[str, str]]]:
+                for idx, (section_title, chunk_text) in enumerate(sections):
+                    chunk_id = f"{article_id}_chunk_{idx}"
+                    metadata = {
+                        "article_id": article_id,
+                        "title": body.title,
+                        "section": section_title,
+                        "source_type": "manual",
+                        "imported_at": now,
+                    }
+                    yield chunk_id, chunk_text, metadata
+
+            # Embed and upsert
+            col = await asyncio.to_thread(
+                chroma_client.get_or_create_collection,
+                KB_COLLECTION,
+                metadata={"hnsw:space": "cosine"},
+            )
+
+            embed_service = EmbedService()
+            pipeline = IngestionPipeline(
+                chroma_client=chroma_client,
+                embed_fn=embed_service._embed_sync,  # noqa: SLF001
+            )
+
+            total = await asyncio.to_thread(
+                pipeline._upsert_stream, col, chunk_stream(),  # noqa: SLF001
+            )
+
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            invalidate_article_cache()
+
+            return CreateArticleResponse(
+                article_id=article_id,
+                title=body.title,
+                chunks_ingested=total,
+                processing_time_ms=elapsed_ms,
+            )
+
+        except ConnectionError as exc:
+            logger.error("Ollama unavailable during article creation: %s", exc)
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=503,
+                content={"detail": "Embedding service (Ollama) is unavailable."},
+            )
+        except Exception:
+            logger.exception("Unexpected error during article creation")
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=500,
+                content={"detail": "Internal server error during article creation."},
+            )
 
 
 @router.get("/articles/{article_id}", response_model=ArticleDetailResponse)
