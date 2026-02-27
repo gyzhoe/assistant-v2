@@ -1315,6 +1315,15 @@ body {
   margin-top: 0.25rem;
 }
 
+.tag-none {
+  font-style: italic;
+}
+
+/* ─── Detail skeleton helpers ────────────────────── */
+.detail-skeleton-line   { height: 1rem; width: 60%; }
+.detail-skeleton-sub    { height: 1rem; width: 40%; margin-top: 0.5rem; }
+.detail-skeleton-block  { height: 3rem; width: 100%; margin-top: 0.5rem; }
+
 /* ─── Reduced motion ──────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
