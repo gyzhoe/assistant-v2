@@ -82,3 +82,13 @@ export interface IngestUploadResponse {
   processing_time_ms: number
   warning: string | null
 }
+
+/** Ingest URL response */
+export interface IngestUrlResponse {
+  url: string
+  collection: string
+  chunks_ingested: number
+  processing_time_ms: number
+  title: string | null
+  warning: string | null
+}

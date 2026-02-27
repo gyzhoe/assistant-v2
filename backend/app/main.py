@@ -68,7 +68,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         RequestSizeLimitMiddleware,
         max_bytes=settings.max_request_bytes,
-        exempt_paths={"/ingest/upload"},
+        exempt_paths={"/ingest/upload", "/ingest/url"},
     )
 
     app.add_middleware(
