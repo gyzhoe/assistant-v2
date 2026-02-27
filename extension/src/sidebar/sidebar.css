@@ -848,3 +848,50 @@ body {
   border-radius: 0.35rem;
   background: var(--surface-soft);
 }
+
+/* URL import */
+.kb-url-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.kb-url-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.kb-url-divider::before,
+.kb-url-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.kb-url-row {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.kb-url-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.kb-url-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.kb-url-input:disabled {
+  opacity: 0.5;
+}

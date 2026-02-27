@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react'
+import { apiClient, ApiError } from '../../lib/api-client'
 import { useKnowledgeImport } from '../hooks/useKnowledgeImport'
 
 const ACCEPTED = '.json,.csv,.html,.htm,.pdf'
@@ -11,9 +12,40 @@ export function ImportTab(): React.ReactElement {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragCount, setDragCount] = useState(0)
+  const [urlInput, setUrlInput] = useState('')
+  const [urlLoading, setUrlLoading] = useState(false)
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const [urlSuccess, setUrlSuccess] = useState<string | null>(null)
 
   const isDragOver = dragCount > 0
   const isUploading = uploadStatus === 'uploading'
+
+  const handleUrlImport = useCallback(async () => {
+    const url = urlInput.trim()
+    if (!url) return
+    setUrlLoading(true)
+    setUrlError(null)
+    setUrlSuccess(null)
+    try {
+      const result = await apiClient.ingestUrl(url)
+      if (result.warning) {
+        setUrlError(result.warning)
+      } else {
+        const label = result.title ?? url
+        setUrlSuccess(`Imported "${label}" — ${result.chunks_ingested} chunks added`)
+        setUrlInput('')
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const detail = (err.body as Record<string, string>)?.detail ?? 'Unknown error'
+        setUrlError(detail)
+      } else {
+        setUrlError('Failed to import URL')
+      }
+    } finally {
+      setUrlLoading(false)
+    }
+  }, [urlInput])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -134,6 +166,32 @@ export function ImportTab(): React.ReactElement {
         Drop files here or click to browse
         <br />
         <span className="kb-file-size">PDF, HTML, JSON, CSV</span>
+      </div>
+
+      {/* URL import section */}
+      <div className="kb-url-section">
+        <div className="kb-url-divider">
+          <span>or import from URL</span>
+        </div>
+        <div className="kb-url-row">
+          <input
+            type="url"
+            className="kb-url-input"
+            placeholder="https://example.com/article"
+            value={urlInput}
+            onChange={(e) => { setUrlInput(e.target.value); setUrlError(null); setUrlSuccess(null) }}
+            disabled={urlLoading || isUploading}
+          />
+          <button
+            className="primary-btn"
+            onClick={handleUrlImport}
+            disabled={!urlInput.trim() || urlLoading || isUploading}
+          >
+            {urlLoading ? 'Importing...' : 'Import'}
+          </button>
+        </div>
+        {urlError && <p className="support-text error-text" role="alert">{urlError}</p>}
+        {urlSuccess && <p className="support-text" style={{ color: 'var(--ok-text)' }}>{urlSuccess}</p>}
       </div>
 
       {/* Error message */}

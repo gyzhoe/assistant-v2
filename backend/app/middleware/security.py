@@ -82,7 +82,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     distinct source IPs over time.
     """
 
-    RATE_LIMITED_PATHS = {"/generate", "/ingest/upload"}
+    RATE_LIMITED_PATHS = {"/generate", "/ingest/upload", "/ingest/url"}
 
     def __init__(self, app: ASGIApp, max_per_minute: int = 20) -> None:
         super().__init__(app)
@@ -95,6 +95,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._path_limits: dict[str, int] = {
             "/generate": max_per_minute,
             "/ingest/upload": INGEST_RATE_LIMIT,
+            "/ingest/url": INGEST_RATE_LIMIT,
         }
 
     def _evict_stale_entries(self, now: float) -> None:

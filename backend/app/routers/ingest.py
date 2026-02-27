@@ -10,13 +10,21 @@ import tempfile
 import time
 from pathlib import Path, PurePosixPath
 
+import httpx
 from fastapi import APIRouter, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.models.response_models import IngestUploadResponse
+from app.models.request_models import IngestUrlRequest
+from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.services.embed_service import EmbedService
 from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
+from ingestion.url_loader import (
+    ContentTypeError,
+    ResponseTooLargeError,
+    SSRFError,
+    load_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +167,106 @@ async def clear_collection(request: Request, name: str) -> dict[str, str]:
         pass
 
     return {"status": "ok", "collection": name}
+
+
+@router.post("/ingest/url", response_model=IngestUrlResponse)
+async def ingest_url(
+    request: Request, body: IngestUrlRequest,
+) -> IngestUrlResponse:
+    """Fetch a URL, extract content, and ingest into ChromaDB."""
+    url_str = str(body.url)
+
+    # Shared semaphore with file upload — one ingestion at a time
+    if not _upload_semaphore._value:  # noqa: SLF001
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=409,
+            content={"detail": "Another ingestion is already in progress. Please wait."},
+        )
+
+    async with _upload_semaphore:
+        try:
+            start = time.perf_counter()
+
+            # Validate + fetch + extract + chunk in thread pool
+            chunks_list = await asyncio.to_thread(lambda: list(load_url(url_str)))
+
+            if not chunks_list:
+                return IngestUrlResponse(
+                    url=url_str,
+                    collection=KB_COLLECTION,
+                    chunks_ingested=0,
+                    processing_time_ms=int((time.perf_counter() - start) * 1000),
+                    warning="No text content extracted from URL.",
+                )
+
+            # Get title from first chunk metadata
+            title = chunks_list[0][2].get("title")
+
+            # Run ingestion pipeline
+            chroma_client = request.app.state.chroma_client
+            embed_service = EmbedService()
+            pipeline = IngestionPipeline(
+                chroma_client=chroma_client,
+                embed_fn=embed_service._embed_sync,  # noqa: SLF001
+            )
+
+            col = await asyncio.to_thread(
+                chroma_client.get_or_create_collection,
+                KB_COLLECTION,
+                metadata={"hnsw:space": "cosine"},
+            )
+
+            total = await asyncio.to_thread(
+                pipeline._upsert_stream, col, iter(chunks_list),  # noqa: SLF001
+            )
+
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+            warning: str | None = None
+            if total == 0:
+                warning = "No text content extracted from URL."
+
+            return IngestUrlResponse(
+                url=url_str,
+                collection=KB_COLLECTION,
+                chunks_ingested=total,
+                processing_time_ms=elapsed_ms,
+                title=title,
+                warning=warning,
+            )
+
+        except SSRFError as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=422,
+                content={"detail": str(exc)},
+            )
+        except ContentTypeError as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=422,
+                content={"detail": str(exc)},
+            )
+        except ResponseTooLargeError as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=413,
+                content={"detail": str(exc), "error_code": "PAYLOAD_TOO_LARGE"},
+            )
+        except ConnectionError as exc:
+            logger.error("Ollama unavailable during URL ingestion: %s", exc)
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=503,
+                content={"detail": "Embedding service (Ollama) is unavailable."},
+            )
+        except (httpx.HTTPError, ValueError) as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=422,
+                content={"detail": f"Failed to fetch URL: {exc}"},
+            )
+        except Exception:
+            logger.exception("Unexpected error during URL ingestion")
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=500,
+                content={"detail": "Internal server error during URL ingestion."},
+            )
 
 
 async def _stream_to_temp(
