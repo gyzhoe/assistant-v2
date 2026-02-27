@@ -669,3 +669,182 @@ body {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
 }
+
+/* ── Knowledge Import ──────────────────────────────────────────────── */
+
+/* Tab strip */
+.kb-tab-strip {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 550;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.kb-tab:hover {
+  color: var(--text);
+}
+
+.kb-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 650;
+}
+
+.kb-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 0.2rem;
+}
+
+/* Drop zone */
+.kb-drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.kb-drop-zone:hover {
+  border-color: var(--accent);
+}
+
+.kb-drop-zone.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.kb-drop-zone.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.kb-drop-zone:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* File list */
+.kb-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.kb-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.35rem;
+  background: var(--surface-soft);
+}
+
+.kb-file-type-badge {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  font-weight: 650;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.kb-file-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.kb-file-size {
+  font-size: 0.65rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.kb-file-remove {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0.2rem;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.kb-file-remove:hover {
+  color: var(--error-text);
+  background: var(--error);
+}
+
+.kb-file-remove:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Progress */
+.kb-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.kb-progress-text {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.kb-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.kb-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+/* Collection list */
+.kb-collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.kb-collection-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  background: var(--surface-soft);
+}

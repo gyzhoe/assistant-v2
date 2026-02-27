@@ -13,3 +13,11 @@ class GenerateResponse(BaseModel):
     model_used: str
     context_docs: list[ContextDoc]
     latency_ms: int
+
+
+class IngestUploadResponse(BaseModel):
+    filename: str
+    collection: str
+    chunks_ingested: int
+    processing_time_ms: int
+    warning: str | None = None  # e.g., "No text content extracted"

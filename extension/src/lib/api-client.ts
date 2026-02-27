@@ -1,4 +1,4 @@
-import type { GenerateRequest, GenerateResponse, HealthResponse } from '../shared/types'
+import type { GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
 
 async function getBackendUrl(): Promise<string> {
@@ -78,6 +78,37 @@ export const apiClient = {
     if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to fetch models' })
     const data = (await resp.json()) as { models: string[] }
     return data.models
+  },
+
+  async uploadFile(file: File, signal?: AbortSignal): Promise<IngestUploadResponse> {
+    const [base, token] = await Promise.all([getBackendUrl(), getApiToken()])
+    const form = new FormData()
+    form.append('file', file)
+    const headers: Record<string, string> = {}
+    if (token) headers['X-Extension-Token'] = token
+    const resp = await fetch(`${base}/ingest/upload`, {
+      method: 'POST',
+      headers,
+      body: form,
+      signal,
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<IngestUploadResponse>
+  },
+
+  async clearCollection(name: string): Promise<void> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/ingest/collections/${name}/clear`, {
+      method: 'POST',
+      headers,
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
   },
 }
 

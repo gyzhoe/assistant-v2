@@ -1,9 +1,215 @@
-from fastapi import APIRouter
+"""
+Ingest router — upload files for RAG ingestion and manage collections.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import tempfile
+import time
+from pathlib import Path, PurePosixPath
+
+from fastapi import APIRouter, Request, UploadFile
+from fastapi.responses import JSONResponse
+
+from app.config import settings
+from app.models.response_models import IngestUploadResponse
+from app.services.embed_service import EmbedService
+from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ingest"])
 
+ALLOWED_EXTENSIONS = {".json", ".csv", ".html", ".htm", ".pdf"}
+ALLOWED_COLLECTIONS = {TICKET_COLLECTION, KB_COLLECTION}
+_CHUNK_SIZE = 8192  # 8 KB read chunks for streaming upload
 
-@router.post("/ingest")
-async def ingest_status() -> dict[str, str]:
-    """Placeholder — ingestion is handled by the CLI (ingestion/cli.py)."""
-    return {"message": "Use the CLI: python -m ingestion.cli --help"}
+# Module-level semaphore: only one upload at a time
+_upload_semaphore = asyncio.Semaphore(1)
+
+
+@router.post("/ingest/upload", response_model=IngestUploadResponse)
+async def upload_file(request: Request, file: UploadFile) -> IngestUploadResponse:
+    """Upload a single file for ingestion into ChromaDB."""
+    # Validate filename
+    if not file.filename:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=422,
+            content={"detail": "No filename provided."},
+        )
+
+    # Sanitize filename (strip directory components)
+    safe_name = PurePosixPath(file.filename).name
+    suffix = Path(safe_name).suffix.lower()
+
+    if suffix not in ALLOWED_EXTENSIONS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=422,
+            content={
+                "detail": (
+                    f"Unsupported file type: {suffix}. "
+                    f"Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                ),
+            },
+        )
+
+    # Try to acquire the upload semaphore (non-blocking)
+    if not _upload_semaphore._value:  # noqa: SLF001
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=409,
+            content={"detail": "Another upload is already in progress. Please wait."},
+        )
+
+    async with _upload_semaphore:
+        tmp_path: Path | None = None
+        try:
+            start = time.perf_counter()
+
+            # Stream to temp file with size check
+            tmp_path = await _stream_to_temp(file, safe_name, suffix)
+
+            # Check for empty file
+            if tmp_path.stat().st_size == 0:
+                return JSONResponse(  # type: ignore[return-value]
+                    status_code=422,
+                    content={"detail": "Uploaded file is empty (0 bytes)."},
+                )
+
+            # Run ingestion in thread pool
+            chroma_client = request.app.state.chroma_client
+            embed_service = EmbedService()
+            pipeline = IngestionPipeline(
+                chroma_client=chroma_client,
+                embed_fn=embed_service._embed_sync,  # noqa: SLF001
+            )
+
+            collection_name, chunks = await asyncio.to_thread(
+                pipeline.ingest_file, tmp_path,
+            )
+
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+            warning: str | None = None
+            if chunks == 0:
+                warning = (
+                    "No text content extracted — file may be empty "
+                    "or contain only images"
+                )
+
+            return IngestUploadResponse(
+                filename=safe_name,
+                collection=collection_name,
+                chunks_ingested=chunks,
+                processing_time_ms=elapsed_ms,
+                warning=warning,
+            )
+
+        except _PayloadTooLargeError as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=413,
+                content={
+                    "detail": str(exc),
+                    "error_code": "PAYLOAD_TOO_LARGE",
+                },
+            )
+        except ConnectionError as exc:
+            logger.error("Ollama unavailable during ingestion: %s", exc)
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=503,
+                content={"detail": "Embedding service (Ollama) is unavailable."},
+            )
+        except ValueError as exc:
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=422,
+                content={"detail": str(exc)},
+            )
+        except Exception:
+            logger.exception("Unexpected error during file upload")
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=500,
+                content={"detail": "Internal server error during ingestion."},
+            )
+        finally:
+            if tmp_path is not None:
+                _cleanup_temp(tmp_path)
+
+
+@router.post("/ingest/collections/{name}/clear")
+async def clear_collection(request: Request, name: str) -> dict[str, str]:
+    """Delete all documents from a collection."""
+    if name not in ALLOWED_COLLECTIONS:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={
+                "detail": (
+                    f"Unknown collection: {name}. "
+                    f"Allowed: {', '.join(sorted(ALLOWED_COLLECTIONS))}"
+                ),
+            },
+        )
+
+    chroma_client = request.app.state.chroma_client
+
+    try:
+        await asyncio.to_thread(chroma_client.delete_collection, name)
+    except ValueError:
+        # Collection doesn't exist — that's fine, idempotent
+        pass
+
+    return {"status": "ok", "collection": name}
+
+
+async def _stream_to_temp(
+    file: UploadFile, safe_name: str, suffix: str,
+) -> Path:
+    """Stream uploaded file to a temp file, enforcing size limit."""
+    max_bytes = settings.max_upload_bytes
+    written = 0
+
+    tmp = tempfile.NamedTemporaryFile(
+        delete=False, suffix=suffix, prefix=f"ingest_{safe_name}_",
+    )
+    tmp_path = Path(tmp.name)
+
+    try:
+        while True:
+            chunk = await file.read(_CHUNK_SIZE)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                tmp.close()
+                _cleanup_temp(tmp_path)
+                raise _PayloadTooLargeError(max_bytes)
+            tmp.write(chunk)
+        tmp.close()
+    except _PayloadTooLargeError:
+        raise
+    except Exception:
+        tmp.close()
+        _cleanup_temp(tmp_path)
+        raise
+
+    return tmp_path
+
+
+class _PayloadTooLargeError(Exception):
+    """Raised when streamed upload exceeds size limit."""
+
+    def __init__(self, max_bytes: int) -> None:
+        self.max_bytes = max_bytes
+        super().__init__(f"File exceeds maximum upload size of {max_bytes} bytes.")
+
+
+def _cleanup_temp(path: Path, retries: int = 3, delay: float = 0.5) -> None:
+    """Remove temp file with retries for Windows AV locks."""
+    for attempt in range(retries):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except OSError:
+            if attempt < retries - 1:
+                time.sleep(delay)
+    logger.warning("Could not delete temp file: %s", path)

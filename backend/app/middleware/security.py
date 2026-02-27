@@ -68,10 +68,13 @@ class APITokenMiddleware(BaseHTTPMiddleware):
 # Rate Limiting Middleware
 # ---------------------------------------------------------------------------
 
+INGEST_RATE_LIMIT = 5  # max /ingest/upload requests per client IP per minute
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Simple in-process rate limiter.
-    Limits /generate to max_per_minute requests per client IP.
+    Limits /generate and /ingest/upload to configurable requests per client IP.
 
     Memory management: a periodic sweep (at most once per window) evicts entries
     for IPs whose most-recent request is older than the window.  This prevents
@@ -79,15 +82,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     distinct source IPs over time.
     """
 
-    RATE_LIMITED_PATHS = {"/generate"}
+    RATE_LIMITED_PATHS = {"/generate", "/ingest/upload"}
 
     def __init__(self, app: ASGIApp, max_per_minute: int = 20) -> None:
         super().__init__(app)
         self._max = max_per_minute
         self._window = 60.0  # seconds
+        # Keyed by "{path}:{ip}" to track per-path, per-IP rate limits
         self._counts: dict[str, list[float]] = defaultdict(list)
         self._lock = asyncio.Lock()
         self._last_sweep: float = 0.0  # monotonic timestamp of the most-recent cleanup sweep
+        self._path_limits: dict[str, int] = {
+            "/generate": max_per_minute,
+            "/ingest/upload": INGEST_RATE_LIMIT,
+        }
 
     def _evict_stale_entries(self, now: float) -> None:
         """Remove IPs whose most-recent request falls outside the current window.
@@ -110,27 +118,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
+        rate_key = f"{request.url.path}:{client_ip}"
+        limit = self._path_limits.get(request.url.path, self._max)
         now = time.monotonic()
 
         async with self._lock:
             # Periodic cleanup: evict stale IP entries to bound memory usage.
             self._evict_stale_entries(now)
 
-            timestamps = self._counts[client_ip]
+            timestamps = self._counts[rate_key]
             # Remove timestamps outside the window
-            self._counts[client_ip] = [t for t in timestamps if now - t < self._window]
+            self._counts[rate_key] = [t for t in timestamps if now - t < self._window]
 
-            if len(self._counts[client_ip]) >= self._max:
+            if len(self._counts[rate_key]) >= limit:
                 logger.warning("Rate limit exceeded for %s on %s", client_ip, request.url.path)
                 return JSONResponse(
                     status_code=429,
                     content={
-                        "detail": f"Rate limit exceeded. Max {self._max} requests per minute.",
+                        "detail": f"Rate limit exceeded. Max {limit} requests per minute.",
                         "error_code": "RATE_LIMITED",
                     },
                 )
 
-            self._counts[client_ip].append(now)
+            self._counts[rate_key].append(now)
 
         return await call_next(request)
 
@@ -146,11 +156,19 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     Default: 64 KB — sufficient for the largest reasonable ticket description.
     """
 
-    def __init__(self, app: ASGIApp, max_bytes: int = 65_536) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_bytes: int = 65_536,
+        exempt_paths: set[str] | None = None,
+    ) -> None:
         super().__init__(app)
         self._max_bytes = max_bytes
+        self._exempt_paths = exempt_paths or set()
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        if request.url.path in self._exempt_paths:
+            return await call_next(request)
         content_length = request.headers.get("content-length")
         if content_length:
             if int(content_length) > self._max_bytes:
