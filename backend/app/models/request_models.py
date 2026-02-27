@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 # Enterprise input limits — prevents oversized payloads reaching Ollama
 # and mitigates prompt injection via extremely long ticket content.
@@ -24,3 +24,7 @@ class GenerateRequest(BaseModel):
     prompt_suffix: str = Field(
         default="", max_length=2000, description="Custom instructions appended to the prompt"
     )
+
+
+class IngestUrlRequest(BaseModel):
+    url: HttpUrl = Field(description="URL to fetch and ingest")
