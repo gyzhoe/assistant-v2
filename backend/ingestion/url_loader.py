@@ -2,6 +2,7 @@
 URL content loader — fetches web pages, extracts text, and chunks for ingestion.
 
 Includes SSRF prevention to block requests to private/internal networks.
+Every redirect hop is re-validated to prevent redirect-based SSRF bypass.
 """
 
 import hashlib
@@ -51,6 +52,26 @@ class ResponseTooLargeError(ValueError):
     """Raised when the response body exceeds the size limit."""
 
 
+def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Check if an IP address falls within any blocked network range.
+
+    Also checks IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1) by
+    extracting the embedded IPv4 address and testing it separately.
+    """
+    for network in _BLOCKED_NETWORKS:
+        if ip in network:
+            return True
+
+    # IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) bypass IPv4 range checks
+    # because the IPv6 address won't match IPv4 networks directly.
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        for network in _BLOCKED_NETWORKS:
+            if ip.ipv4_mapped in network:
+                return True
+
+    return False
+
+
 def validate_url(url: str) -> str:
     """Validate URL scheme and resolve hostname to check for private IPs.
 
@@ -79,12 +100,11 @@ def validate_url(url: str) -> str:
         except ValueError:
             continue
 
-        for network in _BLOCKED_NETWORKS:
-            if ip in network:
-                raise SSRFError(
-                    f"URL resolves to private/internal IP address ({ip}). "
-                    "Requests to internal networks are blocked for security."
-                )
+        if _is_private_ip(ip):
+            raise SSRFError(
+                "URL resolves to a private/internal network address. "
+                "Requests to internal networks are blocked for security."
+            )
 
     return url
 
@@ -92,34 +112,49 @@ def validate_url(url: str) -> str:
 def fetch_url(url: str) -> tuple[str, str, str]:
     """Fetch URL content with security constraints.
 
+    Redirects are followed manually so each hop is re-validated for SSRF.
     Returns (content, content_type, final_url).
-    Raises ContentTypeError, ResponseTooLargeError, or httpx errors.
+    Raises SSRFError, ContentTypeError, ResponseTooLargeError, or httpx errors.
     """
+    current_url = url
+
     with httpx.Client(
-        follow_redirects=True,
-        max_redirects=MAX_REDIRECTS,
+        follow_redirects=False,
         timeout=REQUEST_TIMEOUT,
     ) as client:
-        resp = client.get(url, headers={"Accept": "text/html, text/plain"})
-        resp.raise_for_status()
+        for _ in range(MAX_REDIRECTS + 1):
+            resp = client.get(current_url, headers={"Accept": "text/html, text/plain"})
 
-        # Check content type
-        content_type = resp.headers.get("content-type", "")
-        mime = content_type.split(";")[0].strip().lower()
-        if mime not in ALLOWED_CONTENT_TYPES:
-            raise ContentTypeError(
-                f"Content-Type {mime!r} is not supported. "
-                f"Allowed: {', '.join(sorted(ALLOWED_CONTENT_TYPES))}"
-            )
+            if resp.is_redirect:
+                location = resp.headers.get("location", "")
+                if not location:
+                    raise ValueError("Redirect with no Location header")
+                redirect_url = str(resp.url.join(location))
+                validate_url(redirect_url)
+                current_url = redirect_url
+                continue
 
-        # Check size
-        if len(resp.content) > MAX_RESPONSE_BYTES:
-            raise ResponseTooLargeError(
-                f"Response body ({len(resp.content)} bytes) exceeds "
-                f"maximum of {MAX_RESPONSE_BYTES} bytes."
-            )
+            resp.raise_for_status()
 
-        return resp.text, mime, str(resp.url)
+            # Check content type
+            content_type = resp.headers.get("content-type", "")
+            mime = content_type.split(";")[0].strip().lower()
+            if mime not in ALLOWED_CONTENT_TYPES:
+                raise ContentTypeError(
+                    f"Content-Type {mime!r} is not supported. "
+                    f"Allowed: {', '.join(sorted(ALLOWED_CONTENT_TYPES))}"
+                )
+
+            # Check size
+            if len(resp.content) > MAX_RESPONSE_BYTES:
+                raise ResponseTooLargeError(
+                    f"Response body ({len(resp.content)} bytes) exceeds "
+                    f"maximum of {MAX_RESPONSE_BYTES} bytes."
+                )
+
+            return resp.text, mime, str(resp.url)
+
+        raise ValueError(f"Too many redirects (max {MAX_REDIRECTS})")
 
 
 def extract_content(html: str) -> tuple[str, str]:

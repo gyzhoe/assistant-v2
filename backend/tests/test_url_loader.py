@@ -11,6 +11,7 @@ from ingestion.url_loader import (
     ContentTypeError,
     ResponseTooLargeError,
     SSRFError,
+    _is_private_ip,
     extract_content,
     fetch_url,
     load_url,
@@ -87,18 +88,111 @@ def test_validate_url_rejects_unresolvable_hostname() -> None:
             validate_url("https://nonexistent.invalid")
 
 
+def test_validate_url_blocks_ipv6_link_local() -> None:
+    with patch("ingestion.url_loader.socket.getaddrinfo", return_value=[(10, 1, 6, "", ("fe80::1", 443, 0, 0))]):
+        with pytest.raises(SSRFError, match="private/internal"):
+            validate_url("http://ipv6-link-local.test")
+
+
+def test_validate_url_blocks_ipv6_unique_local() -> None:
+    with patch("ingestion.url_loader.socket.getaddrinfo", return_value=[(10, 1, 6, "", ("fd00::1", 443, 0, 0))]):
+        with pytest.raises(SSRFError, match="private/internal"):
+            validate_url("http://ipv6-ula.test")
+
+
+def test_validate_url_blocks_zero_network() -> None:
+    with patch("ingestion.url_loader.socket.getaddrinfo", return_value=_mock_getaddrinfo("0.0.0.1")):
+        with pytest.raises(SSRFError, match="private/internal"):
+            validate_url("http://zero-net.test")
+
+
+def test_validate_url_rejects_file_scheme() -> None:
+    with pytest.raises(ValueError, match="http or https"):
+        validate_url("file:///etc/passwd")
+
+
+def test_validate_url_rejects_data_scheme() -> None:
+    with pytest.raises(ValueError, match="http or https"):
+        validate_url("data:text/html,<h1>pwned</h1>")
+
+
+def test_validate_url_error_does_not_leak_ip() -> None:
+    """SSRF error messages must not reveal the internal IP address."""
+    with patch("ingestion.url_loader.socket.getaddrinfo", return_value=_mock_getaddrinfo("10.42.0.99")):
+        with pytest.raises(SSRFError) as exc_info:
+            validate_url("http://internal.corp")
+    assert "10.42.0.99" not in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# _is_private_ip — IPv4-mapped IPv6 bypass prevention
+# ---------------------------------------------------------------------------
+
+
+def test_is_private_ip_blocks_ipv4_mapped_ipv6_loopback() -> None:
+    """::ffff:127.0.0.1 must be detected as private (IPv4-mapped IPv6)."""
+    import ipaddress as _ipa
+
+    ip = _ipa.ip_address("::ffff:127.0.0.1")
+    assert _is_private_ip(ip) is True
+
+
+def test_is_private_ip_blocks_ipv4_mapped_ipv6_private() -> None:
+    """::ffff:10.0.0.1 must be detected as private."""
+    import ipaddress as _ipa
+
+    ip = _ipa.ip_address("::ffff:10.0.0.1")
+    assert _is_private_ip(ip) is True
+
+
+def test_is_private_ip_allows_public() -> None:
+    import ipaddress as _ipa
+
+    ip = _ipa.ip_address("93.184.216.34")
+    assert _is_private_ip(ip) is False
+
+
+def test_validate_url_blocks_ipv4_mapped_ipv6() -> None:
+    """DNS returning ::ffff:127.0.0.1 must be blocked."""
+    with patch(
+        "ingestion.url_loader.socket.getaddrinfo",
+        return_value=[(10, 1, 6, "", ("::ffff:127.0.0.1", 443, 0, 0))],
+    ):
+        with pytest.raises(SSRFError, match="private/internal"):
+            validate_url("http://mapped-ipv6.test")
+
+
 # ---------------------------------------------------------------------------
 # fetch_url
 # ---------------------------------------------------------------------------
 
 
+def _make_mock_response(
+    *,
+    content_type: str = "text/html; charset=utf-8",
+    body: bytes = b"<html><body>Hello</body></html>",
+    text: str = "<html><body>Hello</body></html>",
+    url: str = "https://example.com/page",
+    is_redirect: bool = False,
+    status_code: int = 200,
+    location: str | None = None,
+) -> MagicMock:
+    """Build a mock httpx.Response."""
+    resp = MagicMock()
+    resp.headers = {"content-type": content_type}
+    if location:
+        resp.headers["location"] = location
+    resp.content = body
+    resp.text = text
+    resp.url = httpx.URL(url)
+    resp.is_redirect = is_redirect
+    resp.status_code = status_code
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
 def test_fetch_url_success() -> None:
-    mock_resp = MagicMock()
-    mock_resp.headers = {"content-type": "text/html; charset=utf-8"}
-    mock_resp.content = b"<html><body>Hello</body></html>"
-    mock_resp.text = "<html><body>Hello</body></html>"
-    mock_resp.url = httpx.URL("https://example.com/page")
-    mock_resp.raise_for_status = MagicMock()
+    mock_resp = _make_mock_response()
 
     mock_client = MagicMock()
     mock_client.get.return_value = mock_resp
@@ -114,9 +208,7 @@ def test_fetch_url_success() -> None:
 
 
 def test_fetch_url_wrong_content_type() -> None:
-    mock_resp = MagicMock()
-    mock_resp.headers = {"content-type": "image/png"}
-    mock_resp.raise_for_status = MagicMock()
+    mock_resp = _make_mock_response(content_type="image/png", is_redirect=False)
 
     mock_client = MagicMock()
     mock_client.get.return_value = mock_resp
@@ -129,10 +221,8 @@ def test_fetch_url_wrong_content_type() -> None:
 
 
 def test_fetch_url_too_large() -> None:
-    mock_resp = MagicMock()
-    mock_resp.headers = {"content-type": "text/html"}
-    mock_resp.content = b"x" * (6 * 1024 * 1024)  # 6 MB > 5 MB limit
-    mock_resp.raise_for_status = MagicMock()
+    big_body = b"x" * (6 * 1024 * 1024)
+    mock_resp = _make_mock_response(content_type="text/html", body=big_body, is_redirect=False)
 
     mock_client = MagicMock()
     mock_client.get.return_value = mock_resp
@@ -142,6 +232,102 @@ def test_fetch_url_too_large() -> None:
     with patch("ingestion.url_loader.httpx.Client", return_value=mock_client):
         with pytest.raises(ResponseTooLargeError, match="exceeds"):
             fetch_url("https://example.com/huge")
+
+
+def test_fetch_url_follows_safe_redirect() -> None:
+    """Redirects to public IPs should be followed normally."""
+    redirect_resp = _make_mock_response(
+        is_redirect=True,
+        status_code=302,
+        url="https://example.com/old",
+        location="https://example.com/new",
+    )
+    final_resp = _make_mock_response(url="https://example.com/new")
+
+    mock_client = MagicMock()
+    mock_client.get.side_effect = [redirect_resp, final_resp]
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("ingestion.url_loader.httpx.Client", return_value=mock_client),
+        patch("ingestion.url_loader.validate_url", return_value="https://example.com/new"),
+    ):
+        content, mime, final_url = fetch_url("https://example.com/old")
+
+    assert final_url == "https://example.com/new"
+
+
+def test_fetch_url_blocks_redirect_to_private_ip() -> None:
+    """Redirect-based SSRF: public URL redirects to internal IP must be blocked."""
+    redirect_resp = _make_mock_response(
+        is_redirect=True,
+        status_code=302,
+        url="https://evil.com/redir",
+        location="http://169.254.169.254/latest/meta-data/",
+    )
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = redirect_resp
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("ingestion.url_loader.httpx.Client", return_value=mock_client),
+        patch(
+            "ingestion.url_loader.validate_url",
+            side_effect=SSRFError("URL resolves to a private/internal network address."),
+        ),
+    ):
+        with pytest.raises(SSRFError, match="private/internal"):
+            fetch_url("https://evil.com/redir")
+
+
+def test_fetch_url_blocks_redirect_to_localhost() -> None:
+    """Redirect to localhost must be blocked."""
+    redirect_resp = _make_mock_response(
+        is_redirect=True,
+        status_code=301,
+        url="https://evil.com/go",
+        location="http://127.0.0.1:8765/health",
+    )
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = redirect_resp
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("ingestion.url_loader.httpx.Client", return_value=mock_client),
+        patch(
+            "ingestion.url_loader.validate_url",
+            side_effect=SSRFError("URL resolves to a private/internal network address."),
+        ),
+    ):
+        with pytest.raises(SSRFError, match="private/internal"):
+            fetch_url("https://evil.com/go")
+
+
+def test_fetch_url_too_many_redirects() -> None:
+    """Exceeding MAX_REDIRECTS must raise ValueError."""
+    redirect_resp = _make_mock_response(
+        is_redirect=True,
+        status_code=302,
+        url="https://example.com/loop",
+        location="https://example.com/loop",
+    )
+
+    mock_client = MagicMock()
+    mock_client.get.return_value = redirect_resp
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("ingestion.url_loader.httpx.Client", return_value=mock_client),
+        patch("ingestion.url_loader.validate_url", return_value="https://example.com/loop"),
+    ):
+        with pytest.raises(ValueError, match="Too many redirects"):
+            fetch_url("https://example.com/loop")
 
 
 # ---------------------------------------------------------------------------
