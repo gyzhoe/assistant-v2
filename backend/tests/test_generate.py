@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import AsyncClient
 
+from app.models.request_models import GenerateRequest
+from app.routers.generate import _build_prompt, _relevance_label
 from app.services.microsoft_docs import WebContextDoc
 
 
@@ -237,3 +239,68 @@ async def test_generate_ms_docs_config_disabled(client: AsyncClient) -> None:
         })
         assert response.status_code == 200
         mock_ms.search.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _build_prompt and _relevance_label
+# ---------------------------------------------------------------------------
+
+
+class TestRelevanceLabel:
+    """Tests for _relevance_label() helper."""
+
+    def test_high_relevance(self) -> None:
+        assert _relevance_label(0.75) == "HIGH relevance"
+        assert _relevance_label(0.90) == "HIGH relevance"
+        assert _relevance_label(1.0) == "HIGH relevance"
+
+    def test_moderate_relevance(self) -> None:
+        assert _relevance_label(0.50) == "MODERATE relevance"
+        assert _relevance_label(0.60) == "MODERATE relevance"
+        assert _relevance_label(0.74) == "MODERATE relevance"
+
+    def test_low_relevance(self) -> None:
+        assert _relevance_label(0.49) == "LOW relevance"
+        assert _relevance_label(0.35) == "LOW relevance"
+        assert _relevance_label(0.0) == "LOW relevance"
+
+
+class TestBuildPrompt:
+    """Tests for _build_prompt() prompt structure."""
+
+    def _request(self, **kwargs: str) -> GenerateRequest:
+        defaults = {
+            "ticket_subject": "VPN Issue",
+            "ticket_description": "Cannot connect to VPN",
+            "requester_name": "Jane",
+            "category": "Network",
+            "status": "Open",
+        }
+        defaults.update(kwargs)
+        return GenerateRequest(**defaults)
+
+    def test_contains_grounding_rules(self) -> None:
+        prompt = _build_prompt(self._request(), "some KB context")
+        assert "GROUNDING RULES" in prompt
+        assert "NEVER invent" in prompt
+        assert "ONLY use information" in prompt
+
+    def test_contains_format_rules(self) -> None:
+        prompt = _build_prompt(self._request(), "some KB context")
+        assert "FORMAT RULES" in prompt
+        assert "60-120 words" in prompt
+
+    def test_contains_examples(self) -> None:
+        prompt = _build_prompt(self._request(), "some KB context")
+        assert "EXAMPLES" in prompt
+        assert "Example 1" in prompt
+        assert "Example 2" in prompt
+
+    def test_no_context_fallback(self) -> None:
+        prompt = _build_prompt(self._request(), "")
+        assert "(no matching articles found)" in prompt
+
+    def test_context_included_when_provided(self) -> None:
+        prompt = _build_prompt(self._request(), "[KB | HIGH relevance | score: 0.85]\nReset VPN")
+        assert "HIGH relevance" in prompt
+        assert "Reset VPN" in prompt

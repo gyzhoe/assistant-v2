@@ -67,7 +67,7 @@ export const STORAGE_KEY_SECRETS = 'localSecrets'
 export const DEFAULT_BACKEND_URL = 'http://localhost:8765'
 
 /** Default LLM model */
-export const DEFAULT_MODEL = 'llama3.2:3b'
+export const DEFAULT_MODEL = 'qwen2.5:14b'
 
 /** MutationObserver debounce delay in ms */
 export const OBSERVER_DEBOUNCE_MS = 300

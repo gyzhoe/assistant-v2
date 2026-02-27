@@ -1,10 +1,14 @@
 import asyncio
+import logging
 from typing import Any
 
 from chromadb.api import ClientAPI
 
+from app.config import settings
 from app.models.response_models import ContextDoc
 from app.services.embed_service import EmbedService
+
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -28,7 +32,17 @@ class RAGService:
 
         all_docs = ticket_docs + kb_docs
         all_docs.sort(key=lambda d: d.score, reverse=True)
-        return all_docs[:max_docs]
+
+        threshold = settings.rag_min_similarity
+        before_count = len(all_docs)
+        filtered = [d for d in all_docs if d.score >= threshold]
+        if before_count > 0 and len(filtered) < before_count:
+            logger.info(
+                "RAG filter: %d/%d docs above threshold %.2f",
+                len(filtered), before_count, threshold,
+            )
+
+        return filtered[:max_docs]
 
     async def _query_collection(
         self, name: str, embedding: list[float], n_results: int
