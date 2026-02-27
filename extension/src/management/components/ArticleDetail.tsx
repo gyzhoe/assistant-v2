@@ -39,9 +39,9 @@ export function ArticleDetail({ articleId, title, onDelete }: ArticleDetailProps
   if (isLoading || !detail) {
     return (
       <div className="article-detail" aria-busy="true">
-        <div className="skeleton" style={{ height: '1rem', width: '60%' }} />
-        <div className="skeleton" style={{ height: '1rem', width: '40%', marginTop: '0.5rem' }} />
-        <div className="skeleton" style={{ height: '3rem', width: '100%', marginTop: '0.5rem' }} />
+        <div className="skeleton detail-skeleton-line" />
+        <div className="skeleton detail-skeleton-sub" />
+        <div className="skeleton detail-skeleton-block" />
       </div>
     )
   }
@@ -77,7 +77,7 @@ export function ArticleDetail({ articleId, title, onDelete }: ArticleDetailProps
             <div className="tag-pills">
               {(detail.tags ?? []).length > 0
                 ? detail.tags!.map(t => <span key={t} className="tag-pill">{t}</span>)
-                : <span className="article-detail-value" style={{ fontStyle: 'italic' }}>None</span>
+                : <span className="article-detail-value tag-none">None</span>
               }
             </div>
             <button type="button" className="link-btn" onClick={() => {
