@@ -73,3 +73,12 @@ export interface HealthResponse {
   chroma_doc_counts: Record<string, number>
   version: string
 }
+
+/** Ingest upload response */
+export interface IngestUploadResponse {
+  filename: string
+  collection: string
+  chunks_ingested: number
+  processing_time_ms: number
+  warning: string | null
+}
