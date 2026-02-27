@@ -12,12 +12,14 @@ in place and the steps required to harden the deployment.
 
 | Control | Status | Notes |
 |---|---|---|
-| All inference local | Enforced | Ollama only — no cloud calls anywhere in the codebase |
+| All inference local | Enforced | Ollama only — no cloud calls for inference. Optional Microsoft Learn search is read-only documentation lookup |
 | CORS restricted to extension origin | Enforced | `CORSMiddleware` locks to `chrome-extension://<ID>` |
 | API token auth | Configurable | Set `API_TOKEN` in `.env` — required in production |
 | Request size limit | Enforced | Default 64 KB for API; 50 MB for file uploads (`MAX_UPLOAD_BYTES`) |
-| Rate limiting | Enforced | 20 req/min for `/generate`; 5 req/min for `/ingest/upload` |
-| Upload concurrency | Enforced | Single concurrent upload via `asyncio.Semaphore(1)`; 409 on conflict |
+| Rate limiting | Enforced | 20 req/min for `/generate`; 5 req/min for `/ingest/upload` and `/ingest/url` |
+| Ingestion concurrency | Enforced | Single concurrent ingestion (upload or URL) via `asyncio.Semaphore(1)`; 409 on conflict |
+| URL ingestion SSRF prevention | Enforced | Private IP blocking, DNS pre-resolution, redirect re-validation, scheme/content-type whitelist |
+| Microsoft Learn domain lock | Enforced | Only articles from `learn.microsoft.com` are fetched; search keywords use only subject + category |
 | Filename sanitization | Enforced | `PurePosixPath(filename).name` strips directory traversal |
 | File type allowlist | Enforced | Only `.json`, `.csv`, `.html`, `.htm`, `.pdf` accepted |
 | Input length caps | Enforced | Pydantic `max_length` on all fields; prevents prompt injection via oversized input |
@@ -111,16 +113,48 @@ If your security policy requires audit logs, add structured logging middleware t
 | Concurrent upload exhaustion | Semaphore limits to 1 active ingestion; 409 on conflict |
 | Path traversal via filename | Filename sanitized with `PurePosixPath().name` |
 | Malicious file type upload | Extension allowlist: `.json`, `.csv`, `.html`, `.htm`, `.pdf` only |
-| Ticket data leak via prompt injection | Input truncation, no external calls |
+| SSRF via URL ingestion | DNS pre-resolution, private IP blocking (IPv4/IPv6/mapped), redirect re-validation per hop, scheme whitelist |
+| SSRF via MS Learn search results | Domain validation: only `learn.microsoft.com` URLs fetched, 2 MB cap, 10s timeout |
+| Ticket data leak via prompt injection | Input truncation; MS Learn search uses only subject + category (never full description) |
 | Ticket data leak via browser extension | Extension only stores data in memory; nothing persisted to cloud |
 | Unauthorized extension calling backend | CORS + API token combination |
 | Server identity leak | Security headers strip server banner |
 
 ---
 
+---
+
+## URL Ingestion SSRF Prevention
+
+The `POST /ingest/url` endpoint accepts arbitrary URLs. The following measures prevent Server-Side Request Forgery:
+
+1. **Scheme whitelist**: Only `http` and `https` schemes are allowed
+2. **DNS pre-resolution**: The hostname is resolved via `socket.getaddrinfo()` before connecting
+3. **Private IP blocking**: All resolved addresses are checked against RFC 1918/4193 ranges:
+   - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (IPv4 private)
+   - `127.0.0.0/8` (loopback), `169.254.0.0/16` (link-local)
+   - `::1` (IPv6 loopback), `fe80::/10` (IPv6 link-local)
+   - IPv4-mapped IPv6 addresses (`::ffff:127.0.0.1`) are unpacked and re-checked
+4. **Redirect re-validation**: Redirects are followed manually (max 10 hops), with full SSRF validation on every intermediate URL
+5. **Content-Type whitelist**: Only `text/html`, `text/plain`, `application/xhtml+xml`
+6. **Response size cap**: 5 MB maximum
+7. **Timeout**: 10 seconds per request
+
+## Microsoft Learn Search Privacy
+
+The optional Microsoft Learn integration searches public documentation at generation time:
+
+- Search keywords use **only** ticket subject + category — never the full description
+- Only articles hosted on `learn.microsoft.com` are fetched (domain validated via `urlparse`)
+- Article content is capped at 3000 chars and cached for 5 minutes
+- If the search fails, generation continues with local context only
+- Disable entirely via `microsoft_docs_enabled = false` in `.env` or `include_web_context: false` per request
+
+---
+
 ## What This System Does NOT Do
 
-- Does not send data to OpenAI, Anthropic, or any cloud service
+- Does not send data to OpenAI, Anthropic, or any cloud service for inference
 - Does not store ticket content to disk (only embeddings of ingested KB/past tickets)
 - Does not log ticket content
-- Does not require network access beyond localhost
+- Does not require internet access (Microsoft Learn search is optional and degrades gracefully)

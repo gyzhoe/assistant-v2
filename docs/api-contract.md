@@ -47,7 +47,10 @@ Retrieves RAG context and generates a reply using the local LLM.
   "status": "Open",
   "model": "llama3.2:3b",
   "max_context_docs": 5,
-  "stream": false
+  "stream": false,
+  "include_web_context": true,
+  "prompt_suffix": "",
+  "custom_fields": {}
 }
 ```
 
@@ -62,6 +65,9 @@ Retrieves RAG context and generates a reply using the local LLM.
 | `model` | string | no | `"llama3.2:3b"` | Ollama model to use |
 | `max_context_docs` | integer | no | `5` | Max RAG documents to include |
 | `stream` | boolean | no | `false` | Streaming not yet implemented |
+| `include_web_context` | boolean | no | `true` | Include Microsoft Learn search results as additional context |
+| `prompt_suffix` | string | no | `""` | Custom instructions appended to the prompt (max 2000 chars) |
+| `custom_fields` | object | no | `{}` | WHD custom fields (e.g., building, room, MAC address) |
 
 ### Response `200 OK`
 ```json
@@ -185,6 +191,65 @@ Clears all documents from a ChromaDB collection. Idempotent.
   "detail": "Unknown collection: foo"
 }
 ```
+
+---
+
+## `POST /ingest/url`
+
+Fetches a URL server-side, extracts text content, chunks it, and ingests into ChromaDB. Shares the upload concurrency semaphore (one ingestion at a time).
+
+### Request Body
+```json
+{
+  "url": "https://learn.microsoft.com/en-us/windows-server/networking/802-1x"
+}
+```
+
+### Request fields
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `url` | string (URL) | yes | The URL to fetch and ingest (http/https only) |
+
+### Response `200 OK`
+```json
+{
+  "url": "https://learn.microsoft.com/en-us/windows-server/networking/802-1x",
+  "collection": "kb_articles",
+  "chunks_ingested": 12,
+  "processing_time_ms": 3200,
+  "title": "Configure 802.1X wired access",
+  "warning": null
+}
+```
+
+### Response fields
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | The URL that was fetched |
+| `collection` | string | Target ChromaDB collection (always `kb_articles`) |
+| `chunks_ingested` | integer | Number of text chunks stored |
+| `processing_time_ms` | integer | Total processing time |
+| `title` | string \| null | Page title extracted from HTML |
+| `warning` | string \| null | Warning message (e.g., no content extracted) |
+
+### Error responses
+| Status | Condition |
+|---|---|
+| `409 Conflict` | Another ingestion is already in progress |
+| `413 Payload Too Large` | Response exceeds 5 MB |
+| `422 Unprocessable Entity` | SSRF violation (private IP), unsupported Content-Type, invalid URL, or fetch failure |
+| `503 Service Unavailable` | Ollama is not reachable for embedding |
+
+### SSRF prevention
+URLs are validated before fetching:
+- Scheme must be `http` or `https`
+- Hostname is resolved via DNS and checked against private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.0.0/16`, `::1`, `fe80::/10`)
+- IPv4-mapped IPv6 addresses (e.g., `::ffff:127.0.0.1`) are detected and blocked
+- Redirects are followed manually (max 10 hops), with SSRF re-validation on every hop
+- Content-Type must be `text/html`, `text/plain`, or `application/xhtml+xml`
+
+### Rate limit
+5 requests per minute per IP.
 
 ---
 
