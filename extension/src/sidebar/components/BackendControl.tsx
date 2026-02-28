@@ -164,11 +164,6 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   return (
     <section className="panel" aria-label="Status and services">
       <div className="section-heading-row">
-        <ThemeToggle
-          theme={themeSetting}
-          resolvedTheme={resolvedTheme}
-          onCycle={onCycleTheme}
-        />
         <button
           className="collapsible-trigger"
           onClick={() => setCollapsed((c) => !c)}
@@ -181,6 +176,11 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
             <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
           </div>
         </button>
+        <ThemeToggle
+          theme={themeSetting}
+          resolvedTheme={resolvedTheme}
+          onCycle={onCycleTheme}
+        />
       </div>
 
       {!collapsed && (
