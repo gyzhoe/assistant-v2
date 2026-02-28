@@ -22,6 +22,7 @@ body {
   --bg: #f6f8fa;
   --header-bg: #ffffff;
   --surface: #ffffff;
+  /* --surface-soft matches --bg in sidebar for seamless blending in the narrow panel */
   --surface-soft: #f6f8fa;
   --text: #1f2328;
   --text-heading: #1f2328;
@@ -60,6 +61,7 @@ body {
   --bg: #0d1117;
   --header-bg: #161b22;
   --surface: #161b22;
+  /* --surface-soft matches --bg in sidebar for seamless blending in the narrow panel */
   --surface-soft: #0d1117;
   --text: #e6edf3;
   --text-heading: #e6edf3;
@@ -510,13 +512,14 @@ body {
   border: none;
   padding: 0;
   color: var(--accent);
-  text-decoration: underline;
+  text-decoration: none;
+  font-weight: 500;
   cursor: pointer;
   font-size: inherit;
 }
 
 .link-btn:hover {
-  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .link-btn:focus-visible {
@@ -547,6 +550,10 @@ body {
 
 /* ─── Error fallback ───────────────────────────────── */
 .error-fallback {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   color: var(--error-text);
 }
 
@@ -665,6 +672,57 @@ body {
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* ─── Skeleton loader (reply generation) ──────────── */
+.skeleton-loader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+.skeleton-line {
+  height: 12px;
+  width: 100%;
+}
+
+.skeleton-line-80 { width: 80%; }
+.skeleton-line-75 { width: 75%; }
+.skeleton-line-85 { width: 83.3333%; }
+.skeleton-line-gap { margin-top: 8px; }
+
+/* ─── Insert button wrapper ───────────────────────── */
+.insert-button-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ─── ManageTab confirm button ────────────────────── */
+.manage-confirm-btn {
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  transition: background 120ms ease, opacity 120ms ease;
+}
+
+.manage-confirm-btn:hover {
+  background: var(--surface-soft);
+}
+
+.manage-confirm-btn.danger {
+  color: var(--error-text);
+}
+
+.manage-confirm-btn.danger:hover {
+  background: var(--error);
+  border-color: var(--error-text);
 }
 
 @media (prefers-reduced-motion: reduce) {

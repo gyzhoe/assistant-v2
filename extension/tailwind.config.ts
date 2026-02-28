@@ -5,9 +5,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Fluent Design palette
+        // Accent colour matches the --accent CSS variable used across all surfaces
         accent: {
-          DEFAULT: '#0078d4',
+          DEFAULT: '#0969da',
           light: '#2b88d8',
           dark: '#005a9e',
           hover: '#106ebe',

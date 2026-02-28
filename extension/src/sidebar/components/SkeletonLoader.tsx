@@ -3,16 +3,16 @@ import React from 'react'
 export function SkeletonLoader(): React.ReactElement {
   return (
     <div
-      className="flex flex-col gap-2 p-4"
+      className="skeleton-loader"
       role="status"
       aria-label="Generating reply, please wait"
       aria-live="polite"
     >
-      <div className="skeleton h-3 rounded w-full" />
-      <div className="skeleton h-3 rounded w-4/5" />
-      <div className="skeleton h-3 rounded w-3/4" />
-      <div className="skeleton h-3 rounded w-full mt-2" />
-      <div className="skeleton h-3 rounded w-5/6" />
+      <div className="skeleton skeleton-line" />
+      <div className="skeleton skeleton-line skeleton-line-80" />
+      <div className="skeleton skeleton-line skeleton-line-75" />
+      <div className="skeleton skeleton-line skeleton-line-gap" />
+      <div className="skeleton skeleton-line skeleton-line-85" />
       <span className="sr-only">Generating reply…</span>
     </div>
   )
