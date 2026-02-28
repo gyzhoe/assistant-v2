@@ -78,7 +78,10 @@ Source: "deps\wheels\*";             DestDir: "{app}\deps\wheels";       Flags: 
 Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: ignoreversion; Components: backend
 
 ; Bundled Ollama models (offline install — ~2.2 GB)
+; Only included when built locally with models present; CI builds skip this.
+#ifexist "deps\ollama-models\manifest"
 Source: "deps\ollama-models\*";      DestDir: "{app}\deps\ollama-models"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: models
+#endif
 
 ; PowerShell helper scripts
 Source: "scripts\post-install.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
