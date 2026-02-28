@@ -4,6 +4,7 @@ Searches the public Microsoft Learn API for relevant documentation
 and extracts content to provide as additional context for reply generation.
 """
 
+import asyncio
 import hashlib
 import logging
 import time
@@ -90,8 +91,6 @@ class MicrosoftDocsService:
 
     async def _do_search(self, keywords: str) -> list[WebContextDoc]:
         """Execute search API call and fetch top articles."""
-        import asyncio
-
         search_results = await asyncio.to_thread(self._search_api, keywords)
         if not search_results:
             return []

@@ -1,15 +1,31 @@
 import asyncio
+import logging
 import os
+import secrets
 import signal
 import subprocess
 import sys
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import APIKeyHeader
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["health"])
+
+_token_header = APIKeyHeader(name="X-Extension-Token", auto_error=False)
+
+
+async def _require_token(token: str | None = Depends(_token_header)) -> None:
+    """Guard for destructive endpoints — requires token even when api_token is empty."""
+    if not settings.api_token:
+        # No token configured (dev mode) — allow through
+        return
+    if not token or not secrets.compare_digest(token, settings.api_token):
+        raise HTTPException(status_code=401, detail="Unauthorized.")
 
 
 @router.get("/health")
@@ -43,7 +59,7 @@ async def health_check(request: Request) -> dict[str, object]:
     }
 
 
-@router.post("/shutdown")
+@router.post("/shutdown", dependencies=[Depends(_require_token)])
 async def shutdown_backend() -> dict[str, str]:
     """Gracefully shut down the backend server after a short delay."""
 
@@ -55,7 +71,7 @@ async def shutdown_backend() -> dict[str, str]:
     return {"status": "shutting_down"}
 
 
-@router.post("/ollama/start")
+@router.post("/ollama/start", dependencies=[Depends(_require_token)])
 async def start_ollama() -> dict[str, str]:
     """Start the Ollama server as a detached background process."""
     # Check if already running
@@ -83,7 +99,7 @@ async def start_ollama() -> dict[str, str]:
     return {"status": "starting"}
 
 
-@router.post("/ollama/stop")
+@router.post("/ollama/stop", dependencies=[Depends(_require_token)])
 async def stop_ollama() -> dict[str, str]:
     """Stop the Ollama server process."""
     if sys.platform == "win32":

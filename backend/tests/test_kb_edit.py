@@ -75,7 +75,7 @@ async def test_update_article_success() -> None:
     _, mock_col, ac = _setup_app()
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with ac:
             resp = await ac.put("/kb/articles/art1", json={
@@ -88,7 +88,7 @@ async def test_update_article_success() -> None:
     data = resp.json()
     assert data["article_id"] == "art1"
     assert data["title"] == "VPN Setup Guide v2"
-    assert data["chunks_created"] > 0
+    assert data["chunks_ingested"] > 0
     assert data["processing_time_ms"] >= 0
 
     # Verify old chunks were deleted
@@ -151,7 +151,7 @@ async def test_update_article_preserves_id() -> None:
     _, mock_col, ac = _setup_app()
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with ac:
             resp = await ac.put("/kb/articles/art1", json={
@@ -177,7 +177,7 @@ async def test_update_article_preserves_imported_at() -> None:
     _, mock_col, ac = _setup_app()
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with ac:
             resp = await ac.put("/kb/articles/art1", json={
@@ -229,7 +229,7 @@ async def test_update_article_rechunks() -> None:
     _, mock_col, ac = _setup_app()
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with ac:
             resp = await ac.put("/kb/articles/art1", json={
@@ -244,7 +244,7 @@ async def test_update_article_rechunks() -> None:
             })
 
     assert resp.status_code == 200
-    assert resp.json()["chunks_created"] == 4  # Intro + A + B + C
+    assert resp.json()["chunks_ingested"] == 4  # Intro + A + B + C
 
 
 @pytest.mark.asyncio
@@ -253,7 +253,7 @@ async def test_update_article_updates_tags() -> None:
     _, mock_col, ac = _setup_app()
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with ac:
             resp = await ac.put("/kb/articles/art1", json={

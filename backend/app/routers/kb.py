@@ -10,10 +10,10 @@ import logging
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from chromadb.api import ClientAPI
+from fastapi import APIRouter, HTTPException, Request
 
 from app.models.kb import (
     ArticleDeleteResponse,
@@ -21,8 +21,10 @@ from app.models.kb import (
     ArticleListResponse,
     ArticleSummary,
     ChunkDetail,
+    CreateArticleResponse,
     StatsResponse,
     TagListResponse,
+    UpdateArticleResponse,
     UpdateTagsResponse,
 )
 from app.models.request_models import (
@@ -30,7 +32,6 @@ from app.models.request_models import (
     UpdateArticleRequest,
     UpdateTagsRequest,
 )
-from app.models.response_models import CreateArticleResponse, UpdateArticleResponse
 from app.routers.shared import upload_semaphore
 from app.services.embed_service import EmbedService
 from app.utils.chunker import chunk_by_markdown_headings
@@ -104,7 +105,7 @@ def _build_article_index(
 
 
 async def _get_article_index(
-    request: Request,
+    chroma_client: ClientAPI,
 ) -> tuple[dict[str, dict[str, Any]], int]:
     """Return the cached article index, rebuilding if stale.
 
@@ -115,11 +116,9 @@ async def _get_article_index(
     if _is_cache_valid():
         return _article_cache, _total_chunks_cached
 
-    chroma_client = request.app.state.chroma_client
-
     try:
         col = await asyncio.to_thread(
-            chroma_client.get_collection, "kb_articles",
+            chroma_client.get_collection, KB_COLLECTION,
         )
     except (ValueError, Exception):
         # Collection doesn't exist
@@ -133,7 +132,7 @@ async def _get_article_index(
     )
 
     ids: list[str] = result.get("ids", [])
-    metadatas: list[dict[str, Any]] = result.get("metadatas", [])
+    metadatas = cast(list[dict[str, Any]], result.get("metadatas", []))
 
     _article_cache, _total_chunks_cached = _build_article_index(ids, metadatas)
     _cache_timestamp = time.monotonic()
@@ -153,7 +152,7 @@ async def list_articles(
     source_type: str | None = None,
 ) -> ArticleListResponse:
     """List KB articles with pagination, search, and source type filter."""
-    index, _ = await _get_article_index(request)
+    index, _ = await _get_article_index(request.app.state.chroma_client)
 
     # Filter
     articles = list(index.values())
@@ -206,31 +205,33 @@ async def create_article(
             col.get, where={"article_id": article_id}, limit=1,
         )
         if existing.get("ids"):
-            return JSONResponse(  # type: ignore[return-value]
+            raise HTTPException(
                 status_code=409,
-                content={"detail": "An article with this title already exists."},
+                detail="An article with this title already exists.",
             )
+    except HTTPException:
+        raise
     except (ValueError, Exception):
         pass  # Collection doesn't exist yet — fine
 
     # Check semaphore (non-blocking)
     if not upload_semaphore._value:  # noqa: SLF001
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=409,
-            content={"detail": "Another ingestion is already in progress. Please wait."},
+            detail="Another ingestion is already in progress. Please wait.",
         )
 
     async with upload_semaphore:
         try:
-            start = time.perf_counter()
+            start_t = time.perf_counter()
 
             # Chunk content by markdown headings
             sections = chunk_by_markdown_headings(body.content)
 
             if not sections:
-                return JSONResponse(  # type: ignore[return-value]
+                raise HTTPException(
                     status_code=422,
-                    content={"detail": "No content to ingest after processing."},
+                    detail="No content to ingest after processing.",
                 )
 
             # Build chunk stream: (chunk_id, text, metadata)
@@ -259,14 +260,14 @@ async def create_article(
             embed_service = EmbedService()
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
-                embed_fn=embed_service._embed_sync,  # noqa: SLF001
+                embed_fn=embed_service.embed_fn,
             )
 
             total = await asyncio.to_thread(
-                pipeline._upsert_stream, col, chunk_stream(),  # noqa: SLF001
+                pipeline.upsert_stream, col, chunk_stream(),
             )
 
-            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            elapsed_ms = int((time.perf_counter() - start_t) * 1000)
             invalidate_article_cache()
 
             return CreateArticleResponse(
@@ -276,18 +277,20 @@ async def create_article(
                 processing_time_ms=elapsed_ms,
             )
 
+        except HTTPException:
+            raise
         except ConnectionError as exc:
             logger.error("Ollama unavailable during article creation: %s", exc)
-            return JSONResponse(  # type: ignore[return-value]
+            raise HTTPException(
                 status_code=503,
-                content={"detail": "Embedding service (Ollama) is unavailable."},
-            )
-        except Exception:
+                detail="Embedding service (Ollama) is unavailable.",
+            ) from exc
+        except Exception as exc:
             logger.exception("Unexpected error during article creation")
-            return JSONResponse(  # type: ignore[return-value]
+            raise HTTPException(
                 status_code=500,
-                content={"detail": "Internal server error during article creation."},
-            )
+                detail="Internal server error during article creation.",
+            ) from exc
 
 
 @router.put("/articles/{article_id}", response_model=UpdateArticleResponse)
@@ -302,11 +305,11 @@ async def update_article(
         col = await asyncio.to_thread(
             chroma_client.get_collection, KB_COLLECTION,
         )
-    except (ValueError, Exception):
-        return JSONResponse(  # type: ignore[return-value]
+    except (ValueError, Exception) as exc:
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
-        )
+            detail=f"Article not found: {article_id}",
+        ) from exc
 
     result = await asyncio.to_thread(
         col.get, where={"article_id": article_id}, include=["metadatas"],
@@ -316,30 +319,30 @@ async def update_article(
     metadatas: list[dict[str, Any]] = result.get("metadatas", [])
 
     if not ids:
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
+            detail=f"Article not found: {article_id}",
         )
 
     first_meta = metadatas[0]
     if first_meta.get("source_type") != "manual":
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=403,
-            content={"detail": "Only manual articles can be edited."},
+            detail="Only manual articles can be edited.",
         )
 
     original_imported_at = first_meta.get("imported_at", "")
 
     # Check semaphore (non-blocking)
     if not upload_semaphore._value:  # noqa: SLF001
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=409,
-            content={"detail": "Another ingestion is already in progress. Please wait."},
+            detail="Another ingestion is already in progress. Please wait.",
         )
 
     async with upload_semaphore:
         try:
-            start = time.perf_counter()
+            start_t = time.perf_counter()
 
             # 2. Delete existing chunks
             await asyncio.to_thread(col.delete, ids=ids)
@@ -348,9 +351,9 @@ async def update_article(
             sections = chunk_by_markdown_headings(body.content)
 
             if not sections:
-                return JSONResponse(  # type: ignore[return-value]
+                raise HTTPException(
                     status_code=422,
-                    content={"detail": "No content to ingest after processing."},
+                    detail="No content to ingest after processing.",
                 )
 
             # 4. Build chunk stream preserving original article_id and imported_at
@@ -371,35 +374,37 @@ async def update_article(
             embed_service = EmbedService()
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
-                embed_fn=embed_service._embed_sync,  # noqa: SLF001
+                embed_fn=embed_service.embed_fn,
             )
 
             total = await asyncio.to_thread(
-                pipeline._upsert_stream, col, chunk_stream(),  # noqa: SLF001
+                pipeline.upsert_stream, col, chunk_stream(),
             )
 
-            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            elapsed_ms = int((time.perf_counter() - start_t) * 1000)
             invalidate_article_cache()
 
             return UpdateArticleResponse(
                 article_id=article_id,
                 title=body.title,
-                chunks_created=total,
+                chunks_ingested=total,
                 processing_time_ms=elapsed_ms,
             )
 
+        except HTTPException:
+            raise
         except ConnectionError as exc:
             logger.error("Ollama unavailable during article update: %s", exc)
-            return JSONResponse(  # type: ignore[return-value]
+            raise HTTPException(
                 status_code=503,
-                content={"detail": "Embedding service (Ollama) is unavailable."},
-            )
-        except Exception:
+                detail="Embedding service (Ollama) is unavailable.",
+            ) from exc
+        except Exception as exc:
             logger.exception("Unexpected error during article update")
-            return JSONResponse(  # type: ignore[return-value]
+            raise HTTPException(
                 status_code=500,
-                content={"detail": "Internal server error during article update."},
-            )
+                detail="Internal server error during article update.",
+            ) from exc
 
 
 @router.get("/articles/{article_id}", response_model=ArticleDetailResponse)
@@ -409,13 +414,13 @@ async def get_article(request: Request, article_id: str) -> ArticleDetailRespons
 
     try:
         col = await asyncio.to_thread(
-            chroma_client.get_collection, "kb_articles",
+            chroma_client.get_collection, KB_COLLECTION,
         )
-    except (ValueError, Exception):
-        return JSONResponse(  # type: ignore[return-value]
+    except (ValueError, Exception) as exc:
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
-        )
+            detail=f"Article not found: {article_id}",
+        ) from exc
 
     result = await asyncio.to_thread(
         col.get,
@@ -428,9 +433,9 @@ async def get_article(request: Request, article_id: str) -> ArticleDetailRespons
     metadatas: list[dict[str, Any]] = result.get("metadatas", [])
 
     if not ids:
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
+            detail=f"Article not found: {article_id}",
         )
 
     # Build article metadata from first chunk
@@ -473,12 +478,12 @@ async def update_tags(
     """Update tags on all chunks of an article."""
     chroma_client = request.app.state.chroma_client
     try:
-        col = await asyncio.to_thread(chroma_client.get_collection, "kb_articles")
-    except (ValueError, Exception):
-        return JSONResponse(  # type: ignore[return-value]
+        col = await asyncio.to_thread(chroma_client.get_collection, KB_COLLECTION)
+    except (ValueError, Exception) as exc:
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
-        )
+            detail=f"Article not found: {article_id}",
+        ) from exc
 
     result = await asyncio.to_thread(
         col.get, where={"article_id": article_id}, include=["metadatas"],
@@ -487,9 +492,9 @@ async def update_tags(
     metadatas: list[dict[str, Any]] = result.get("metadatas", [])
 
     if not ids:
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
+            detail=f"Article not found: {article_id}",
         )
 
     tags_str = ",".join(body.tags)
@@ -505,7 +510,7 @@ async def update_tags(
 @router.get("/tags", response_model=TagListResponse)
 async def get_tags(request: Request) -> TagListResponse:
     """Return all unique tags across all articles."""
-    index, _ = await _get_article_index(request)
+    index, _ = await _get_article_index(request.app.state.chroma_client)
     all_tags: set[str] = set()
     for article in index.values():
         all_tags.update(article.get("tags", []))
@@ -521,13 +526,13 @@ async def delete_article(
 
     try:
         col = await asyncio.to_thread(
-            chroma_client.get_collection, "kb_articles",
+            chroma_client.get_collection, KB_COLLECTION,
         )
-    except (ValueError, Exception):
-        return JSONResponse(  # type: ignore[return-value]
+    except (ValueError, Exception) as exc:
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
-        )
+            detail=f"Article not found: {article_id}",
+        ) from exc
 
     # Get chunk IDs for this article
     result = await asyncio.to_thread(
@@ -537,9 +542,9 @@ async def delete_article(
     ids: list[str] = result.get("ids", [])
 
     if not ids:
-        return JSONResponse(  # type: ignore[return-value]
+        raise HTTPException(
             status_code=404,
-            content={"detail": f"Article not found: {article_id}"},
+            detail=f"Article not found: {article_id}",
         )
 
     await asyncio.to_thread(col.delete, ids=ids)
@@ -554,7 +559,7 @@ async def delete_article(
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(request: Request) -> StatsResponse:
     """Return KB collection statistics."""
-    index, total_chunks = await _get_article_index(request)
+    index, total_chunks = await _get_article_index(request.app.state.chroma_client)
 
     by_source_type: dict[str, int] = {}
     for article in index.values():

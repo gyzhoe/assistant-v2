@@ -168,7 +168,8 @@ async def test_upload_oversized_file_returns_413() -> None:
                 files={"file": ("big.json", io.BytesIO(big_content), "application/json")},
             )
             assert resp.status_code == 413
-            assert "PAYLOAD_TOO_LARGE" in resp.json().get("error_code", "")
+            detail = resp.json()["detail"]
+            assert "PAYLOAD_TOO_LARGE" in detail.get("error_code", "")
 
 
 # ---------------------------------------------------------------------------

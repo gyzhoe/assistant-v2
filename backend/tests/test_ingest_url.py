@@ -54,7 +54,7 @@ async def test_ingest_url_success() -> None:
             patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
         ):
             mock_pipeline = MagicMock()
-            mock_pipeline._upsert_stream.return_value = 2
+            mock_pipeline.upsert_stream.return_value = 2
             mock_pipeline_cls.return_value = mock_pipeline
 
             resp = await ac.post(
@@ -127,7 +127,8 @@ async def test_ingest_url_too_large_returns_413() -> None:
             )
 
     assert resp.status_code == 413
-    assert "PAYLOAD_TOO_LARGE" in resp.json().get("error_code", "")
+    detail = resp.json()["detail"]
+    assert "PAYLOAD_TOO_LARGE" in detail.get("error_code", "")
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +152,7 @@ async def test_ingest_url_ollama_down_returns_503() -> None:
             patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
         ):
             mock_pipeline = MagicMock()
-            mock_pipeline._upsert_stream.side_effect = ConnectionError("Ollama down")
+            mock_pipeline.upsert_stream.side_effect = ConnectionError("Ollama down")
             mock_pipeline_cls.return_value = mock_pipeline
 
             resp = await ac.post(
@@ -214,7 +215,7 @@ async def test_ingest_url_concurrent_returns_409() -> None:
         patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
     ):
         mock_pipeline = MagicMock()
-        mock_pipeline._upsert_stream.return_value = 1
+        mock_pipeline.upsert_stream.return_value = 1
         mock_pipeline_cls.return_value = mock_pipeline
         fresh_app.state.chroma_client.get_or_create_collection.return_value = MagicMock()
 
