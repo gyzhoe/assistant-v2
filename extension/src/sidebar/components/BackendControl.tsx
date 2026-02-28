@@ -115,7 +115,11 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       await apiClient.ollamaStart()
     } catch {
       const resp = await sendNativeCommand('start_ollama')
-      if (!resp.ok) { setOllamaAction('idle'); return }
+      if (!resp.ok) {
+        setNativeError(resp.error ?? 'Failed to start Ollama')
+        setOllamaAction('idle')
+        return
+      }
     }
     clearTimer()
     setTimeout(() => {

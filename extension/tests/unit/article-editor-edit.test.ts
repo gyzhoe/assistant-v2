@@ -89,7 +89,7 @@ describe('ArticleEditor — edit mode', () => {
     vi.mocked(managementApi.updateArticle).mockResolvedValue({
       article_id: 'art1',
       title: 'VPN Setup Guide',
-      chunks_created: 2,
+      chunks_ingested: 2,
       processing_time_ms: 50,
     })
 
@@ -131,7 +131,7 @@ describe('ArticleEditor — edit mode', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Only manual articles can be edited.')).toBeTruthy()
+      expect(screen.getByText(/Only manual articles can be edited/)).toBeTruthy()
     })
   })
 

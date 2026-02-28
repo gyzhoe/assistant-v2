@@ -12,7 +12,7 @@ import { showToast } from './Toast'
 
 interface ArticleListProps {
   onImportClick: () => void
-  onAuthRequired: () => void
+  onAuthRequired: (message?: string) => void
   onEditArticle?: (articleId: string) => void
 }
 
@@ -39,7 +39,7 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
   // Handle 401 at the query level
   useEffect(() => {
     if (error instanceof ApiError && error.status === 401) {
-      onAuthRequired()
+      onAuthRequired('Invalid token. Please try again.')
     }
   }, [error, onAuthRequired])
 
@@ -104,9 +104,9 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
 
   if (isError && !(error instanceof ApiError && error.status === 401)) {
     return (
-      <div className="connection-error">
-        <span className="connection-error-icon" aria-hidden="true">!</span>
-        Unable to connect to the backend. Make sure the server is running at localhost:8765.
+      <div className="alert-banner error" role="alert">
+        <p className="alert-title">Connection error</p>
+        <p className="alert-message">Unable to connect to the backend. Make sure the server is running at localhost:8765.</p>
       </div>
     )
   }

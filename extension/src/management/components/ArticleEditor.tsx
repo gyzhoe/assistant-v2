@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
+import { ConfirmDialog } from './ConfirmDialog'
 import { showToast } from './Toast'
+import { DEFAULT_TAG_SUGGESTIONS } from '../constants/tagSuggestions'
 import type { ArticleDetail, CreateArticleResponse, UpdateArticleResponse } from '../types'
 
 const CONTENT_TEMPLATE = `## Problem
@@ -17,37 +19,6 @@ Step-by-step instructions to resolve the problem.
 ## Additional Notes
 Any extra context, caveats, or related links.
 `
-
-/** WHD request types shown as default tag suggestions (all 27 from WHD instance). */
-const DEFAULT_TAG_SUGGESTIONS = [
-  'ACCOUNT (u-,r-,b-number,...)',
-  'ADMINISTRATIVE RIGHTS',
-  'ARTICLE on LOAN',
-  'CERTIFICATE ISSUE',
-  'COLLABORATION/COMMUNICATION',
-  'COMPUTER and ACCESSORIES',
-  'FACILITEITEN',
-  'FORWARD FROM IT DEPARTMENT',
-  'REMOTE DESKTOP ACCESS',
-  'IVANTI VPN',
-  'LINUX',
-  'MAILBOX (Outlook, Adm. Email...)',
-  'Multi Factor Authentication (MFA)',
-  'NEED A HARDPHONE (CAP)',
-  'NEED A PHONE NUMBER',
-  'NEED A SOFTPHONE (USB)',
-  'NETWORK (Wired / Wireless)',
-  'PERIPHERALS (keyboard, mouse, headset,...)',
-  'PHONE ISSUE (General)',
-  'PRINTER',
-  'REDCAP',
-  'REMOTE ACCESS',
-  'Request by mail',
-  'SHINY R App Hosting',
-  'SOFTWARE',
-  'SOFTWARE BLOCKED by AppLocker',
-  'WEBSITE & WEB APPS',
-]
 
 /** Reconstruct markdown content from article chunks. */
 function reconstructContent(detail: ArticleDetail): string {
@@ -72,6 +43,8 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
   const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
   const [showTagSuggestions, setShowTagSuggestions] = useState(false)
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false)
+  const [tagTruncateWarning, setTagTruncateWarning] = useState(false)
   const [loaded, setLoaded] = useState(mode === 'create')
   const titleRef = useRef<HTMLInputElement>(null)
   const originalRef = useRef<{ title: string; content: string; tags: string[] }>({ title: '', content: CONTENT_TEMPLATE, tags: [] })
@@ -95,9 +68,6 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
       setTags(detail.tags ?? [])
       originalRef.current = { title: detail.title, content: reconstructed, tags: detail.tags ?? [] }
       setLoaded(true)
-      if (detail.source_type !== 'manual') {
-        setError('Only manual articles can be edited.')
-      }
     }
   }, [isEdit, detail])
 
@@ -128,7 +98,7 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
         : managementApi.createArticle(title.trim(), content.trim(), tags),
     onSuccess: (data) => {
       if (isEdit) {
-        const chunks = 'chunks_created' in data ? data.chunks_created : 0
+        const chunks = 'chunks_ingested' in data ? data.chunks_ingested : 0
         showToast(`Article updated — ${chunks} chunks re-indexed`, 'success')
         queryClient.invalidateQueries({ queryKey: ['article', articleId] })
       } else {
@@ -161,7 +131,8 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
 
   const handleCancel = useCallback(() => {
     if (isDirty) {
-      if (!window.confirm('You have unsaved changes. Discard them?')) return
+      setShowDiscardDialog(true)
+      return
     }
     onBack()
   }, [isDirty, onBack])
@@ -217,6 +188,11 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
       </div>
 
       <div className="editor-fields">
+        {isNonManual && (
+          <div className="editor-banner-warning" role="alert">
+            Only manual articles can be edited. This article was imported from an external source.
+          </div>
+        )}
         <div className="editor-field">
           <label className="editor-label" htmlFor="article-title">Title</label>
           <input
@@ -230,6 +206,7 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
             maxLength={200}
             disabled={!!isNonManual}
           />
+          {error && <p className="editor-error" role="alert">{error}</p>}
         </div>
 
         <div className="editor-field">
@@ -276,6 +253,10 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
                     const newTags = pasted.split(',').map(t => t.trim()).filter(Boolean)
                     setTags(prev => {
                       const combined = [...prev, ...newTags.filter(t => !prev.includes(t))]
+                      if (combined.length > 20) {
+                        setTagTruncateWarning(true)
+                        setTimeout(() => setTagTruncateWarning(false), 3000)
+                      }
                       return combined.slice(0, 20)
                     })
                     setTagInput('')
@@ -291,14 +272,32 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
               </datalist>
             </div>
           </div>
+          {tagTruncateWarning && (
+            <p className="editor-hint" style={{ color: 'var(--warn-text, #9a6700)' }}>Some pasted tags were truncated to the 20-tag limit.</p>
+          )}
           <div className="tag-browse-row">
             <button
               type="button"
               className="tag-browse-toggle"
               onClick={() => setShowTagSuggestions(v => !v)}
               aria-expanded={showTagSuggestions}
+              aria-label="Browse tag suggestions"
             >
-              {showTagSuggestions ? '\u25BE' : '\u25B8'} Browse request types
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className={`tag-browse-chevron${showTagSuggestions ? ' open' : ''}`}
+              >
+                <path d="M3 2l4 3-4 3" />
+              </svg>
+              Browse request types
             </button>
             <span className="editor-hint">or type custom tags above</span>
           </div>
@@ -349,8 +348,16 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
           </p>
         </div>
 
-        {error && <p className="editor-error" role="alert">{error}</p>}
       </div>
+
+      <ConfirmDialog
+        open={showDiscardDialog}
+        title="Discard Changes"
+        description="You have unsaved changes. Discard them?"
+        confirmLabel="Discard"
+        onConfirm={() => { setShowDiscardDialog(false); onBack() }}
+        onCancel={() => setShowDiscardDialog(false)}
+      />
     </div>
   )
 }

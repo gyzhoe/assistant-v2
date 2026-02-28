@@ -3,9 +3,10 @@ import { setToken } from '../api'
 
 interface TokenGateProps {
   onAuthenticated: () => void
+  errorMessage?: string
 }
 
-export function TokenGate({ onAuthenticated }: TokenGateProps): React.ReactElement {
+export function TokenGate({ onAuthenticated, errorMessage }: TokenGateProps): React.ReactElement {
   const [value, setValue] = useState('')
   const [error, setError] = useState(false)
 
@@ -32,6 +33,7 @@ export function TokenGate({ onAuthenticated }: TokenGateProps): React.ReactEleme
         </div>
         <h2 className="token-gate-title">Authentication Required</h2>
         <p className="token-gate-desc">Enter the API token to access KB management.</p>
+        {errorMessage && <p className="token-gate-error" role="alert">{errorMessage}</p>}
         <form onSubmit={handleSubmit} className="token-gate-form">
           <input
             type="password"

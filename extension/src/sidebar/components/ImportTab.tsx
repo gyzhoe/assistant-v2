@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { apiClient, ApiError } from '../../lib/api-client'
 import { useKnowledgeImport } from '../hooks/useKnowledgeImport'
 
@@ -19,6 +19,13 @@ export function ImportTab(): React.ReactElement {
 
   const isDragOver = dragCount > 0
   const isUploading = uploadStatus === 'uploading'
+
+  // Auto-dismiss URL success message after 4 seconds
+  useEffect(() => {
+    if (!urlSuccess) return
+    const timer = setTimeout(() => setUrlSuccess(null), 4000)
+    return () => clearTimeout(timer)
+  }, [urlSuccess])
 
   const handleUrlImport = useCallback(async () => {
     const url = urlInput.trim()
@@ -91,11 +98,11 @@ export function ImportTab(): React.ReactElement {
     const warnings = results.filter((r) => r.warning).map((r) => r.warning)
     return (
       <div className="kb-progress">
-        <p className="support-text" style={{ color: 'var(--ok-text)' }}>
+        <p className="support-text ok-text">
           {results.length} file{results.length !== 1 ? 's' : ''} imported, {totalChunks} chunks added
         </p>
         {warnings.map((w, i) => (
-          <p key={i} className="support-text" style={{ color: 'var(--warn-text)' }}>
+          <p key={i} className="support-text warn-text">
             {w}
           </p>
         ))}
@@ -187,11 +194,11 @@ export function ImportTab(): React.ReactElement {
             onClick={handleUrlImport}
             disabled={!urlInput.trim() || urlLoading || isUploading}
           >
-            {urlLoading ? 'Importing...' : 'Import'}
+            {urlLoading ? 'Importing...' : 'Import URL'}
           </button>
         </div>
         {urlError && <p className="support-text error-text" role="alert">{urlError}</p>}
-        {urlSuccess && <p className="support-text" style={{ color: 'var(--ok-text)' }}>{urlSuccess}</p>}
+        {urlSuccess && <p className="support-text ok-text">{urlSuccess}</p>}
       </div>
 
       {/* Error message */}

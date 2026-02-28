@@ -3,37 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { managementApi } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
 import { showToast } from './Toast'
-
-/** WHD request types for tag autocomplete (all 27 from WHD instance). */
-const DEFAULT_TAG_SUGGESTIONS = [
-  'ACCOUNT (u-,r-,b-number,...)',
-  'ADMINISTRATIVE RIGHTS',
-  'ARTICLE on LOAN',
-  'CERTIFICATE ISSUE',
-  'COLLABORATION/COMMUNICATION',
-  'COMPUTER and ACCESSORIES',
-  'FACILITEITEN',
-  'FORWARD FROM IT DEPARTMENT',
-  'REMOTE DESKTOP ACCESS',
-  'IVANTI VPN',
-  'LINUX',
-  'MAILBOX (Outlook, Adm. Email...)',
-  'Multi Factor Authentication (MFA)',
-  'NEED A HARDPHONE (CAP)',
-  'NEED A PHONE NUMBER',
-  'NEED A SOFTPHONE (USB)',
-  'NETWORK (Wired / Wireless)',
-  'PERIPHERALS (keyboard, mouse, headset,...)',
-  'PHONE ISSUE (General)',
-  'PRINTER',
-  'REDCAP',
-  'REMOTE ACCESS',
-  'Request by mail',
-  'SHINY R App Hosting',
-  'SOFTWARE',
-  'SOFTWARE BLOCKED by AppLocker',
-  'WEBSITE & WEB APPS',
-]
+import { DEFAULT_TAG_SUGGESTIONS } from '../constants/tagSuggestions'
 
 interface ArticleDetailProps {
   articleId: string
@@ -179,7 +149,7 @@ export function ArticleDetail({ articleId, title, onDelete, onEdit }: ArticleDet
             <div className="tag-editor-actions">
               <button type="button" className="primary-btn" onClick={() => tagMutation.mutate()}
                 disabled={tagMutation.isPending}>
-                {tagMutation.isPending ? 'Saving\u2026' : 'Save'}
+                {tagMutation.isPending ? 'Saving\u2026' : 'Save Tags'}
               </button>
               <button type="button" className="secondary-btn" onClick={() => setEditingTags(false)}>Cancel</button>
             </div>

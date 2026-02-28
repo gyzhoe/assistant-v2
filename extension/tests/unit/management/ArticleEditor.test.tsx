@@ -98,13 +98,11 @@ describe('ArticleEditor', () => {
 
   it('cancel shows confirm dialog when there are changes', () => {
     const onBack = vi.fn()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderEditor(onBack)
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Draft' } })
     fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(confirmSpy).toHaveBeenCalledWith('You have unsaved changes. Discard them?')
     expect(onBack).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
+    expect(screen.getByText('Discard Changes')).not.toBeNull()
   })
 
   it('successful save shows toast and calls onBack', async () => {

@@ -78,11 +78,12 @@ export function KnowledgePanel(): React.ReactElement {
 
       {!collapsed && (
         <div id="kb-panel-body" className="collapsible-body">
-          <div className="kb-tab-strip" role="tablist">
+          <div className="kb-tab-strip" role="tablist" aria-label="Knowledge base tabs">
             <button
               role="tab"
               className={`kb-tab ${activeTab === 'import' ? 'active' : ''}`}
               aria-selected={activeTab === 'import'}
+              aria-controls="kb-tab-panel-import"
               onClick={() => setActiveTab('import')}
             >
               Import
@@ -91,6 +92,7 @@ export function KnowledgePanel(): React.ReactElement {
               role="tab"
               className={`kb-tab ${activeTab === 'manage' ? 'active' : ''}`}
               aria-selected={activeTab === 'manage'}
+              aria-controls="kb-tab-panel-manage"
               onClick={() => setActiveTab('manage')}
             >
               Manage
@@ -98,9 +100,13 @@ export function KnowledgePanel(): React.ReactElement {
           </div>
 
           {activeTab === 'import' ? (
-            <ImportTab />
+            <div role="tabpanel" id="kb-tab-panel-import">
+              <ImportTab />
+            </div>
           ) : (
-            <ManageTab docCounts={docCounts} onRefresh={handleRefresh} />
+            <div role="tabpanel" id="kb-tab-panel-manage">
+              <ManageTab docCounts={docCounts} onRefresh={handleRefresh} onSwitchToImport={() => setActiveTab('import')} />
+            </div>
           )}
         </div>
       )}

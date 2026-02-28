@@ -135,10 +135,12 @@ export function useKnowledgeImport() {
 
         let message = 'Upload failed'
         if (err instanceof ApiError) {
-          if (err.status === 503) message = 'Backend or Ollama is not reachable'
+          const body = err.body as { detail?: string; error_code?: string }
+          if (body?.error_code === 'PAYLOAD_TOO_LARGE' || err.status === 413) {
+            message = 'File is too large. Please reduce the file size and try again.'
+          } else if (err.status === 503) message = 'Backend or Ollama is not reachable'
           else if (err.status === 409) message = 'Another import is already in progress'
           else {
-            const body = err.body as { detail?: string }
             message = body?.detail ?? `Upload failed (${err.status})`
           }
         } else if (err instanceof Error) {

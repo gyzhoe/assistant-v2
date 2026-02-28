@@ -72,6 +72,7 @@ export function ReplyPanel(): React.ReactElement {
             <span className="reply-placeholder">
               Your generated reply will appear here.
             </span>
+            <span className="reply-hint">Press Alt+Shift+H to toggle sidebar</span>
           </div>
         )}
 
