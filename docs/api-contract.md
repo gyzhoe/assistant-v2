@@ -41,7 +41,7 @@ Retrieves RAG context and generates a reply using the local LLM.
 ```json
 {
   "ticket_subject": "Cannot access network drive after password reset",
-  "ticket_description": "User Alex Johnson reports she cannot access the \\\\fileserver\\shared drive...",
+  "ticket_description": "User reports they cannot access the shared network drive after a password reset...",
   "requester_name": "Alex Johnson",
   "category": "Network",
   "status": "Open",
