@@ -12,8 +12,8 @@ export function StatCards({ stats, health, isLoading }: StatCardsProps): React.R
       <div className="stat-cards">
         {[0, 1, 2].map(i => (
           <div key={i} className="stat-card">
-            <div className="skeleton stat-value-skeleton" />
             <div className="skeleton stat-label-skeleton" />
+            <div className="skeleton stat-value-skeleton" />
           </div>
         ))}
       </div>
@@ -25,19 +25,18 @@ export function StatCards({ stats, health, isLoading }: StatCardsProps): React.R
   return (
     <div className="stat-cards">
       <div className="stat-card">
-        <span className="stat-value">{stats?.total_articles ?? 0}</span>
         <span className="stat-label">Articles</span>
+        <span className="stat-value">{stats?.total_articles ?? 0}</span>
       </div>
       <div className="stat-card">
-        <span className="stat-value">{stats?.total_chunks ?? 0}</span>
         <span className="stat-label">Parts</span>
+        <span className="stat-value">{stats?.total_chunks ?? 0}</span>
       </div>
       <div className="stat-card">
         <span className={`stat-indicator ${systemOk ? 'ok' : 'error'}`} />
         <span className="stat-value stat-status-value">
-          {systemOk ? 'All Online' : 'Degraded'}
+          {systemOk ? 'Online' : 'Degraded'}
         </span>
-        <span className="stat-label">System Status</span>
       </div>
     </div>
   )
