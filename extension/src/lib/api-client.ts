@@ -1,4 +1,4 @@
-import type { GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse } from '../shared/types'
+import type { GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
 
 async function getBackendUrl(): Promise<string> {
@@ -109,6 +109,17 @@ export const apiClient = {
       const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
       throw new ApiError(resp.status, error)
     }
+  },
+
+  async searchKBArticles(query: string, limit: number = 5, signal?: AbortSignal): Promise<KBArticleListResponse> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const params = new URLSearchParams({ search: query, page_size: String(limit) })
+    const resp = await fetch(`${base}/kb/articles?${params.toString()}`, { headers, signal })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<KBArticleListResponse>
   },
 
   async ingestUrl(url: string, signal?: AbortSignal): Promise<IngestUrlResponse> {

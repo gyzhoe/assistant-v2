@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **KB Context Picker**: search and pin KB articles as additional context for reply generation
+  - New `KBContextPicker` component in the sidebar: debounced search, pin/unpin chips
+  - Pinned articles persist across generations (user clears manually)
+  - Backend injects pinned article chunks as high-priority `[PINNED]` context in the AI prompt
+  - `pinned_article_ids` field on the generate request (capped at 10)
+  - `searchKBArticles` method added to the API client
+
+- **Collapsible Ticket Context**: the Ticket Context section in the sidebar is now collapsible (starts expanded) with a chevron toggle, matching the pattern used by Status and Knowledge Base panels
+
 - **Consistency review — Backend (PR #76)**:
   - Exposed `embed_fn` public property on `EmbedService` and `upsert_stream` public method on `IngestionPipeline`
   - Replaced all hardcoded `"kb_articles"` string literals with the `KB_COLLECTION` constant

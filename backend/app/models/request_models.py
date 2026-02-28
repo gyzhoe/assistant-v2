@@ -28,6 +28,18 @@ class GenerateRequest(BaseModel):
     prompt_suffix: str = Field(
         default="", max_length=2000, description="Custom instructions appended to the prompt"
     )
+    pinned_article_ids: list[str] = Field(
+        default_factory=list, max_length=10, description="KB article IDs to inject as pinned context"
+    )
+
+    @field_validator("pinned_article_ids")
+    @classmethod
+    def validate_pinned_article_ids(cls, v: list[str]) -> list[str]:
+        for item in v:
+            if len(item) > _SHORT_FIELD_MAX:
+                msg = f"Each pinned article ID must be at most {_SHORT_FIELD_MAX} characters"
+                raise ValueError(msg)
+        return v
 
 
 class IngestUrlRequest(BaseModel):

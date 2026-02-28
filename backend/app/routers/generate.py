@@ -1,15 +1,18 @@
 import asyncio
 import logging
 import time
+from typing import Any, cast
 
+from chromadb.api import ClientAPI
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
 from app.models.request_models import GenerateRequest
-from app.models.response_models import GenerateResponse
+from app.models.response_models import ContextDoc, GenerateResponse
 from app.services.llm_service import LLMService
 from app.services.microsoft_docs import MicrosoftDocsService
 from app.services.rag_service import RAGService
+from ingestion.pipeline import KB_COLLECTION
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +61,17 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
             },
         ) from exc
 
+    # Fetch pinned articles and prepend to context
+    if body.pinned_article_ids:
+        pinned_docs = await _fetch_pinned_articles(
+            chroma_client, body.pinned_article_ids,
+        )
+        # Prepend pinned docs before RAG results
+        context_docs = pinned_docs + context_docs
+
     # Build prompt
     context_text = "\n\n---\n\n".join(
-        f"[{doc.source.upper()} | {_relevance_label(doc.score)} | score: {doc.score:.2f}]\n{doc.content}"
-        for doc in context_docs
+        _format_context_doc(doc) for doc in context_docs
     )
 
     if web_docs:
@@ -111,6 +121,64 @@ def _relevance_label(score: float) -> str:
     if score >= 0.50:
         return "MODERATE relevance"
     return "LOW relevance"
+
+
+def _format_context_doc(doc: ContextDoc) -> str:
+    """Format a context doc for the prompt, using PINNED label for pinned articles."""
+    if doc.metadata.get("source_type") == "pinned":
+        return f"[{doc.source.upper()} | PINNED | score: {doc.score:.2f}]\n{doc.content}"
+    return (
+        f"[{doc.source.upper()} | {_relevance_label(doc.score)} "
+        f"| score: {doc.score:.2f}]\n{doc.content}"
+    )
+
+
+async def _fetch_pinned_articles(
+    chroma_client: ClientAPI, article_ids: list[str],
+) -> list[ContextDoc]:
+    """Fetch the first chunk of each pinned article from ChromaDB."""
+    try:
+        col = await asyncio.to_thread(
+            chroma_client.get_collection, KB_COLLECTION,
+        )
+    except Exception:
+        logger.warning(
+            "KB collection '%s' not found — skipping pinned articles %s",
+            KB_COLLECTION, article_ids, exc_info=True,
+        )
+        return []
+
+    # Fetch one chunk per article — limit=1 avoids non-deterministic chunk
+    # selection since ChromaDB returns chunks in undefined order and there
+    # is no chunk_index metadata to sort by.
+    pinned: list[ContextDoc] = []
+    for aid in article_ids:
+        where_filter: dict[str, Any] = {"article_id": {"$eq": aid}}
+        try:
+            result = await asyncio.to_thread(
+                col.get,
+                where=where_filter,
+                limit=1,
+                include=["documents", "metadatas"],
+            )
+        except Exception:
+            logger.warning(
+                "Failed to fetch pinned article '%s' from ChromaDB",
+                aid, exc_info=True,
+            )
+            continue
+
+        docs = cast(list[str], result.get("documents") or [])
+        metas = cast(list[dict[str, Any]], result.get("metadatas") or [])
+        if docs and metas:
+            pinned.append(ContextDoc(
+                content=docs[0],
+                source="kb",
+                score=1.0,
+                metadata={**metas[0], "source_type": "pinned"},
+            ))
+
+    return pinned
 
 
 def _build_prompt(body: GenerateRequest, context_text: str) -> str:

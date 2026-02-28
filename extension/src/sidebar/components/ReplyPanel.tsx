@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useTicketData } from '../hooks/useTicketData'
 import { useGenerateReply } from '../hooks/useGenerateReply'
 import { TicketContext } from './TicketContext'
+import { KBContextPicker } from './KBContextPicker'
 import { ModelSelector } from './ModelSelector'
 import { SkeletonLoader } from './SkeletonLoader'
 import { InsertButton } from './InsertButton'
@@ -11,7 +12,9 @@ import { ErrorState } from './ErrorState'
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
   const { generate } = useGenerateReply()
+  const [contextCollapsed, setContextCollapsed] = useState(false)
 
+  const pinnedCount = useSidebarStore((s) => s.pinnedArticles.length)
   const ticketData = useSidebarStore((s) => s.ticketData)
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
   const reply = useSidebarStore((s) => s.reply)
@@ -27,11 +30,29 @@ export function ReplyPanel(): React.ReactElement {
     <>
       {/* Ticket context */}
       <section className="panel" aria-label="Ticket details">
-        <h2 className="section-heading">Ticket context</h2>
-        {!isTicketPage && (
-          <p className="support-text">Open a WHD ticket page to begin. This panel updates automatically.</p>
+        <button
+          className="section-heading-row collapsible-trigger"
+          onClick={() => setContextCollapsed((c) => !c)}
+          aria-expanded={!contextCollapsed}
+          aria-controls="ticket-context-body"
+        >
+          <h2 className="section-heading">Ticket context</h2>
+          <div className="heading-right">
+            {pinnedCount > 0 && (
+              <span className="status-chip ok">{pinnedCount} pinned</span>
+            )}
+            <span className={`chevron ${contextCollapsed ? '' : 'open'}`} aria-hidden="true" />
+          </div>
+        </button>
+        {!contextCollapsed && (
+          <div id="ticket-context-body" className="collapsible-body">
+            {!isTicketPage && (
+              <p className="support-text">Open a WHD ticket page to begin. This panel updates automatically.</p>
+            )}
+            {ticketData && <TicketContext ticket={ticketData} />}
+            <KBContextPicker />
+          </div>
         )}
-        {ticketData && <TicketContext ticket={ticketData} />}
       </section>
 
       {/* Compose reply */}

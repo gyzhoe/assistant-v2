@@ -37,6 +37,12 @@ export interface SelectorConfig {
   techNotes: string
 }
 
+/** A pinned KB article for additional context */
+export interface KBArticlePin {
+  article_id: string
+  title: string
+}
+
 /** Generate API request */
 export interface GenerateRequest {
   ticket_subject: string
@@ -50,6 +56,7 @@ export interface GenerateRequest {
   include_web_context: boolean
   prompt_suffix: string
   custom_fields: Record<string, string>
+  pinned_article_ids?: string[]
 }
 
 /** Single retrieved context document */
@@ -94,4 +101,23 @@ export interface IngestUrlResponse {
   processing_time_ms: number
   title: string | null
   warning: string | null
+}
+
+/** KB article summary (from GET /kb/articles) */
+export interface KBArticleListItem {
+  article_id: string
+  title: string
+  source_type: string
+  source: string
+  chunk_count: number
+  imported_at: string | null
+  tags: string[]
+}
+
+/** KB article list response */
+export interface KBArticleListResponse {
+  articles: KBArticleListItem[]
+  total_articles: number
+  page: number
+  page_size: number
 }

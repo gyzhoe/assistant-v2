@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_MODEL } from '../../shared/constants'
-import type { TicketData, GenerateResponse } from '../../shared/types'
+import type { TicketData, GenerateResponse, KBArticlePin } from '../../shared/types'
 
 interface SidebarState {
   ticketData: TicketData | null
@@ -13,6 +13,7 @@ interface SidebarState {
   isInserted: boolean
   abortController: AbortController | null
   isEditingReply: boolean
+  pinnedArticles: KBArticlePin[]
 
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
@@ -24,6 +25,8 @@ interface SidebarState {
   setIsInserted: (val: boolean) => void
   setAbortController: (ctrl: AbortController | null) => void
   setIsEditingReply: (val: boolean) => void
+  pinArticle: (article: KBArticlePin) => void
+  unpinArticle: (articleId: string) => void
   cancelGeneration: () => void
   reset: () => void
 }
@@ -39,6 +42,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   isInserted: false,
   abortController: null,
   isEditingReply: false,
+  pinnedArticles: [],
 
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
@@ -50,6 +54,16 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   setIsInserted: (val) => set({ isInserted: val }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setIsEditingReply: (val) => set({ isEditingReply: val }),
+  pinArticle: (article) => {
+    const { pinnedArticles } = get()
+    if (pinnedArticles.length >= 10) return
+    if (pinnedArticles.some((a) => a.article_id === article.article_id)) return
+    set({ pinnedArticles: [...pinnedArticles, article] })
+  },
+  unpinArticle: (articleId) => {
+    const { pinnedArticles } = get()
+    set({ pinnedArticles: pinnedArticles.filter((a) => a.article_id !== articleId) })
+  },
   cancelGeneration: () => {
     const { abortController } = get()
     if (abortController) abortController.abort()
@@ -66,6 +80,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
       isInserted: false,
       abortController: null,
       isEditingReply: false,
+      pinnedArticles: [],
     })
   },
 }))

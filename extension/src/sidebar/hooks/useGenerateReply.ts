@@ -6,6 +6,7 @@ import { apiClient, ApiError } from '../../lib/api-client'
 export function useGenerateReply() {
   const ticketData = useSidebarStore((s) => s.ticketData)
   const selectedModel = useSidebarStore((s) => s.selectedModel)
+  const pinnedArticles = useSidebarStore((s) => s.pinnedArticles)
   const setReply = useSidebarStore((s) => s.setReply)
   const setIsGenerating = useSidebarStore((s) => s.setIsGenerating)
   const setGenerateError = useSidebarStore((s) => s.setGenerateError)
@@ -39,6 +40,7 @@ export function useGenerateReply() {
         include_web_context: true,
         prompt_suffix: settings.promptSuffix,
         custom_fields: ticketData.customFields,
+        pinned_article_ids: pinnedArticles.map((a) => a.article_id),
       }, ctrl.signal)
       setReply(response.reply)
       setLastResponse(response)
@@ -62,7 +64,7 @@ export function useGenerateReply() {
       setIsGenerating(false)
       setAbortController(null)
     }
-  }, [ticketData, selectedModel, settings.promptSuffix, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply])
+  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply])
 
   return { generate }
 }
