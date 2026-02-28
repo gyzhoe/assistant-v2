@@ -95,7 +95,7 @@ export interface TagListResponse {
 export interface UpdateArticleResponse {
   article_id: string
   title: string
-  chunks_created: number
+  chunks_ingested: number
   processing_time_ms: number
 }
 

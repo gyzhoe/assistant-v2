@@ -98,7 +98,7 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
         : managementApi.createArticle(title.trim(), content.trim(), tags),
     onSuccess: (data) => {
       if (isEdit) {
-        const chunks = 'chunks_created' in data ? data.chunks_created : 0
+        const chunks = 'chunks_ingested' in data ? data.chunks_ingested : 0
         showToast(`Article updated — ${chunks} chunks re-indexed`, 'success')
         queryClient.invalidateQueries({ queryKey: ['article', articleId] })
       } else {
