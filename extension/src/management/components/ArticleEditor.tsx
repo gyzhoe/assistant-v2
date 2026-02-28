@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
 import { showToast } from './Toast'
+import type { ArticleDetail, CreateArticleResponse, UpdateArticleResponse } from '../types'
 
 const CONTENT_TEMPLATE = `## Problem
 Describe the issue or question this article addresses.
@@ -48,20 +49,61 @@ const DEFAULT_TAG_SUGGESTIONS = [
   'WEBSITE & WEB APPS',
 ]
 
-interface ArticleEditorProps {
-  onBack: () => void
+/** Reconstruct markdown content from article chunks. */
+function reconstructContent(detail: ArticleDetail): string {
+  return detail.chunks.map(chunk => {
+    const section = chunk.section ?? ''
+    const text = chunk.text ?? ''
+    if (section === 'Introduction' || !section) return text
+    return `## ${section}\n\n${text}`
+  }).join('\n\n')
 }
 
-export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElement {
+interface ArticleEditorProps {
+  onBack: () => void
+  mode?: 'create' | 'edit'
+  articleId?: string
+}
+
+export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEditorProps): React.ReactElement {
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState(CONTENT_TEMPLATE)
+  const [content, setContent] = useState(mode === 'create' ? CONTENT_TEMPLATE : '')
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
   const [showTagSuggestions, setShowTagSuggestions] = useState(false)
+  const [loaded, setLoaded] = useState(mode === 'create')
   const titleRef = useRef<HTMLInputElement>(null)
+  const originalRef = useRef<{ title: string; content: string; tags: string[] }>({ title: '', content: CONTENT_TEMPLATE, tags: [] })
   const queryClient = useQueryClient()
-  const isDirty = title.length > 0 || (content !== CONTENT_TEMPLATE && content.length > 0) || tags.length > 0
+
+  const isEdit = mode === 'edit' && !!articleId
+
+  // Fetch article detail in edit mode
+  const { data: detail, isLoading: detailLoading } = useQuery({
+    queryKey: ['article', articleId],
+    queryFn: () => managementApi.getArticle(articleId!),
+    enabled: isEdit,
+  })
+
+  // Populate fields when article detail loads
+  useEffect(() => {
+    if (isEdit && detail) {
+      const reconstructed = reconstructContent(detail)
+      setTitle(detail.title)
+      setContent(reconstructed)
+      setTags(detail.tags ?? [])
+      originalRef.current = { title: detail.title, content: reconstructed, tags: detail.tags ?? [] }
+      setLoaded(true)
+      if (detail.source_type !== 'manual') {
+        setError('Only manual articles can be edited.')
+      }
+    }
+  }, [isEdit, detail])
+
+  const isDirty = isEdit
+    ? title !== originalRef.current.title || content !== originalRef.current.content || JSON.stringify(tags) !== JSON.stringify(originalRef.current.tags)
+    : title.length > 0 || (content !== CONTENT_TEMPLATE && content.length > 0) || tags.length > 0
 
   const { data: existingTags } = useQuery({
     queryKey: ['tags'],
@@ -74,26 +116,39 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
       .filter(t => !tags.includes(t))
   }, [existingTags, tags])
 
-  // Auto-focus title on mount
+  // Auto-focus title on mount (after loaded)
   useEffect(() => {
-    titleRef.current?.focus()
-  }, [])
+    if (loaded) titleRef.current?.focus()
+  }, [loaded])
 
-  const mutation = useMutation({
-    mutationFn: () => managementApi.createArticle(title.trim(), content.trim(), tags),
+  const mutation = useMutation<CreateArticleResponse | UpdateArticleResponse, Error>({
+    mutationFn: () =>
+      isEdit
+        ? managementApi.updateArticle(articleId!, title.trim(), content.trim(), tags)
+        : managementApi.createArticle(title.trim(), content.trim(), tags),
     onSuccess: (data) => {
-      showToast(`Article created — ${data.chunks_ingested} chunks ingested`, 'success')
+      if (isEdit) {
+        const chunks = 'chunks_created' in data ? data.chunks_created : 0
+        showToast(`Article updated — ${chunks} chunks re-indexed`, 'success')
+        queryClient.invalidateQueries({ queryKey: ['article', articleId] })
+      } else {
+        const chunks = 'chunks_ingested' in data ? data.chunks_ingested : 0
+        showToast(`Article created — ${chunks} chunks ingested`, 'success')
+      }
       queryClient.invalidateQueries({ queryKey: ['articles'] })
       queryClient.invalidateQueries({ queryKey: ['stats'] })
+      queryClient.invalidateQueries({ queryKey: ['tags'] })
       onBack()
     },
     onError: (err: Error) => {
       if (err instanceof ApiError && err.status === 409) {
         setError('An article with this title already exists.')
+      } else if (err instanceof ApiError && err.status === 403) {
+        setError('Only manual articles can be edited.')
       } else if (err instanceof ApiError && err.status === 503) {
         setError('Embedding service (Ollama) is unavailable. Is it running?')
       } else {
-        setError('Failed to create article. Please try again.')
+        setError(isEdit ? 'Failed to update article. Please try again.' : 'Failed to create article. Please try again.')
       }
     },
   })
@@ -123,7 +178,26 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
     return () => document.removeEventListener('keydown', handler)
   }, [handleSave])
 
-  const canSave = title.trim().length > 0 && content.trim().length > 0 && !mutation.isPending
+  const canSave = title.trim().length > 0 && content.trim().length > 0 && !mutation.isPending && loaded
+  const isNonManual = isEdit && detail && detail.source_type !== 'manual'
+
+  if (isEdit && detailLoading) {
+    return (
+      <div className="editor-container">
+        <div className="editor-header">
+          <button type="button" className="secondary-btn" onClick={onBack}>
+            <BackIcon /> Back
+          </button>
+          <h2 className="editor-title">Edit Article</h2>
+          <button type="button" className="primary-btn" disabled>Save Article</button>
+        </div>
+        <div className="editor-fields">
+          <div className="skeleton detail-skeleton-line" />
+          <div className="skeleton detail-skeleton-block" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="editor-container">
@@ -131,12 +205,12 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
         <button type="button" className="secondary-btn" onClick={handleCancel}>
           <BackIcon /> Back
         </button>
-        <h2 className="editor-title">Create New Article</h2>
+        <h2 className="editor-title">{isEdit ? 'Edit Article' : 'Create New Article'}</h2>
         <button
           type="button"
           className="primary-btn"
           onClick={handleSave}
-          disabled={!canSave}
+          disabled={!canSave || !!isNonManual}
         >
           {mutation.isPending ? 'Saving\u2026' : 'Save Article'}
         </button>
@@ -154,6 +228,7 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
             value={title}
             onChange={e => { setTitle(e.target.value); setError('') }}
             maxLength={200}
+            disabled={!!isNonManual}
           />
         </div>
 
@@ -267,6 +342,7 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
             value={content}
             onChange={e => setContent(e.target.value)}
             maxLength={100000}
+            disabled={!!isNonManual}
           />
           <p className="editor-hint">
             Use <code>##</code> headings to split into sections for better search results.

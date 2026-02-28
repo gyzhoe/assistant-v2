@@ -91,6 +91,14 @@ export interface TagListResponse {
   tags: string[]
 }
 
+/** Update article response */
+export interface UpdateArticleResponse {
+  article_id: string
+  title: string
+  chunks_created: number
+  processing_time_ms: number
+}
+
 /** Source type literals */
 export type SourceType = 'pdf' | 'html' | 'url' | 'json' | 'csv' | 'manual'
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **KB Article Editing**: edit title, content, and tags of manually created articles after saving
+  - `PUT /kb/articles/{article_id}` endpoint: re-chunks and re-embeds content while preserving original article ID and import timestamp
+  - Only `source_type: "manual"` articles can be edited (returns 403 for imported articles)
+  - Edit mode in KB Management page: "Edit Article" button in article detail view (manual articles only)
+  - `ArticleEditor` component supports both create and edit modes with content reconstruction from chunks
+  - Request size middleware updated to support sub-path exemptions for large article payloads
+  - CORS methods expanded to include PUT and PATCH
+  - 11 new backend tests, 4 new frontend tests
+
 ## [1.7.0] - 2026-02-28
 
 ### Changed

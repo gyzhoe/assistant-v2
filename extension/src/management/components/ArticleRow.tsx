@@ -6,6 +6,7 @@ interface ArticleRowProps {
   isExpanded: boolean
   onToggle: () => void
   onDelete: (articleId: string, title: string, chunkCount: number) => void
+  onEdit?: (articleId: string) => void
 }
 
 function formatRelativeDate(dateStr: string | null): string {
@@ -43,7 +44,7 @@ const ChevronIcon = ({ open }: { open: boolean }) => (
   </svg>
 )
 
-export function ArticleRow({ article, isExpanded, onToggle, onDelete }: ArticleRowProps): React.ReactElement {
+export function ArticleRow({ article, isExpanded, onToggle, onDelete, onEdit }: ArticleRowProps): React.ReactElement {
   return (
     <div className={`article-row-wrapper${isExpanded ? ' expanded' : ''}`}>
       <button
@@ -68,6 +69,7 @@ export function ArticleRow({ article, isExpanded, onToggle, onDelete }: ArticleR
           articleId={article.article_id}
           title={article.title}
           onDelete={onDelete}
+          onEdit={onEdit}
         />
       )}
     </div>

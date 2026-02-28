@@ -25,8 +25,12 @@ from app.models.kb import (
     TagListResponse,
     UpdateTagsResponse,
 )
-from app.models.request_models import CreateArticleRequest, UpdateTagsRequest
-from app.models.response_models import CreateArticleResponse
+from app.models.request_models import (
+    CreateArticleRequest,
+    UpdateArticleRequest,
+    UpdateTagsRequest,
+)
+from app.models.response_models import CreateArticleResponse, UpdateArticleResponse
 from app.routers.shared import upload_semaphore
 from app.services.embed_service import EmbedService
 from app.utils.chunker import chunk_by_markdown_headings
@@ -283,6 +287,118 @@ async def create_article(
             return JSONResponse(  # type: ignore[return-value]
                 status_code=500,
                 content={"detail": "Internal server error during article creation."},
+            )
+
+
+@router.put("/articles/{article_id}", response_model=UpdateArticleResponse)
+async def update_article(
+    request: Request, article_id: str, body: UpdateArticleRequest,
+) -> UpdateArticleResponse:
+    """Update title, content, and tags of a manual KB article."""
+    chroma_client = request.app.state.chroma_client
+
+    # 1. Verify article exists and is manual
+    try:
+        col = await asyncio.to_thread(
+            chroma_client.get_collection, KB_COLLECTION,
+        )
+    except (ValueError, Exception):
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={"detail": f"Article not found: {article_id}"},
+        )
+
+    result = await asyncio.to_thread(
+        col.get, where={"article_id": article_id}, include=["metadatas"],
+    )
+
+    ids: list[str] = result.get("ids", [])
+    metadatas: list[dict[str, Any]] = result.get("metadatas", [])
+
+    if not ids:
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=404,
+            content={"detail": f"Article not found: {article_id}"},
+        )
+
+    first_meta = metadatas[0]
+    if first_meta.get("source_type") != "manual":
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=403,
+            content={"detail": "Only manual articles can be edited."},
+        )
+
+    original_imported_at = first_meta.get("imported_at", "")
+
+    # Check semaphore (non-blocking)
+    if not upload_semaphore._value:  # noqa: SLF001
+        return JSONResponse(  # type: ignore[return-value]
+            status_code=409,
+            content={"detail": "Another ingestion is already in progress. Please wait."},
+        )
+
+    async with upload_semaphore:
+        try:
+            start = time.perf_counter()
+
+            # 2. Delete existing chunks
+            await asyncio.to_thread(col.delete, ids=ids)
+
+            # 3. Re-chunk new content
+            sections = chunk_by_markdown_headings(body.content)
+
+            if not sections:
+                return JSONResponse(  # type: ignore[return-value]
+                    status_code=422,
+                    content={"detail": "No content to ingest after processing."},
+                )
+
+            # 4. Build chunk stream preserving original article_id and imported_at
+            def chunk_stream() -> Iterator[tuple[str, str, dict[str, str]]]:
+                for idx, (section_title, chunk_text) in enumerate(sections):
+                    chunk_id = f"{article_id}_chunk_{idx}"
+                    metadata = {
+                        "article_id": article_id,
+                        "title": body.title,
+                        "section": section_title,
+                        "source_type": "manual",
+                        "imported_at": original_imported_at,
+                        "tags": ",".join(body.tags),
+                    }
+                    yield chunk_id, chunk_text, metadata
+
+            # 5. Embed and upsert
+            embed_service = EmbedService()
+            pipeline = IngestionPipeline(
+                chroma_client=chroma_client,
+                embed_fn=embed_service._embed_sync,  # noqa: SLF001
+            )
+
+            total = await asyncio.to_thread(
+                pipeline._upsert_stream, col, chunk_stream(),  # noqa: SLF001
+            )
+
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            invalidate_article_cache()
+
+            return UpdateArticleResponse(
+                article_id=article_id,
+                title=body.title,
+                chunks_created=total,
+                processing_time_ms=elapsed_ms,
+            )
+
+        except ConnectionError as exc:
+            logger.error("Ollama unavailable during article update: %s", exc)
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=503,
+                content={"detail": "Embedding service (Ollama) is unavailable."},
+            )
+        except Exception:
+            logger.exception("Unexpected error during article update")
+            return JSONResponse(  # type: ignore[return-value]
+                status_code=500,
+                content={"detail": "Internal server error during article update."},
             )
 
 

@@ -8,6 +8,7 @@ import type {
   IngestUrlResponse,
   ArticleListParams,
   CreateArticleResponse,
+  UpdateArticleResponse,
   UpdateTagsResponse,
   TagListResponse,
 } from './types'
@@ -107,6 +108,13 @@ export const managementApi = {
   createArticle(title: string, content: string, tags: string[] = []): Promise<CreateArticleResponse> {
     return fetchApi<CreateArticleResponse>('/kb/articles', {
       method: 'POST',
+      body: JSON.stringify({ title, content, tags }),
+    })
+  },
+
+  updateArticle(id: string, title: string, content: string, tags: string[]): Promise<UpdateArticleResponse> {
+    return fetchApi<UpdateArticleResponse>(`/kb/articles/${encodeURIComponent(id)}`, {
+      method: 'PUT',
       body: JSON.stringify({ title, content, tags }),
     })
   },

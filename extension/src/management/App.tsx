@@ -23,7 +23,8 @@ export function App(): React.ReactElement {
   const [needsAuth, setNeedsAuth] = useState(false)
   const [authKey, setAuthKey] = useState(0)
   const [importOpen, setImportOpen] = useState(false)
-  const [view, setView] = useState<'list' | 'create'>('list')
+  const [view, setView] = useState<'list' | 'create' | 'edit'>('list')
+  const [editArticleId, setEditArticleId] = useState<string | null>(null)
   const importNodeRef = useRef<HTMLDivElement | null>(null)
 
   const toggleTheme = useCallback(() => {
@@ -78,7 +79,11 @@ export function App(): React.ReactElement {
   }, [])
 
   const handleNewArticle = useCallback(() => setView('create'), [])
-  const handleBackToList = useCallback(() => setView('list'), [])
+  const handleBackToList = useCallback(() => { setView('list'); setEditArticleId(null) }, [])
+  const handleEditArticle = useCallback((id: string) => {
+    setEditArticleId(id)
+    setView('edit')
+  }, [])
 
   if (needsAuth) {
     return (
@@ -102,10 +107,14 @@ export function App(): React.ReactElement {
         <main className="mgmt-main">
           <ArticleEditor onBack={handleBackToList} />
         </main>
+      ) : view === 'edit' && editArticleId ? (
+        <main className="mgmt-main">
+          <ArticleEditor onBack={handleBackToList} mode="edit" articleId={editArticleId} />
+        </main>
       ) : (
         <main className="mgmt-main">
           <StatCards stats={stats} health={health} isLoading={statsLoading || healthLoading} />
-          <ArticleList onImportClick={handleImportClick} onAuthRequired={handleAuthRequired} />
+          <ArticleList onImportClick={handleImportClick} onAuthRequired={handleAuthRequired} onEditArticle={handleEditArticle} />
           <ImportSection
             isOpen={importOpen}
             onToggle={() => setImportOpen(prev => !prev)}

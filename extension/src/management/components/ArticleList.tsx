@@ -13,11 +13,12 @@ import { showToast } from './Toast'
 interface ArticleListProps {
   onImportClick: () => void
   onAuthRequired: () => void
+  onEditArticle?: (articleId: string) => void
 }
 
 const PAGE_SIZE = 20
 
-export function ArticleList({ onImportClick, onAuthRequired }: ArticleListProps): React.ReactElement {
+export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: ArticleListProps): React.ReactElement {
   const [search, setSearch] = useState('')
   const [sourceType, setSourceType] = useState<SourceType | ''>('')
   const [page, setPage] = useState(1)
@@ -151,6 +152,7 @@ export function ArticleList({ onImportClick, onAuthRequired }: ArticleListProps)
                   isExpanded={expandedId === article.article_id}
                   onToggle={() => setExpandedId(prev => prev === article.article_id ? null : article.article_id)}
                   onDelete={handleDelete}
+                  onEdit={onEditArticle}
                 />
               </div>
             ))}

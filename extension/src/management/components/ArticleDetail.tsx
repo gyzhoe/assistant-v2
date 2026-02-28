@@ -39,9 +39,10 @@ interface ArticleDetailProps {
   articleId: string
   title: string
   onDelete: (articleId: string, title: string, chunkCount: number) => void
+  onEdit?: (articleId: string) => void
 }
 
-export function ArticleDetail({ articleId, title, onDelete }: ArticleDetailProps): React.ReactElement {
+export function ArticleDetail({ articleId, title, onDelete, onEdit }: ArticleDetailProps): React.ReactElement {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [editingTags, setEditingTags] = useState(false)
   const [editTags, setEditTags] = useState<string[]>([])
@@ -192,6 +193,15 @@ export function ArticleDetail({ articleId, title, onDelete }: ArticleDetailProps
         </div>
       )}
       <div className="article-detail-actions">
+        {detail.source_type === 'manual' && onEdit && (
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={() => onEdit(articleId)}
+          >
+            Edit Article
+          </button>
+        )}
         <button
           type="button"
           className="primary-btn confirm-danger"

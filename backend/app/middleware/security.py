@@ -168,7 +168,10 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         self._exempt_paths = exempt_paths or set()
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if request.url.path in self._exempt_paths:
+        exempt = request.url.path in self._exempt_paths or any(
+            request.url.path.startswith(p + "/") for p in self._exempt_paths
+        )
+        if exempt:
             return await call_next(request)
         content_length = request.headers.get("content-length")
         if content_length:
