@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tag picker UI in ArticleEditor: pill display, Enter/comma to add, paste support, datalist autocomplete from existing tags
   - Inline tag editing in ArticleDetail: view/edit mode toggle with Save/Cancel and error toast
   - 12 new backend tests (tag CRUD, validation, filtered RAG), 2 new frontend tests
+- **Auto-Generate API Token**: installer generates a secure API token during setup and the extension auto-detects it — zero manual configuration
+  - `post-install.ps1` generates 32-byte hex token and writes to `backend/.env` from `.env.example` template
+  - `get_token` native messaging action reads token from `.env` for the extension
+  - `chrome.runtime.onInstalled` auto-provisions token on first install via native messaging
+  - "Auto-detect" button in Options page for manual token re-sync
+  - Upgrade-safe: existing `.env` is never overwritten
+- **Article Editor UX improvements**: content template, tag picker, and cross-navigation
+  - Pre-filled Markdown template (Problem / Solution / Additional Notes) for new articles
+  - Collapsible "Browse request types" picker with all 17 WHD request types as clickable chips
+  - Cross-links: Options page links to KB Management, KB Management gear icon shows extension settings hint
+  - `options-btn-secondary` CSS class for secondary action buttons
 - **Create Article from Scratch**: full-page Markdown editor in KB Management page for authoring knowledge articles directly
   - `POST /kb/articles` endpoint: generates article ID, chunks by `##`/`###` headings, embeds via Ollama, stores in ChromaDB as `source_type: "manual"`
   - `chunk_by_markdown_headings()` utility: splits Markdown by headings, auto-creates "Introduction" section for pre-heading content, sub-splits oversized sections

@@ -133,6 +133,7 @@ interface NativeResponse {
   ok: boolean
   status?: string
   error?: string
+  token?: string
 }
 
 /** Send a command to the native messaging host to start a service. */

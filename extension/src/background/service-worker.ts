@@ -1,4 +1,5 @@
 import type { ExtensionMessage } from '../shared/messages'
+import { STORAGE_KEY_SECRETS, debugLog } from '../shared/constants'
 
 // Open side panel when toolbar button is clicked
 chrome.action.onClicked.addListener((tab) => {
@@ -66,3 +67,28 @@ chrome.runtime.onMessage.addListener(
     return false
   }
 )
+
+/**
+ * Auto-provision API token on first install.
+ * Reads the token from the backend .env via native messaging
+ * and stores it in chrome.storage.local so the extension is
+ * authenticated from the start — zero user configuration.
+ */
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== 'install') return
+
+  const NATIVE_HOST = 'com.assistant.backend_manager'
+  chrome.runtime.sendNativeMessage(NATIVE_HOST, { action: 'get_token' }, (response) => {
+    if (chrome.runtime.lastError) {
+      debugLog('Auto-token: native host unavailable:', chrome.runtime.lastError.message)
+      return
+    }
+    if (response?.ok && response.token) {
+      chrome.storage.local.set({ [STORAGE_KEY_SECRETS]: { apiToken: response.token } }, () => {
+        debugLog('Auto-token: API token provisioned from backend .env')
+      })
+    } else {
+      debugLog('Auto-token: no token available:', response?.error ?? 'unknown')
+    }
+  })
+})

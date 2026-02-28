@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { storage, DEFAULT_SETTINGS } from '../lib/storage'
-import { apiClient } from '../lib/api-client'
+import { apiClient, sendNativeCommand } from '../lib/api-client'
 import type { AppSettings, SelectorConfig } from '../shared/types'
 import { STORAGE_KEY_SECRETS, DEFAULT_SELECTORS } from '../shared/constants'
 
@@ -20,6 +20,8 @@ export default function OptionsPage(): React.ReactElement {
   const [saveMsg, setSaveMsg] = useState('')
   const [models, setModels] = useState<string[]>([])
   const [selectorsExpanded, setSelectorsExpanded] = useState(false)
+  const [autoDetectMsg, setAutoDetectMsg] = useState('')
+  const [isDetecting, setIsDetecting] = useState(false)
 
   useEffect(() => {
     storage.getSettings().then(setSettings)
@@ -66,6 +68,25 @@ export default function OptionsPage(): React.ReactElement {
     } finally {
       setIsSaving(false)
       setTimeout(() => setSaveMsg(''), 3000)
+    }
+  }
+
+  const handleAutoDetect = async () => {
+    setIsDetecting(true)
+    setAutoDetectMsg('')
+    try {
+      const response = await sendNativeCommand('get_token')
+      if (response.ok && response.token) {
+        setApiToken(response.token)
+        setAutoDetectMsg('Token detected! Click Save to apply.')
+      } else {
+        setAutoDetectMsg('Could not detect token. Enter manually.')
+      }
+    } catch {
+      setAutoDetectMsg('Could not detect token. Enter manually.')
+    } finally {
+      setIsDetecting(false)
+      setTimeout(() => setAutoDetectMsg(''), 5000)
     }
   }
 
@@ -154,16 +175,30 @@ export default function OptionsPage(): React.ReactElement {
           <label htmlFor="apiToken" className="options-label">
             API Token
           </label>
-          <input
-            id="apiToken"
-            type="password"
-            value={apiToken}
-            onChange={(e) => setApiToken(e.target.value)}
-            className="options-input font-mono"
-            placeholder="Paste the API_TOKEN from the backend .env file"
-            autoComplete="off"
-            spellCheck={false}
-          />
+          <div className="flex gap-2">
+            <input
+              id="apiToken"
+              type="password"
+              value={apiToken}
+              onChange={(e) => setApiToken(e.target.value)}
+              className="options-input font-mono flex-1"
+              placeholder="Paste the API_TOKEN from the backend .env file"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              onClick={handleAutoDetect}
+              disabled={isDetecting}
+              className="options-btn-secondary whitespace-nowrap"
+              aria-label="Auto-detect API token from backend"
+            >
+              {isDetecting ? 'Detecting\u2026' : 'Auto-detect'}
+            </button>
+          </div>
+          {autoDetectMsg && (
+            <p className="options-hint font-medium" role="status" aria-live="polite">{autoDetectMsg}</p>
+          )}
           <p className="options-hint">
             Shared secret configured in the backend <code>API_TOKEN</code> environment variable.
             Stored only on this device — never synced to other browsers.
@@ -222,6 +257,19 @@ export default function OptionsPage(): React.ReactElement {
           {saveMsg && (
             <p className="options-save-msg" role="status" aria-live="polite">{saveMsg}</p>
           )}
+        </div>
+
+        {/* Quick Links */}
+        <div className="flex flex-col gap-1.5">
+          <p className="options-label">Quick Links</p>
+          <a
+            href={`${settings.backendUrl || 'http://localhost:8765'}/manage/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="options-link"
+          >
+            Knowledge Base Management &rarr;
+          </a>
         </div>
       </div>
     </div>

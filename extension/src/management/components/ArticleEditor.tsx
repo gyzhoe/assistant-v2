@@ -3,19 +3,55 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
 import { showToast } from './Toast'
 
+const CONTENT_TEMPLATE = `## Problem
+Describe the issue or question this article addresses.
+
+## Solution
+Step-by-step instructions to resolve the problem.
+
+1. First step
+2. Second step
+3. Third step
+
+## Additional Notes
+Any extra context, caveats, or related links.
+`
+
+/** WHD request types shown as default tag suggestions. */
+const DEFAULT_TAG_SUGGESTIONS = [
+  'ACCOUNT (u-,r-,b-number,...)',
+  'ADMINISTRATIVE RIGHTS',
+  'CERTIFICATE ISSUE',
+  'COLLABORATION/COMMUNICATION',
+  'COMPUTER and ACCESSORIES',
+  'IVANTI VPN',
+  'LINUX',
+  'MAILBOX (Outlook, Adm. Email...)',
+  'Multi Factor Authentication (MFA)',
+  'NETWORK (Wired / Wireless)',
+  'PERIPHERALS (keyboard, mouse, headset,...)',
+  'PHONE ISSUE (General)',
+  'PRINTER',
+  'REMOTE ACCESS',
+  'SOFTWARE',
+  'SOFTWARE BLOCKED by AppLocker',
+  'WEBSITE & WEB APPS',
+]
+
 interface ArticleEditorProps {
   onBack: () => void
 }
 
 export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElement {
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
+  const [content, setContent] = useState(CONTENT_TEMPLATE)
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
-  const isDirty = title.length > 0 || content.length > 0 || tags.length > 0
+  const isDirty = title.length > 0 || (content !== CONTENT_TEMPLATE && content.length > 0) || tags.length > 0
 
   const { data: existingTags } = useQuery({
     queryKey: ['tags'],
@@ -154,21 +190,50 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
                   }
                 }}
                 disabled={tags.length >= 20}
-                list="tag-suggestions"
                 maxLength={100}
               />
-              {existingTags && existingTags.tags.length > 0 && (
-                <datalist id="tag-suggestions">
-                  {existingTags.tags
-                    .filter(t => !tags.includes(t) && t.toLowerCase().includes(tagInput.toLowerCase()))
-                    .map(t => <option key={t} value={t} />)}
-                </datalist>
-              )}
             </div>
           </div>
-          <p className="editor-hint">
-            WHD request types like NETWORK CONNECTION, MAILBOX, etc. Press Enter or comma to add.
-          </p>
+          <div className="tag-browse-row">
+            <button
+              type="button"
+              className="tag-browse-toggle"
+              onClick={() => setShowTagSuggestions(v => !v)}
+              aria-expanded={showTagSuggestions}
+            >
+              {showTagSuggestions ? '\u25BE' : '\u25B8'} Browse request types
+            </button>
+            <span className="editor-hint">or type custom tags above</span>
+          </div>
+          {showTagSuggestions && (() => {
+            const apiTags = existingTags?.tags ?? []
+            const allSuggestions = [...new Set([...DEFAULT_TAG_SUGGESTIONS, ...apiTags])]
+            return (
+              <div className="tag-suggestions-list">
+                {allSuggestions.map(t => {
+                  const selected = tags.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className={`tag-suggestion-chip ${selected ? 'tag-suggestion-selected' : ''}`}
+                      onClick={() => {
+                        if (selected) {
+                          setTags(prev => prev.filter(x => x !== t))
+                        } else if (tags.length < 20) {
+                          setTags(prev => [...prev, t])
+                        }
+                      }}
+                      disabled={!selected && tags.length >= 20}
+                      aria-pressed={selected}
+                    >
+                      {selected ? '\u2713 ' : '+ '}{t}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
 
         <div className="editor-field">
