@@ -69,6 +69,7 @@ class APITokenMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 INGEST_RATE_LIMIT = 5  # max /ingest/upload requests per client IP per minute
+FEEDBACK_RATE_LIMIT = 10  # max /feedback requests per client IP per minute
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -82,7 +83,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     distinct source IPs over time.
     """
 
-    RATE_LIMITED_PATHS = {"/generate", "/ingest/upload", "/ingest/url"}
+    RATE_LIMITED_PATHS = {"/generate", "/ingest/upload", "/ingest/url", "/feedback"}
 
     def __init__(self, app: ASGIApp, max_per_minute: int = 20) -> None:
         super().__init__(app)
@@ -96,6 +97,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/generate": max_per_minute,
             "/ingest/upload": INGEST_RATE_LIMIT,
             "/ingest/url": INGEST_RATE_LIMIT,
+            "/feedback": FEEDBACK_RATE_LIMIT,
         }
 
     def _evict_stale_entries(self, now: float) -> None:

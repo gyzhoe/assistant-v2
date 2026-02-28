@@ -14,6 +14,7 @@ export function useGenerateReply() {
   const setIsInserted = useSidebarStore((s) => s.setIsInserted)
   const setAbortController = useSidebarStore((s) => s.setAbortController)
   const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
+  const setReplyRating = useSidebarStore((s) => s.setReplyRating)
   const { settings } = useSettings()
 
   const generate = useCallback(async () => {
@@ -26,6 +27,7 @@ export function useGenerateReply() {
     setReply('')
     setIsInserted(false)
     setIsEditingReply(false)
+    setReplyRating(null)
 
     try {
       const response = await apiClient.generate({
@@ -64,7 +66,7 @@ export function useGenerateReply() {
       setIsGenerating(false)
       setAbortController(null)
     }
-  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply])
+  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply, setReplyRating])
 
   return { generate }
 }

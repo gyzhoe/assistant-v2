@@ -1,4 +1,4 @@
-import type { GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
+import type { FeedbackRequest, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
 
 async function getBackendUrl(): Promise<string> {
@@ -104,6 +104,19 @@ export const apiClient = {
     const resp = await fetch(`${base}/ingest/collections/${name}/clear`, {
       method: 'POST',
       headers,
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+  },
+
+  async submitFeedback(data: FeedbackRequest): Promise<void> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/feedback`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
     })
     if (!resp.ok) {
       const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))

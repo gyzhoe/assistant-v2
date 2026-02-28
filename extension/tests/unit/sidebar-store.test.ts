@@ -11,7 +11,7 @@ describe('sidebarStore', () => {
       isGenerating: false,
       generateError: null,
       lastResponse: null,
-      selectedModel: 'llama3.2:3b',
+      selectedModel: 'qwen2.5:14b',
       isInserted: false,
     })
   })
@@ -24,7 +24,7 @@ describe('sidebarStore', () => {
     expect(state.isGenerating).toBe(false)
     expect(state.generateError).toBeNull()
     expect(state.lastResponse).toBeNull()
-    expect(state.selectedModel).toBe('llama3.2:3b')
+    expect(state.selectedModel).toBe('qwen2.5:14b')
     expect(state.isInserted).toBe(false)
   })
 
@@ -65,6 +65,22 @@ describe('sidebarStore', () => {
   it('sets generateError', () => {
     useSidebarStore.getState().setGenerateError('Ollama down')
     expect(useSidebarStore.getState().generateError).toBe('Ollama down')
+  })
+
+  it('setReplyRating sets rating', () => {
+    useSidebarStore.getState().setReplyRating('good')
+    expect(useSidebarStore.getState().replyRating).toBe('good')
+  })
+
+  it('setReplyRating sets bad rating', () => {
+    useSidebarStore.getState().setReplyRating('bad')
+    expect(useSidebarStore.getState().replyRating).toBe('bad')
+  })
+
+  it('reset clears replyRating', () => {
+    useSidebarStore.getState().setReplyRating('good')
+    useSidebarStore.getState().reset()
+    expect(useSidebarStore.getState().replyRating).toBeNull()
   })
 
   it('reset clears transient state but preserves ticket and model', () => {

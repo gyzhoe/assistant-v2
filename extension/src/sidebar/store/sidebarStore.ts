@@ -13,6 +13,7 @@ interface SidebarState {
   isInserted: boolean
   abortController: AbortController | null
   isEditingReply: boolean
+  replyRating: 'good' | 'bad' | null
   pinnedArticles: KBArticlePin[]
 
   setTicketData: (data: TicketData | null) => void
@@ -25,6 +26,7 @@ interface SidebarState {
   setIsInserted: (val: boolean) => void
   setAbortController: (ctrl: AbortController | null) => void
   setIsEditingReply: (val: boolean) => void
+  setReplyRating: (rating: 'good' | 'bad' | null) => void
   pinArticle: (article: KBArticlePin) => void
   unpinArticle: (articleId: string) => void
   cancelGeneration: () => void
@@ -42,6 +44,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   isInserted: false,
   abortController: null,
   isEditingReply: false,
+  replyRating: null,
   pinnedArticles: [],
 
   setTicketData: (data) => set({ ticketData: data }),
@@ -54,6 +57,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   setIsInserted: (val) => set({ isInserted: val }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setIsEditingReply: (val) => set({ isEditingReply: val }),
+  setReplyRating: (rating) => set({ replyRating: rating }),
   pinArticle: (article) => {
     const { pinnedArticles } = get()
     if (pinnedArticles.length >= 10) return
@@ -80,6 +84,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
       isInserted: false,
       abortController: null,
       isEditingReply: false,
+      replyRating: null,
       pinnedArticles: [],
     })
   },

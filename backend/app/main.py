@@ -17,7 +17,7 @@ from app.middleware.security import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
-from app.routers import generate, health, ingest, kb, models
+from app.routers import feedback, generate, health, ingest, kb, models
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(models.router)
     app.include_router(ingest.router)
     app.include_router(kb.router)
+    app.include_router(feedback.router)
 
     # Static file serving for KB management SPA — must come AFTER API routes
     # so /kb/* API endpoints take priority over static file catch-all.

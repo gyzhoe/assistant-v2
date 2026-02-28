@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Collapsible Ticket Context**: the Ticket Context section in the sidebar is now collapsible (starts expanded) with a chevron toggle, matching the pattern used by Status and Knowledge Base panels
 
+- **Reply Ratings and Dynamic Few-Shot Examples**:
+  - Reply rating buttons (thumbs up/down) in sidebar draft panel
+  - `POST /feedback` endpoint stores rated replies in ChromaDB `rated_replies` collection
+  - Good-rated replies used as dynamic few-shot examples in the generate prompt, replacing hardcoded examples
+  - Falls back to hardcoded examples when no rated examples available (cold start)
+  - Rating UI disables after one vote per generation (prevents double-rating, resets on next generation)
+
 - **Consistency review — Backend (PR #76)**:
   - Exposed `embed_fn` public property on `EmbedService` and `upsert_stream` public method on `IngestionPipeline`
   - Replaced all hardcoded `"kb_articles"` string literals with the `KB_COLLECTION` constant

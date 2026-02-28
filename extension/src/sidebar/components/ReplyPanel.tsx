@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useTicketData } from '../hooks/useTicketData'
 import { useGenerateReply } from '../hooks/useGenerateReply'
+import { useSubmitFeedback } from '../hooks/useSubmitFeedback'
 import { TicketContext } from './TicketContext'
 import { KBContextPicker } from './KBContextPicker'
 import { ModelSelector } from './ModelSelector'
@@ -12,6 +13,7 @@ import { ErrorState } from './ErrorState'
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
   const { generate } = useGenerateReply()
+  const { submitRating } = useSubmitFeedback()
   const [contextCollapsed, setContextCollapsed] = useState(false)
 
   const pinnedCount = useSidebarStore((s) => s.pinnedArticles.length)
@@ -25,6 +27,7 @@ export function ReplyPanel(): React.ReactElement {
   const isEditingReply = useSidebarStore((s) => s.isEditingReply)
   const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
   const setReply = useSidebarStore((s) => s.setReply)
+  const replyRating = useSidebarStore((s) => s.replyRating)
 
   return (
     <>
@@ -101,14 +104,36 @@ export function ReplyPanel(): React.ReactElement {
           <div className="draft-panel">
             <div className="draft-header">
               <span className="draft-label">Draft Reply</span>
-              <button
-                type="button"
-                className="secondary-btn draft-toggle"
-                onClick={() => setIsEditingReply(!isEditingReply)}
-                aria-label={isEditingReply ? 'Preview reply' : 'Edit reply'}
-              >
-                {isEditingReply ? 'Preview' : 'Edit'}
-              </button>
+              <div className="draft-actions">
+                <div className="rating-group" role="group" aria-label="Rate this reply">
+                  <button
+                    type="button"
+                    className={`rating-btn${replyRating === 'good' ? ' selected' : ''}${replyRating === 'bad' ? ' dimmed' : ''}`}
+                    onClick={() => submitRating('good')}
+                    disabled={replyRating !== null}
+                    aria-label="Rate as helpful"
+                  >
+                    &#x1F44D;
+                  </button>
+                  <button
+                    type="button"
+                    className={`rating-btn${replyRating === 'bad' ? ' selected' : ''}${replyRating === 'good' ? ' dimmed' : ''}`}
+                    onClick={() => submitRating('bad')}
+                    disabled={replyRating !== null}
+                    aria-label="Rate as unhelpful"
+                  >
+                    &#x1F44E;
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-btn draft-toggle"
+                  onClick={() => setIsEditingReply(!isEditingReply)}
+                  aria-label={isEditingReply ? 'Preview reply' : 'Edit reply'}
+                >
+                  {isEditingReply ? 'Preview' : 'Edit'}
+                </button>
+              </div>
             </div>
             {isEditingReply ? (
               <textarea

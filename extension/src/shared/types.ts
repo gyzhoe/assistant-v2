@@ -93,6 +93,15 @@ export interface IngestUploadResponse {
   warning: string | null
 }
 
+/** Feedback (reply rating) request */
+export interface FeedbackRequest {
+  ticket_subject: string
+  ticket_description: string
+  category: string
+  reply: string
+  rating: 'good' | 'bad'
+}
+
 /** Ingest URL response */
 export interface IngestUrlResponse {
   url: string

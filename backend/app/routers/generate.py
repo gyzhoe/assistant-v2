@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Request
 from app.config import settings
 from app.models.request_models import GenerateRequest
 from app.models.response_models import ContextDoc, GenerateResponse
+from app.routers.feedback import RATED_REPLIES_COLLECTION
+from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 from app.services.microsoft_docs import MicrosoftDocsService
 from app.services.rag_service import RAGService
@@ -84,7 +86,12 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         else:
             context_text = web_context
 
-    prompt = _build_prompt(body, context_text)
+    # Retrieve dynamic few-shot examples from rated replies
+    few_shot_examples = await _get_dynamic_examples(
+        chroma_client, query, body.category,
+    )
+
+    prompt = _build_prompt(body, context_text, few_shot_examples)
     if body.prompt_suffix.strip():
         prompt += f"\n\nAdditional instructions: {body.prompt_suffix.strip()}"
 
@@ -111,6 +118,99 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         model_used=body.model,
         context_docs=context_docs,
         latency_ms=latency_ms,
+    )
+
+
+_MIN_FEWSHOT_SIMILARITY = 0.65
+
+
+async def _get_dynamic_examples(
+    chroma_client: ClientAPI,
+    query: str,
+    category: str,
+) -> list[dict[str, str]]:
+    """Retrieve good-rated replies from ChromaDB for dynamic few-shot prompting.
+
+    Returns a list of dicts with 'ticket_subject' and 'reply' keys (max 2).
+    Falls back to empty list on any error (collection missing, empty, etc.).
+    """
+    try:
+        embed_svc = EmbedService()
+        col = await asyncio.to_thread(
+            chroma_client.get_collection, RATED_REPLIES_COLLECTION,
+        )
+        count = await asyncio.to_thread(col.count)
+        if count == 0:
+            return []
+
+        embedding = await embed_svc.embed(query)
+        n_results = min(2, count)
+
+        results = await asyncio.to_thread(
+            _query_rated_sync, col, embedding, n_results, category,
+        )
+
+        examples: list[dict[str, str]] = []
+        documents: list[str] = results.get("documents", [[]])[0]
+        for i, (meta, distance) in enumerate(zip(
+            results["metadatas"][0],
+            results["distances"][0],
+        )):
+            score = max(0.0, 1.0 - float(distance))
+            if score >= _MIN_FEWSHOT_SIMILARITY:
+                # Prefer explicit metadata; fall back to document text for older entries
+                subject = str(meta.get("ticket_subject", ""))
+                if not subject:
+                    doc_text = documents[i] if i < len(documents) else ""
+                    subject = doc_text.split("\n", 1)[0] if doc_text else ""
+                reply = str(meta.get("reply", ""))
+                if reply:
+                    examples.append({
+                        "ticket_subject": subject,
+                        "reply": reply,
+                    })
+
+        logger.info("Dynamic few-shot: %d examples found", len(examples))
+        return examples
+
+    except Exception:
+        logger.debug("Dynamic few-shot retrieval failed — using hardcoded", exc_info=True)
+        return []
+
+
+def _query_rated_sync(
+    col: Any,
+    embedding: list[float],
+    n_results: int,
+    category: str,
+) -> dict[str, list[list[Any]]]:
+    """Synchronous helper for querying rated_replies (runs in to_thread).
+
+    Uses ``Any`` for col and return because ChromaDB's typed stubs
+    (Collection.query, QueryResult) are too restrictive for the dynamic
+    where-filter and include patterns used here.
+    """
+    include = ["documents", "metadatas", "distances"]
+    if category:
+        results: dict[str, list[list[Any]]] = col.query(
+            query_embeddings=[embedding],
+            n_results=n_results,
+            include=include,
+            where={
+                "$and": [
+                    {"rating": {"$eq": "good"}},
+                    {"category": {"$eq": category}},
+                ],
+            },
+        )
+        if results["metadatas"][0]:
+            return results
+
+    return col.query(  # type: ignore[no-any-return]
+        query_embeddings=[embedding],
+        n_results=n_results,
+        include=include,
+        where={"rating": {"$eq": "good"}},
     )
 
 
@@ -181,10 +281,61 @@ async def _fetch_pinned_articles(
     return pinned
 
 
-def _build_prompt(body: GenerateRequest, context_text: str) -> str:
+_HARDCODED_EXAMPLES = """EXAMPLES
+
+Example 1 (KB match available):
+Ticket: "VPN disconnects every 10 minutes"
+KB: [HIGH relevance] "VPN timeout is caused by stale credentials. Fix: open Credential Manager > Windows Credentials > remove VPN entries > reconnect."
+Reply:
+Hi Alex,
+
+1. Press Windows+R, type "control keymgr.dll", press Enter.
+2. Under Windows Credentials, delete any entries related to VPN.
+3. Reconnect to VPN.
+
+If it still disconnects after clearing credentials, let us know and we'll check your VPN profile server-side.
+
+— IT Support
+
+Example 2 (no KB match):
+Ticket: "Outlook keeps crashing on startup"
+KB: (no matching articles found)
+Reply:
+Hi Sarah,
+
+1. Open Outlook in safe mode: press Windows+R, type "outlook /safe", press Enter.
+2. If it opens, go to File > Options > Add-ins > Manage COM Add-ins > uncheck all > restart Outlook normally.
+3. If safe mode also crashes, open Control Panel > Mail > Show Profiles > create a new profile.
+
+If none of these work, we'll take a closer look at your machine remotely.
+
+— IT Support"""
+
+
+def _build_examples_section(examples: list[dict[str, str]] | None) -> str:
+    """Build the EXAMPLES section using rated replies or hardcoded fallbacks."""
+    if not examples:
+        return _HARDCODED_EXAMPLES
+
+    parts = ["EXAMPLES"]
+    for i, ex in enumerate(examples, 1):
+        parts.append(
+            f"\nExample {i} (real validated reply for similar ticket):\n"
+            f"TICKET: {ex['ticket_subject']}\n"
+            f"REPLY: {ex['reply']}"
+        )
+    return "\n".join(parts)
+
+
+def _build_prompt(
+    body: GenerateRequest,
+    context_text: str,
+    few_shot_examples: list[dict[str, str]] | None = None,
+) -> str:
     subject = body.ticket_subject or "(not available)"
     description = body.ticket_description or "(not available)"
     custom = "\n".join(f"  {k}: {v}" for k, v in body.custom_fields.items()) if body.custom_fields else "(none)"
+    examples_section = _build_examples_section(few_shot_examples)
     return f"""You are a first-line IT helpdesk technician drafting a reply to a user's ticket.
 
 TICKET
@@ -217,34 +368,6 @@ FORMAT RULES
 4. Write for non-technical end users — include exact click paths (e.g., "Open Settings > Network > ...") instead of jargon.
 5. Keep it 60-120 words. Greeting by first name, steps, sign-off with just your name.
 
-EXAMPLES
-
-Example 1 (KB match available):
-Ticket: "VPN disconnects every 10 minutes"
-KB: [HIGH relevance] "VPN timeout is caused by stale credentials. Fix: open Credential Manager > Windows Credentials > remove VPN entries > reconnect."
-Reply:
-Hi Alex,
-
-1. Press Windows+R, type "control keymgr.dll", press Enter.
-2. Under Windows Credentials, delete any entries related to VPN.
-3. Reconnect to VPN.
-
-If it still disconnects after clearing credentials, let us know and we'll check your VPN profile server-side.
-
-— IT Support
-
-Example 2 (no KB match):
-Ticket: "Outlook keeps crashing on startup"
-KB: (no matching articles found)
-Reply:
-Hi Sarah,
-
-1. Open Outlook in safe mode: press Windows+R, type "outlook /safe", press Enter.
-2. If it opens, go to File > Options > Add-ins > Manage COM Add-ins > uncheck all > restart Outlook normally.
-3. If safe mode also crashes, open Control Panel > Mail > Show Profiles > create a new profile.
-
-If none of these work, we'll take a closer look at your machine remotely.
-
-— IT Support
+{examples_section}
 
 REPLY:"""

@@ -725,6 +725,20 @@ body {
   border-color: var(--error-text);
 }
 
+.manage-confirm-btn.success {
+  color: var(--ok-text);
+}
+
+.manage-confirm-btn.success:hover {
+  background: var(--ok);
+  border-color: var(--ok-text);
+}
+
+.manage-confirm-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
 /* ─── KB Context Picker ───────────────────────────── */
 .kb-picker {
   display: flex;
@@ -873,7 +887,6 @@ body {
   box-shadow: 0 0 0 2px var(--accent);
   border-radius: 2px;
 }
-
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
@@ -912,6 +925,55 @@ body {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.draft-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rating-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rating-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  line-height: 1;
+  transition: opacity 120ms ease, border-color 120ms ease;
+}
+
+.rating-btn:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.rating-btn:disabled {
+  cursor: default;
+}
+
+.rating-btn.selected {
+  border-color: var(--accent);
+}
+
+.rating-btn.dimmed {
+  opacity: 0.3;
+}
+
+.rating-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .draft-toggle {
@@ -1144,40 +1206,6 @@ body {
   gap: 4px;
   padding: 12px 8px;
   text-align: center;
-}
-
-.manage-confirm-btn {
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: transparent;
-  transition: background 120ms ease, opacity 120ms ease;
-}
-
-.manage-confirm-btn.danger {
-  color: var(--error-text);
-}
-
-.manage-confirm-btn.danger:hover {
-  background: var(--error);
-  border-color: var(--error-text);
-}
-
-.manage-confirm-btn.success {
-  color: var(--ok-text);
-}
-
-.manage-confirm-btn.success:hover {
-  background: var(--ok);
-  border-color: var(--ok-text);
-}
-
-.manage-confirm-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* URL import */

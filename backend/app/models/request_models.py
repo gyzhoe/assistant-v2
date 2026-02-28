@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 # Enterprise input limits — prevents oversized payloads reaching Ollama
@@ -99,3 +101,11 @@ class UpdateTagsRequest(BaseModel):
     @classmethod
     def validate_tags(cls, v: list[str]) -> list[str]:
         return _validate_tag_list(v)
+
+
+class FeedbackRequest(BaseModel):
+    ticket_subject: str = Field(..., max_length=500)
+    ticket_description: str = Field(..., max_length=16000)
+    category: str = Field("", max_length=200)
+    reply: str = Field(..., max_length=4000)
+    rating: Literal["good", "bad"]
