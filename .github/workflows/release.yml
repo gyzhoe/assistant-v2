@@ -95,37 +95,22 @@ jobs:
       - name: Download NSSM
         shell: pwsh
         run: |
-          # NSSM 2.24 (stable) — pinned 2026-02-26
-          # SHA256 computed from: https://nssm.cc/release/nssm-2.24.zip
-          $nssmVersion = "2.24"
-          $nssmUrl = "https://nssm.cc/release/nssm-${nssmVersion}.zip"
-          $nssmSha256 = "09ddbc5abc1fb5abfd2be27a60462b6c8240f1f921eb70d1199982ddca9c736b"
+          # NSSM 2.24 (win64) — self-hosted on our "tools" GitHub release
+          # to avoid nssm.cc downtime (site returns 503 intermittently).
+          # SHA256 of the win64 nssm.exe binary:
+          $nssmUrl = "https://github.com/${{ github.repository }}/releases/download/tools/nssm.exe"
+          $nssmSha256 = "f689ee9af94b00e9e3f0bb072b34caaf207f32dcb4f5782fc9ca351df9a06c97"
 
           New-Item -ItemType Directory -Force -Path installer/nssm | Out-Null
-          Write-Host "Downloading NSSM ${nssmVersion}..."
-          Invoke-WebRequest -Uri $nssmUrl -OutFile "installer/nssm/nssm.zip"
+          Write-Host "Downloading NSSM from GitHub release..."
+          Invoke-WebRequest -Uri $nssmUrl -OutFile "installer/nssm/nssm.exe"
 
-          $actual = (Get-FileHash -Path "installer/nssm/nssm.zip" -Algorithm SHA256).Hash.ToLower()
+          $actual = (Get-FileHash -Path "installer/nssm/nssm.exe" -Algorithm SHA256).Hash.ToLower()
           if ($actual -ne $nssmSha256) {
             Write-Error "NSSM SHA256 mismatch! Expected: $nssmSha256 | Got: $actual"
             exit 1
           }
           Write-Host "NSSM SHA256 verified OK"
-
-          Expand-Archive -Path "installer/nssm/nssm.zip" -DestinationPath "installer/nssm/extract" -Force
-          # nssm.exe is under win64/ inside the zip
-          $nssmExe = Get-ChildItem -Path "installer/nssm/extract" -Recurse -Filter "nssm.exe" |
-            Where-Object { $_.DirectoryName -match "win64" } |
-            Select-Object -First 1
-          if (-not $nssmExe) {
-            # Fallback: take any nssm.exe found
-            $nssmExe = Get-ChildItem -Path "installer/nssm/extract" -Recurse -Filter "nssm.exe" |
-              Select-Object -First 1
-          }
-          if (-not $nssmExe) { throw "nssm.exe not found after extraction" }
-          Copy-Item $nssmExe.FullName "installer/nssm/nssm.exe"
-          Remove-Item "installer/nssm/nssm.zip", "installer/nssm/extract" -Recurse -Force
-          Write-Host "NSSM extracted to installer/nssm/nssm.exe"
 
       - name: Set version from tag
         shell: pwsh
