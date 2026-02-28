@@ -1,13 +1,21 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient, sendNativeCommand } from '../../lib/api-client'
+import { ThemeToggle } from './ThemeToggle'
+import type { AppSettings } from '../../shared/types'
 
 type BackendStatus = 'online' | 'offline' | 'checking' | 'stopping' | 'starting'
+
+interface BackendControlProps {
+  themeSetting: AppSettings['theme']
+  resolvedTheme: 'light' | 'dark'
+  onCycleTheme: () => void
+}
 
 const POLL_INTERVAL_MS = 5000
 const FAST_POLL_MS = 1500
 
-export function BackendControl(): React.ReactElement {
+export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: BackendControlProps): React.ReactElement {
   const [status, setStatus] = useState<BackendStatus>('checking')
   const [ollamaOk, setOllamaOk] = useState(false)
   const [ollamaAction, setOllamaAction] = useState<'idle' | 'starting' | 'stopping'>('idle')
@@ -151,18 +159,25 @@ export function BackendControl(): React.ReactElement {
 
   return (
     <section className="panel" aria-label="Status and services">
-      <button
-        className="section-heading-row collapsible-trigger"
-        onClick={() => setCollapsed((c) => !c)}
-        aria-expanded={!collapsed}
-        aria-controls="status-panel-body"
-      >
-        <h2 className="section-heading">Status</h2>
-        <div className="heading-right">
-          <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
-          <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
-        </div>
-      </button>
+      <div className="section-heading-row">
+        <ThemeToggle
+          theme={themeSetting}
+          resolvedTheme={resolvedTheme}
+          onCycle={onCycleTheme}
+        />
+        <button
+          className="collapsible-trigger"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          aria-controls="status-panel-body"
+        >
+          <h2 className="section-heading">Status</h2>
+          <div className="heading-right">
+            <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
+            <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
+          </div>
+        </button>
+      </div>
 
       {!collapsed && (
         <div id="status-panel-body" className="collapsible-body">

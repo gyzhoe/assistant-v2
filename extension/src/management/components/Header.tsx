@@ -60,7 +60,7 @@ export function Header({ theme, onToggleTheme, onImportClick, onNewArticle, show
         )}
         <button
           type="button"
-          className="primary-btn mgmt-import-btn"
+          className="secondary-btn mgmt-import-btn"
           onClick={onImportClick}
         >
           <PlusIcon />

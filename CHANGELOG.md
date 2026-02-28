@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **UI overhaul — "Precision Utility" design system**: complete visual refresh across all 3 web surfaces (sidebar, options page, KB management page), replacing generic aesthetics with a GitHub Primer-inspired palette and developer-tool aesthetic
+  - **Sidebar**: removed redundant app header (Edge panel title suffices), theme toggle relocated into Status panel, gradient brand mark replaced with clean text, status chips now use dot + text instead of colored pill backgrounds, tighter 4px-grid spacing, 120ms transitions throughout
+  - **Options page**: restructured into 4 named sections (Connection, Model & Prompt, Appearance, Advanced), uppercase section labels, custom select chevrons, collapsible DOM selectors with left accent border
+  - **KB management page**: stat cards replaced with compact horizontal stat bar, article rows thinned and cleaned up, muted source badges, subtle skeleton pulse (not shimmer), Import button demoted to secondary style, active page number uses subtle highlight instead of solid blue block
+  - **Shared**: new color tokens (light: #f6f8fa bg, #0969da accent; dark: #0d1117 bg, #4493f8 accent), `Segoe UI Variable` font stack, monospace for data values, consistent 6px border-radius, no heavy shadows
+
 ### Fixed
 
 - **Tag autocomplete**: inline tag editing in ArticleDetail now shows datalist autocomplete with all 27 WHD request types and existing tags from the database

@@ -91,14 +91,21 @@ export default function OptionsPage(): React.ReactElement {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="options-heading mb-6">
-        AI Helpdesk Assistant — Settings
-      </h1>
+    <div className="options-page">
+      {/* Page heading */}
+      <div>
+        <h1 className="options-heading">AI Helpdesk Assistant</h1>
+        <p className="options-heading-subtitle">Extension settings</p>
+      </div>
 
-      <div className="flex flex-col gap-6">
+      {/* ── Section: Connection ── */}
+      <div className="options-section">
+        <div className="options-section-header">
+          <span className="options-section-label">Connection</span>
+        </div>
+
         {/* Backend URL */}
-        <div className="flex flex-col gap-1.5">
+        <div className="options-field">
           <label htmlFor="backendUrl" className="options-label">
             Backend URL
           </label>
@@ -113,8 +120,51 @@ export default function OptionsPage(): React.ReactElement {
           <p className="options-hint">URL of the local FastAPI backend server.</p>
         </div>
 
+        {/* API Token */}
+        <div className="options-field">
+          <label htmlFor="apiToken" className="options-label">
+            API Token
+          </label>
+          <div className="options-input-row">
+            <input
+              id="apiToken"
+              type="password"
+              value={apiToken}
+              onChange={(e) => setApiToken(e.target.value)}
+              className="options-input font-mono"
+              placeholder="Paste the API_TOKEN from the backend .env file"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              onClick={handleAutoDetect}
+              disabled={isDetecting}
+              className="options-btn-secondary"
+              aria-label="Auto-detect API token from backend"
+            >
+              {isDetecting ? 'Detecting\u2026' : 'Auto-detect'}
+            </button>
+          </div>
+          {autoDetectMsg && (
+            <p className="options-hint font-medium" role="status" aria-live="polite">{autoDetectMsg}</p>
+          )}
+          <p className="options-hint">
+            Shared secret configured in the backend <code>API_TOKEN</code> environment variable.
+            Stored only on this device — never synced to other browsers.
+            Leave blank if token auth is disabled on the backend.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Section: Model & Prompt ── */}
+      <div className="options-section">
+        <div className="options-section-header">
+          <span className="options-section-label">Model &amp; Prompt</span>
+        </div>
+
         {/* Default model */}
-        <div className="flex flex-col gap-1.5">
+        <div className="options-field">
           <label htmlFor="defaultModel" className="options-label">
             Default Model
           </label>
@@ -135,7 +185,7 @@ export default function OptionsPage(): React.ReactElement {
         </div>
 
         {/* Prompt suffix */}
-        <div className="flex flex-col gap-1.5">
+        <div className="options-field">
           <label htmlFor="promptSuffix" className="options-label">
             Prompt Suffix
           </label>
@@ -151,9 +201,16 @@ export default function OptionsPage(): React.ReactElement {
             Custom instructions appended to every prompt.
           </p>
         </div>
+      </div>
+
+      {/* ── Section: Appearance ── */}
+      <div className="options-section">
+        <div className="options-section-header">
+          <span className="options-section-label">Appearance</span>
+        </div>
 
         {/* Theme */}
-        <div className="flex flex-col gap-1.5">
+        <div className="options-field">
           <label htmlFor="theme" className="options-label">
             Theme
           </label>
@@ -169,45 +226,16 @@ export default function OptionsPage(): React.ReactElement {
             <option value="dark">Dark</option>
           </select>
         </div>
+      </div>
 
-        {/* API Token */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="apiToken" className="options-label">
-            API Token
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="apiToken"
-              type="password"
-              value={apiToken}
-              onChange={(e) => setApiToken(e.target.value)}
-              className="options-input font-mono flex-1"
-              placeholder="Paste the API_TOKEN from the backend .env file"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <button
-              type="button"
-              onClick={handleAutoDetect}
-              disabled={isDetecting}
-              className="options-btn-secondary whitespace-nowrap"
-              aria-label="Auto-detect API token from backend"
-            >
-              {isDetecting ? 'Detecting\u2026' : 'Auto-detect'}
-            </button>
-          </div>
-          {autoDetectMsg && (
-            <p className="options-hint font-medium" role="status" aria-live="polite">{autoDetectMsg}</p>
-          )}
-          <p className="options-hint">
-            Shared secret configured in the backend <code>API_TOKEN</code> environment variable.
-            Stored only on this device — never synced to other browsers.
-            Leave blank if token auth is disabled on the backend.
-          </p>
+      {/* ── Section: Advanced ── */}
+      <div className="options-section">
+        <div className="options-section-header">
+          <span className="options-section-label">Advanced</span>
         </div>
 
         {/* DOM Selector Overrides */}
-        <div className="flex flex-col gap-1.5">
+        <div className="options-field">
           <button
             type="button"
             onClick={() => setSelectorsExpanded((v) => !v)}
@@ -215,7 +243,17 @@ export default function OptionsPage(): React.ReactElement {
             aria-expanded={selectorsExpanded ? 'true' : 'false'}
             aria-controls="selector-overrides"
           >
-            <span className="text-xs">{selectorsExpanded ? '\u25BE' : '\u25B8'}</span>
+            <svg
+              className="options-expand-chevron"
+              data-open={selectorsExpanded ? 'true' : 'false'}
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <path d="M4 2l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             DOM Selector Overrides
           </button>
           <p className="options-hint">
@@ -224,9 +262,9 @@ export default function OptionsPage(): React.ReactElement {
           </p>
 
           {selectorsExpanded && (
-            <div id="selector-overrides" className="flex flex-col gap-3 mt-2 pl-2 options-divider">
+            <div id="selector-overrides" className="options-divider">
               {SELECTOR_FIELDS.map(({ key, label }) => (
-                <div key={key} className="flex flex-col gap-1">
+                <div key={key} className="options-selector-field">
                   <label htmlFor={`selector-${key}`} className="options-hint font-medium">
                     {label}
                   </label>
@@ -243,25 +281,29 @@ export default function OptionsPage(): React.ReactElement {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Save */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="options-btn-primary"
-            aria-label="Save settings"
-          >
-            {isSaving ? 'Saving\u2026' : 'Save Settings'}
-          </button>
-          {saveMsg && (
-            <p className="options-save-msg" role="status" aria-live="polite">{saveMsg}</p>
-          )}
+      {/* ── Save ── */}
+      <div className="options-save-row">
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="options-btn-primary"
+          aria-label="Save settings"
+        >
+          {isSaving ? 'Saving\u2026' : 'Save Settings'}
+        </button>
+        {saveMsg && (
+          <p className="options-save-msg" role="status" aria-live="polite">{saveMsg}</p>
+        )}
+      </div>
+
+      {/* ── Quick Links ── */}
+      <div className="options-section">
+        <div className="options-section-header">
+          <span className="options-section-label">Quick Links</span>
         </div>
-
-        {/* Quick Links */}
-        <div className="flex flex-col gap-1.5">
-          <p className="options-label">Quick Links</p>
+        <div className="options-links-list">
           <a
             href={`${settings.backendUrl || 'http://localhost:8765'}/manage/`}
             target="_blank"
