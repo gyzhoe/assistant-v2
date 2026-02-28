@@ -171,16 +171,23 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
           aria-controls="status-panel-body"
         >
           <h2 className="section-heading">Status</h2>
-          <div className="heading-right">
-            <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
-            <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
-          </div>
         </button>
         <ThemeToggle
           theme={themeSetting}
           resolvedTheme={resolvedTheme}
           onCycle={onCycleTheme}
         />
+        <div
+          className="heading-right"
+          onClick={() => setCollapsed((c) => !c)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setCollapsed((c) => !c) }}
+          aria-label={collapsed ? 'Expand status panel' : 'Collapse status panel'}
+        >
+          <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
+          <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
+        </div>
       </div>
 
       {!collapsed && (
