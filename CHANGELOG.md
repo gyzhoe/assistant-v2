@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Consistency review — Backend (PR #76)**:
+  - Exposed `embed_fn` public property on `EmbedService` and `upsert_stream` public method on `IngestionPipeline`
+  - Replaced all hardcoded `"kb_articles"` string literals with the `KB_COLLECTION` constant
+
+- **Consistency review — Extension UX/Hooks (PR #77)**:
+  - Generate errors now surface the actual Ollama error message instead of the raw "API error 503" string
+  - Replaced browser `window.confirm()` with a styled `ConfirmDialog` (Radix AlertDialog) in ArticleEditor
+  - Added progress indicator to management page file upload (previously showed bare "Uploading..." text)
+  - ManageTab collection clear now shows success/error feedback after the operation
+  - Management import errors now surface the actual backend error detail to the user
+  - Added `aria-label`, `aria-controls`, and `role="tabpanel"` to KnowledgePanel tab strip
+  - Extracted `DEFAULT_TAG_SUGGESTIONS` to a shared constants file (was duplicated across two components)
+
+- **Consistency review — Extension UI/CSS (PR #75)**:
+  - Added `.ok-text` / `.warn-text` modifier classes to sidebar CSS
+  - Added semantic `.icon-btn` class; settings gear button no longer misuses `.theme-toggle`
+
 - **KB Article Editing**: edit title, content, and tags of manually created articles after saving
   - `PUT /kb/articles/{article_id}` endpoint: re-chunks and re-embeds content while preserving original article ID and import timestamp
   - Only `source_type: "manual"` articles can be edited (returns 403 for imported articles)
@@ -17,6 +34,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Request size middleware updated to support sub-path exemptions for large article payloads
   - CORS methods expanded to include PUT and PATCH
   - 11 new backend tests, 4 new frontend tests
+
+### Changed
+
+- **Consistency review — Extension UI (PR #78)**:
+  - Theme toggle icon moved to the right of the Status heading in the sidebar
+
+- **Consistency review — Extension UI/CSS (PR #75)**:
+  - Aligned Tailwind config accent colour to match actual CSS value (`#0969da`)
+  - Removed Tailwind utility classes from `SkeletonLoader`, `InsertButton`, and `ErrorBoundary` — these components are now CSS-class-only
+  - Unified primary button font-weight and skeleton animation across sidebar and management page
+  - Multiple CSS token and link-button consistency fixes between sidebar and management surfaces
+
+- **Consistency review — Backend (PR #76)**:
+  - Unified error response mechanism — all routers now use `HTTPException` (previously mixed with raw `JSONResponse`)
+  - Standardised time measurement to `perf_counter()` across all routers
+  - Renamed `chunks_created` → `chunks_ingested` in `UpdateArticleResponse`
+  - Updated backend version string to `1.7.0`
+
+### Fixed
+
+- **Consistency review — Backend (PR #76)**:
+  - Fixed double-nested `detail` field in 503 error responses from the generate and models endpoints
+  - Added unconditional auth guard to `/shutdown`, `/ollama/start`, and `/ollama/stop` endpoints (guard was previously bypassable)
+  - Fixed `clear_collection` returning 404 instead of 422 for unknown collection names
+  - Consolidated KB response models into a single file; deleted dead `SourceTypeCount` class
+
+- **Consistency review — Extension UI/CSS (PR #75)**:
+  - Fixed invisible active pagination button caused by missing `--accent-subtle` CSS variable
+
+- **Consistency review — Extension UX/Hooks (PR #77)**:
+  - Fixed `TokenGate` showing a blank gate screen on invalid token — now shows an "Invalid token" error message
 
 ## [1.7.0] - 2026-02-28
 
