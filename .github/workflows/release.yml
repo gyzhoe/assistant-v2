@@ -112,6 +112,30 @@ jobs:
           }
           Write-Host "NSSM SHA256 verified OK"
 
+      - name: Download Python 3.13 embeddable
+        shell: pwsh
+        run: |
+          # Python 3.13.2 embeddable (win64) for offline backend install
+          $pyVersion = "3.13.2"
+          $pyUrl = "https://www.python.org/ftp/python/${pyVersion}/python-${pyVersion}-embed-amd64.zip"
+
+          New-Item -ItemType Directory -Force -Path installer/deps/python | Out-Null
+          Write-Host "Downloading Python ${pyVersion} embeddable..."
+          Invoke-WebRequest -Uri $pyUrl -OutFile "installer/deps/python-embed.zip"
+
+          Expand-Archive -Path "installer/deps/python-embed.zip" -DestinationPath "installer/deps/python" -Force
+          Remove-Item "installer/deps/python-embed.zip"
+          Write-Host "Python embeddable extracted to installer/deps/python/"
+
+      - name: Download Python wheels
+        shell: pwsh
+        run: |
+          # Pre-download all backend dependencies as wheels for offline install
+          New-Item -ItemType Directory -Force -Path installer/deps/wheels | Out-Null
+          pip download -r backend/requirements.txt -d installer/deps/wheels --platform win_amd64 --python-version 3.13 --only-binary=:all: 2>&1 | Select-Object -Last 5
+          $count = (Get-ChildItem installer/deps/wheels/*.whl).Count
+          Write-Host "Downloaded $count wheels to installer/deps/wheels/"
+
       - name: Set version from tag
         shell: pwsh
         run: |
