@@ -1,6 +1,8 @@
 # AI Helpdesk Assistant
 
-A local AI assistant for SolarWinds Web Help Desk (on-premises), delivered as a Microsoft Edge browser extension. All AI inference runs locally via [Ollama](https://ollama.com) — no data leaves your network.
+> **Proof of Concept** — This project is a working PoC. The current architecture runs the AI backend locally on the technician's machine via [Ollama](https://ollama.com). The intended end goal is to move AI inference to a shared server or cloud instance (e.g. Azure OpenAI, a self-hosted GPU server), with the Edge extension connecting to that remote backend instead. The local-Ollama setup exists to validate the concept without infrastructure costs.
+
+A local AI assistant for SolarWinds Web Help Desk (on-premises), delivered as a Microsoft Edge browser extension. All AI inference currently runs locally via [Ollama](https://ollama.com) — no data leaves your network.
 
 ## What It Does
 
