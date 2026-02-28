@@ -72,3 +72,7 @@ installer/output/
 *.bak
 .claude/
 CLAUDE.md
+
+# Local test/exploration files
+exploration-findings.md
+test-kb-*.html

@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Tag autocomplete**: inline tag editing in ArticleDetail now shows datalist autocomplete with all 27 WHD request types and existing tags from the database
-- **Missing request types**: added 10 missing WHD request types to DEFAULT_TAG_SUGGESTIONS (ARTICLE on LOAN, FACILITEITEN, Forward from it-dept@example.com, REMOTE DESKTOP ACCESS, NEED A HARDPHONE (CAP), NEED A PHONE NUMBER, NEED A SOFTPHONE (USB), REDCAP, Request by mail, SHINY R App Hosting)
+- **Missing request types**: added 10 missing WHD request types to DEFAULT_TAG_SUGGESTIONS
 - **ArticleEditor autocomplete**: tag input in article creation now also shows inline datalist suggestions while typing
 - **CHANGELOG formatting**: replaced inline styles with CSS classes in CHANGELOG rendering
 
