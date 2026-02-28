@@ -68,7 +68,7 @@ export function Header({ theme, onToggleTheme, onImportClick, onNewArticle, show
         </button>
         <button
           type="button"
-          className="theme-toggle mgmt-settings-btn"
+          className="icon-btn mgmt-settings-btn"
           onClick={() => {
             showToast('Right-click the extension icon in the toolbar \u2192 Extension options', 'info')
           }}

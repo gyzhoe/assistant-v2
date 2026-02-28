@@ -28,7 +28,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-4 flex flex-col gap-3 error-fallback" role="alert">
+        <div className="error-fallback" role="alert">
           <p className="title">Something went wrong</p>
           <p className="detail">
             {this.state.error?.message ?? 'An unexpected error occurred.'}

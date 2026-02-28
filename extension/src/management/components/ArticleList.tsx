@@ -116,7 +116,7 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
   const isEmpty = !isLoading && totalArticles === 0 && !search && !sourceType
 
   return (
-    <div className="article-list" ref={listRef}>
+    <div ref={listRef}>
       {!isEmpty && (
         <div className="article-toolbar">
           <SearchBar value={search} onChange={setSearch} />

@@ -59,7 +59,7 @@ export function InsertButton(): React.ReactElement {
     'Insert into WHD reply'
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="insert-button-wrapper">
       <button
         onClick={handleInsert}
         disabled={disabled}

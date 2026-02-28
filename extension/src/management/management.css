@@ -24,6 +24,7 @@ body {
   --bg: #f6f8fa;
   --header-bg: #ffffff;
   --surface: #ffffff;
+  /* --surface-soft intentionally different from sidebar (#f6f8fa) — management uses a darker shade for row hover contrast */
   --surface-soft: #f0f2f5;
   --surface-active: #e8ebf0;
   --text: #1f2328;
@@ -31,6 +32,7 @@ body {
   --muted: #636c76;
   --border: #d1d9e0;
   --soft-border: #e8ecf0;
+  /* --chip-bg intentionally darker than sidebar (#f6f8fa) for visibility on the wider management surface */
   --chip-bg: #e8ecf0;
   --chip-border: #d1d9e0;
   --chip-text: #636c76;
@@ -46,6 +48,7 @@ body {
   --skeleton-from: #e8ecf0;
   --skeleton-mid: #d1d9e0;
   --overlay-bg: rgba(0, 0, 0, 0.4);
+  --accent-subtle: color-mix(in srgb, var(--accent) 10%, transparent);
 
   min-height: 100vh;
   color: var(--text);
@@ -59,6 +62,7 @@ body {
   --bg: #0d1117;
   --header-bg: #161b22;
   --surface: #161b22;
+  /* --surface-soft intentionally different from sidebar (#0d1117) — management uses a lighter shade for row hover contrast */
   --surface-soft: #1c2128;
   --surface-active: #262c36;
   --text: #e6edf3;
@@ -66,6 +70,7 @@ body {
   --muted: #8b949e;
   --border: #30363d;
   --soft-border: #21262d;
+  /* --chip-bg intentionally darker than sidebar (#1c2128) for visibility on the wider management surface */
   --chip-bg: #262c36;
   --chip-border: #30363d;
   --chip-text: #8b949e;
@@ -81,6 +86,7 @@ body {
   --skeleton-from: #21262d;
   --skeleton-mid: #30363d;
   --overlay-bg: rgba(0, 0, 0, 0.6);
+  --accent-subtle: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 /* ─── Header ──────────────────────────────────────── */
@@ -151,6 +157,30 @@ body {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* Generic icon-only button — same styling as theme-toggle */
+.icon-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 0.375rem;
+  padding: 0.3rem;
+  line-height: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-soft);
+}
+
+.icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
 /* ─── Main layout ─────────────────────────────────── */
 .mgmt-main {
   max-width: 960px;
@@ -167,7 +197,7 @@ body {
   border-radius: 0.375rem;
   padding: 0.375rem 0.75rem;
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   background: var(--accent);
   color: #ffffff;
@@ -181,7 +211,7 @@ body {
 
 .primary-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .primary-btn:focus-visible {
@@ -949,16 +979,17 @@ body {
   margin-top: 0.125rem;
 }
 
-/* ─── Skeleton pulse ──────────────────────────────── */
+/* ─── Skeleton shimmer (matches sidebar shimmer pattern) ── */
 .skeleton {
-  background: var(--skeleton-from);
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--skeleton-from) 25%, var(--skeleton-mid) 50%, var(--skeleton-from) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
   border-radius: 0.25rem;
 }
 
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 /* ─── Skeleton table ──────────────────────────────── */
