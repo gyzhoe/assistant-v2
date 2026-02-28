@@ -65,6 +65,33 @@ def start_backend() -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def get_token() -> dict:
+    """Read API_TOKEN from backend/.env for extension auto-configuration."""
+    env_path = os.path.join(BACKEND_DIR, ".env")
+    if not os.path.exists(env_path):
+        log(f".env not found at {env_path}")
+        return {"ok": False, "error": ".env file not found"}
+
+    try:
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("API_TOKEN="):
+                    value = line[len("API_TOKEN="):]
+                    # Strip surrounding quotes
+                    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                        value = value[1:-1]
+                    value = value.strip()
+                    if not value or value == "REPLACE_WITH_STRONG_SECRET":
+                        log("API_TOKEN is placeholder or empty")
+                        return {"ok": False, "error": "API_TOKEN not configured"}
+                    return {"ok": True, "token": value}
+        return {"ok": False, "error": "API_TOKEN not found in .env"}
+    except Exception as e:
+        log(f"Error reading .env: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 def start_ollama() -> dict:
     log("Starting Ollama")
     try:
@@ -92,6 +119,8 @@ def main() -> None:
         send_message(start_backend())
     elif action == "start_ollama":
         send_message(start_ollama())
+    elif action == "get_token":
+        send_message(get_token())
     else:
         send_message({"ok": False, "error": f"Unknown action: {action}"})
 

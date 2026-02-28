@@ -60,4 +60,24 @@ if ($offlineMode) {
     }
 }
 
+# ── Generate API token and create .env if needed ──────────────────────────────
+$envFile = Join-Path $backendDir ".env"
+$envExample = Join-Path $backendDir ".env.example"
+
+if (Test-Path $envFile) {
+    Write-Host "Existing .env found — skipping token generation." -ForegroundColor Yellow
+} elseif (Test-Path $envExample) {
+    Write-Host "Generating API token..." -ForegroundColor Yellow
+    $tokenBytes = [byte[]]::new(32)
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($tokenBytes)
+    $token = ($tokenBytes | ForEach-Object { $_.ToString("x2") }) -join ""
+
+    $envContent = Get-Content $envExample -Raw
+    $envContent = $envContent -replace "API_TOKEN=REPLACE_WITH_STRONG_SECRET", "API_TOKEN=$token"
+    Set-Content -Path $envFile -Value $envContent -NoNewline
+    Write-Host "API token generated and written to .env (auto-detected by extension)." -ForegroundColor Green
+} else {
+    Write-Host "Warning: .env.example not found — skipping .env creation." -ForegroundColor Yellow
+}
+
 Write-Host "Post-install setup complete!" -ForegroundColor Green
