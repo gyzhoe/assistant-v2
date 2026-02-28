@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
 import { showToast } from './Toast'
@@ -17,22 +17,32 @@ Step-by-step instructions to resolve the problem.
 Any extra context, caveats, or related links.
 `
 
-/** WHD request types shown as default tag suggestions. */
+/** WHD request types shown as default tag suggestions (all 27 from WHD instance). */
 const DEFAULT_TAG_SUGGESTIONS = [
   'ACCOUNT (u-,r-,b-number,...)',
   'ADMINISTRATIVE RIGHTS',
+  'ARTICLE on LOAN',
   'CERTIFICATE ISSUE',
   'COLLABORATION/COMMUNICATION',
   'COMPUTER and ACCESSORIES',
+  'FACILITEITEN',
+  'Forward from it-dept@example.com',
+  'REMOTE DESKTOP ACCESS',
   'IVANTI VPN',
   'LINUX',
   'MAILBOX (Outlook, Adm. Email...)',
   'Multi Factor Authentication (MFA)',
+  'NEED A HARDPHONE (CAP)',
+  'NEED A PHONE NUMBER',
+  'NEED A SOFTPHONE (USB)',
   'NETWORK (Wired / Wireless)',
   'PERIPHERALS (keyboard, mouse, headset,...)',
   'PHONE ISSUE (General)',
   'PRINTER',
+  'REDCAP',
   'REMOTE ACCESS',
+  'Request by mail',
+  'SHINY R App Hosting',
   'SOFTWARE',
   'SOFTWARE BLOCKED by AppLocker',
   'WEBSITE & WEB APPS',
@@ -57,6 +67,12 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
     queryKey: ['tags'],
     queryFn: () => managementApi.getTags(),
   })
+
+  const tagSuggestions = useMemo(() => {
+    const apiTags = existingTags?.tags ?? []
+    return [...new Set([...DEFAULT_TAG_SUGGESTIONS, ...apiTags])]
+      .filter(t => !tags.includes(t))
+  }, [existingTags, tags])
 
   // Auto-focus title on mount
   useEffect(() => {
@@ -164,6 +180,7 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
                 id="article-tags"
                 type="text"
                 className="tag-input"
+                list="tag-suggestions-editor"
                 placeholder={tags.length >= 20 ? 'Max tags reached' : 'Add tags (e.g., NETWORK CONNECTION, MAILBOX)'}
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
@@ -192,6 +209,11 @@ export function ArticleEditor({ onBack }: ArticleEditorProps): React.ReactElemen
                 disabled={tags.length >= 20}
                 maxLength={100}
               />
+              <datalist id="tag-suggestions-editor">
+                {tagSuggestions.map(t => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
             </div>
           </div>
           <div className="tag-browse-row">

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tag autocomplete**: inline tag editing in ArticleDetail now shows datalist autocomplete with all 27 WHD request types and existing tags from the database
+- **Missing request types**: added 10 missing WHD request types to DEFAULT_TAG_SUGGESTIONS (ARTICLE on LOAN, FACILITEITEN, Forward from it-dept@example.com, REMOTE DESKTOP ACCESS, NEED A HARDPHONE (CAP), NEED A PHONE NUMBER, NEED A SOFTPHONE (USB), REDCAP, Request by mail, SHINY R App Hosting)
+- **ArticleEditor autocomplete**: tag input in article creation now also shows inline datalist suggestions while typing
+
 ### Added
 
 - **KB Article Tagging**: tag articles with WHD request types (e.g., NETWORK CONNECTION, MAILBOX) for category-filtered RAG retrieval
