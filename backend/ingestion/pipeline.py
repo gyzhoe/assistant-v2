@@ -112,6 +112,16 @@ class IngestionPipeline:
         for col in self.client.list_collections():
             self.client.delete_collection(col.name)
 
+    # ── Public API ─────────────────────────────────────────────────────────
+
+    def upsert_stream(
+        self,
+        col: Collection,
+        stream: Iterator[tuple[str, str, dict[str, str]]],
+    ) -> int:
+        """Embed and upsert a stream of (id, text, metadata) tuples into a collection."""
+        return self._upsert_stream(col, stream)
+
     # ── Internal ─────────────────────────────────────────────────────────────
 
     def _upsert_stream(

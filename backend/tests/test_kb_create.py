@@ -74,7 +74,7 @@ async def test_create_article_success() -> None:
     with patch(
         "app.routers.kb.EmbedService",
     ) as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -181,7 +181,7 @@ async def test_create_article_heading_sections() -> None:
     )
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = _mock_embed  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = _mock_embed
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -231,7 +231,7 @@ async def test_create_article_ollama_down() -> None:
         raise ConnectionError("Ollama embed service unreachable")
 
     with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value._embed_sync = embed_raises  # noqa: SLF001
+        mock_embed_cls.return_value.embed_fn = embed_raises
 
         async with AsyncClient(
             transport=ASGITransport(app=app),

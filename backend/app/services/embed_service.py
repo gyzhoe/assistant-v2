@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 
 import httpx
 
@@ -18,6 +21,11 @@ class EmbedService:
     def __init__(self, model: str = "nomic-embed-text") -> None:
         self.model = model
         self.base_url = settings.ollama_base_url
+
+    @property
+    def embed_fn(self) -> Callable[[str], list[float]]:
+        """Public accessor for the synchronous embed function."""
+        return self._embed_sync
 
     async def embed(self, text: str) -> list[float]:
         """Return the embedding vector with retry logic."""

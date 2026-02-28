@@ -21,5 +21,5 @@ async def list_models() -> dict[str, list[str]]:
     except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
         raise HTTPException(
             status_code=503,
-            detail={"detail": "Cannot reach Ollama to list models.", "error_code": "OLLAMA_DOWN"},
+            detail={"message": "Cannot reach Ollama to list models.", "error_code": "OLLAMA_DOWN"},
         ) from exc

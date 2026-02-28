@@ -25,7 +25,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     ms_docs = MicrosoftDocsService()
 
     logger.info("Generate request: model=%s subject=%s", body.model, body.ticket_subject[:80])
-    start = time.monotonic()
+    start = time.perf_counter()
 
     # Retrieve context — RAG + optional Microsoft Learn search in parallel
     query = f"{body.ticket_subject}\n\n{body.ticket_description}".strip()
@@ -53,7 +53,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         raise HTTPException(
             status_code=503,
             detail={
-                "detail": str(exc),
+                "message": str(exc),
                 "error_code": "OLLAMA_DOWN",
             },
         ) from exc
@@ -85,12 +85,12 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         raise HTTPException(
             status_code=503,
             detail={
-                "detail": str(exc),
+                "message": str(exc),
                 "error_code": "OLLAMA_DOWN",
             },
         ) from exc
 
-    latency_ms = int((time.monotonic() - start) * 1000)
+    latency_ms = int((time.perf_counter() - start) * 1000)
     logger.info(
         "Generate complete: model=%s latency=%dms docs=%d web_docs=%d",
         body.model, latency_ms, len(context_docs), len(web_docs),

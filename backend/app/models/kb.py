@@ -45,8 +45,18 @@ class ArticleDeleteResponse(BaseModel):
     chunks_deleted: int
 
 
-class SourceTypeCount(BaseModel):
-    """Count of articles per source type — used as dict values in StatsResponse."""
+class CreateArticleResponse(BaseModel):
+    article_id: str
+    title: str
+    chunks_ingested: int
+    processing_time_ms: int
+
+
+class UpdateArticleResponse(BaseModel):
+    article_id: str
+    title: str
+    chunks_ingested: int
+    processing_time_ms: int
 
 
 class UpdateTagsResponse(BaseModel):
