@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useSettings } from './useSettings'
-import { apiClient } from '../../lib/api-client'
+import { apiClient, ApiError } from '../../lib/api-client'
 
 export function useGenerateReply() {
   const ticketData = useSidebarStore((s) => s.ticketData)
@@ -46,7 +46,17 @@ export function useGenerateReply() {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return
       }
-      const message = err instanceof Error ? err.message : 'Failed to generate reply'
+      let message = 'Failed to generate reply'
+      if (err instanceof ApiError) {
+        const body = err.body as { message?: string; detail?: string; error_code?: string }
+        if (body?.error_code === 'OLLAMA_DOWN' || err.status === 503) {
+          message = 'Ollama is not running. Please start it and try again.'
+        } else {
+          message = body?.message ?? body?.detail ?? `Generation failed (${err.status})`
+        }
+      } else if (err instanceof Error) {
+        message = err.message
+      }
       setGenerateError(message)
     } finally {
       setIsGenerating(false)

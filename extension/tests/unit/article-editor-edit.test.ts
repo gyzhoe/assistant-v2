@@ -131,7 +131,7 @@ describe('ArticleEditor — edit mode', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Only manual articles can be edited.')).toBeTruthy()
+      expect(screen.getByText(/Only manual articles can be edited/)).toBeTruthy()
     })
   })
 

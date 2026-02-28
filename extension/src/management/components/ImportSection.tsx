@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { managementApi } from '../api'
+import { managementApi, ApiError } from '../api'
 import { showToast } from './Toast'
 
 interface ImportSectionProps {
@@ -15,6 +15,8 @@ const MAX_SIZE_MB = 10
 export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionProps): React.ReactElement {
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState('')
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
   const [urlValue, setUrlValue] = useState('')
   const [importingUrl, setImportingUrl] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -29,21 +31,26 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
     const fileArr = Array.from(files)
     if (fileArr.length === 0) return
 
-    for (const file of fileArr) {
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i]
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
         showToast(`${file.name} exceeds ${MAX_SIZE_MB}MB limit`, 'error')
         continue
       }
 
       setUploading(true)
+      setUploadingFile(file.name)
+      setUploadProgress({ current: i + 1, total: fileArr.length })
       try {
         const result = await managementApi.uploadFile(file)
         showToast(`Imported "${result.filename}" (${result.chunks_ingested} chunks)`, 'success')
         invalidateAll()
-      } catch {
-        showToast(`Failed to import "${file.name}"`, 'error')
+      } catch (err) {
+        const detail = err instanceof ApiError ? ((err.body as { detail?: string })?.detail ?? `Failed to import "${file.name}"`) : `Failed to import "${file.name}"`
+        showToast(detail, 'error')
       } finally {
         setUploading(false)
+        setUploadingFile('')
       }
     }
   }, [invalidateAll])
@@ -66,8 +73,8 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
       showToast(`Imported URL (${result.chunks_ingested} chunks)`, 'success')
       setUrlValue('')
       invalidateAll()
-    } catch {
-      showToast('Failed to import URL', 'error')
+    } catch (err) {
+      showToast(err instanceof ApiError ? ((err.body as { detail?: string })?.detail ?? 'Failed to import URL') : 'Failed to import URL', 'error')
     } finally {
       setImportingUrl(false)
     }
@@ -107,7 +114,15 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
             {uploading ? (
-              <p>Uploading...</p>
+              <div className="import-upload-progress">
+                <p className="import-upload-filename">{uploadingFile}</p>
+                {uploadProgress.total > 1 && (
+                  <p className="import-drop-hint">File {uploadProgress.current} of {uploadProgress.total}</p>
+                )}
+                <div className="import-progress-track">
+                  <div className="import-progress-fill" style={{ width: uploadProgress.total > 1 ? `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` : '100%' }} />
+                </div>
+              </div>
             ) : (
               <>
                 <p>Drop files here or click to browse</p>

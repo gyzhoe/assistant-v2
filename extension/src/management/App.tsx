@@ -21,6 +21,7 @@ export function App(): React.ReactElement {
     return saved === 'dark' || saved === 'light' ? saved : getSystemTheme()
   })
   const [needsAuth, setNeedsAuth] = useState(false)
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | undefined>(undefined)
   const [authKey, setAuthKey] = useState(0)
   const [importOpen, setImportOpen] = useState(false)
   const [view, setView] = useState<'list' | 'create' | 'edit'>('list')
@@ -59,11 +60,13 @@ export function App(): React.ReactElement {
 
   const handleAuthenticated = useCallback(() => {
     setNeedsAuth(false)
+    setAuthErrorMessage(undefined)
     setAuthKey(prev => prev + 1) // re-trigger queries
   }, [])
 
-  const handleAuthRequired = useCallback(() => {
+  const handleAuthRequired = useCallback((message?: string) => {
     setNeedsAuth(true)
+    setAuthErrorMessage(message)
   }, [])
 
   const importRefCallback = useCallback((node: HTMLDivElement | null) => {
@@ -89,7 +92,7 @@ export function App(): React.ReactElement {
     return (
       <div className="app-shell" data-theme={theme}>
         <Header theme={theme} onToggleTheme={toggleTheme} onImportClick={handleImportClick} />
-        <TokenGate onAuthenticated={handleAuthenticated} />
+        <TokenGate onAuthenticated={handleAuthenticated} errorMessage={authErrorMessage} />
       </div>
     )
   }
