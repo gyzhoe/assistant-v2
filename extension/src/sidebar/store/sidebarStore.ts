@@ -18,6 +18,7 @@ interface SidebarState {
   pinnedArticles: KBArticlePin[]
   settings: AppSettings
   settingsLoading: boolean
+  ollamaReachable: boolean
 
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
@@ -33,6 +34,7 @@ interface SidebarState {
   pinArticle: (article: KBArticlePin) => void
   unpinArticle: (articleId: string) => void
   cancelGeneration: () => void
+  setOllamaReachable: (val: boolean) => void
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>
   reset: () => void
 }
@@ -52,6 +54,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   pinnedArticles: [],
   settings: DEFAULT_SETTINGS,
   settingsLoading: true,
+  ollamaReachable: false,
 
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
@@ -64,6 +67,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setIsEditingReply: (val) => set({ isEditingReply: val }),
   setReplyRating: (rating) => set({ replyRating: rating }),
+  setOllamaReachable: (val) => set({ ollamaReachable: val }),
   pinArticle: (article) => {
     const { pinnedArticles } = get()
     if (pinnedArticles.length >= MAX_PINNED_ARTICLES) return
