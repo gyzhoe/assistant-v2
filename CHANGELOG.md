@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] — Sprint 3 (2026-03-01)
+
+### Added
+
+- **M10**: Documented all 18 API endpoints in `api-contract.md` (health, generation, KB CRUD, ingestion, tags/stats, feedback, settings)
+- **M24**: Upload batch error recovery with per-file status tracking, partial progress, skip & continue, and retry failed
+- **M26**: First-time onboarding flow with ordered setup steps card (Install Ollama → Pull model → Start backend)
+- **L30**: Elapsed time counter during AI generation
+- **L37**: Keyboard shortcut hint (Alt+Shift+H) in manifest
+
+### Changed
+
+- **L32**: Settings gear navigates to options page (was toast notification)
+
+### Fixed
+
+- **M6**: Rate limiter proxy limitation documented in `security.py` + `api-contract.md`
+- **M7**: `/manage` static mount no-auth documented in `main.py`
+- **L2**: Added CSS rule for `.import-section-label`
+- **L4**: Aligned Tailwind `font-mono` with CSS tokens
+- **L6**: httpx import in `pipeline.py` already top-level (stale finding, no change needed)
+- **L14**: Vite 7 / Vitest 2 compatibility verified
+- **L15**: Fixed installer hardcoded component index
+- **L16**: Auth header skipped on `/health` endpoint requests
+- **L18**: Removed Zustand stable setters from dependency arrays
+- **L19**: Fixed `searchKBArticles` pagination (+4 new tests)
+- **L20**: Cached DOMReader instance in content script
+- **L21**: Protected `.sr-only` from tree-shaking
+- **L22**: Added `aria-labelledby` to tab panels
+- **L23**: Added `aria-busy` during article list refetch
+- **L24**: Removed unused React imports
+- **L25**: Added `SidebarHost.stop()` call on extension unload
+- **L26**: Typed `handleChange` properly in OptionsPage
+- **L35**: Client-side URL validation before import
+- **L36**: Client-side file size check before upload
+- **L39**: Warning messages stay visible after success auto-dismiss
+
+### Test Coverage
+
+- Extension tests: 93 (+4 new from pagination fix)
+- Backend tests: 258 (unchanged)
+- **Total:** 351 tests
+
 ## [1.9.0] — Sprint 2 (2026-03-01)
 
 ### Fixed
