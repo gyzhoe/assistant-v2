@@ -27,7 +27,9 @@ export function useSubmitFeedback() {
       debugError('Failed to submit feedback:', err)
       setFeedbackError('Rating not saved')
     }
-  }, [ticketData, reply, setReplyRating])
+  // setReplyRating is a stable Zustand setter — safe to omit from deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketData, reply])
 
   return { submitRating, feedbackError }
 }

@@ -125,9 +125,9 @@ export const apiClient = {
     }
   },
 
-  async searchKBArticles(query: string, limit: number = 5, signal?: AbortSignal): Promise<KBArticleListResponse> {
+  async searchKBArticles(query: string, limit: number = 5, page: number = 1, signal?: AbortSignal): Promise<KBArticleListResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    const params = new URLSearchParams({ search: query, page_size: String(limit) })
+    const params = new URLSearchParams({ search: query, page_size: String(limit), page: String(page) })
     const resp = await fetch(`${base}/kb/articles?${params.toString()}`, { headers, signal })
     if (!resp.ok) {
       const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))

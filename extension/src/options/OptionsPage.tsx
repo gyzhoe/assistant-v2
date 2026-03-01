@@ -53,7 +53,9 @@ export default function OptionsPage(): React.ReactElement {
     return () => window.removeEventListener('beforeunload', handler)
   }, [isDirty])
 
-  const handleChange = (field: keyof AppSettings, value: string) => {
+  type StringAppField = { [K in keyof AppSettings]: AppSettings[K] extends string ? K : never }[keyof AppSettings]
+
+  const handleChange = <K extends StringAppField>(field: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [field]: value }))
   }
 

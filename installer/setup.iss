@@ -239,13 +239,24 @@ begin
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
+var
+  I: Integer;
 begin
   if CurPageID = wpSelectComponents then
   begin
-    // Auto-deselect Ollama component if already installed
+    // Auto-deselect the "ollama" component if Ollama is already installed.
+    // Use component name matching instead of a hardcoded index so that
+    // reordering components in [Components] does not break this logic.
     if IsOllamaInstalled then
     begin
-      WizardForm.ComponentsList.Checked[2] := False;
+      for I := 0 to WizardForm.ComponentsList.Items.Count - 1 do
+      begin
+        if WizardForm.ComponentsList.ItemCaption[I] = 'Ollama LLM Runtime (~100 MB)' then
+        begin
+          WizardForm.ComponentsList.Checked[I] := False;
+          Break;
+        end;
+      end;
     end;
   end;
 end;

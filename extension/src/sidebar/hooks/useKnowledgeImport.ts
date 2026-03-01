@@ -6,6 +6,7 @@ import { debugLog } from '../../shared/constants'
 
 const ALLOWED_EXTENSIONS = ['.json', '.csv', '.html', '.htm', '.pdf']
 const MAX_FILES = 10
+const MAX_FILE_SIZE_MB = 50
 const SUCCESS_DISMISS_MS = 4000
 
 export type FileUploadStatus = 'pending' | 'uploading' | 'success' | 'error'
@@ -87,6 +88,13 @@ export function useKnowledgeImport() {
     if (invalid.length > 0) {
       const names = invalid.map((f) => f.name).join(', ')
       setErrorMessage(`Unsupported file type: ${names}. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`)
+      return
+    }
+
+    const oversized = files.filter((f) => f.size > MAX_FILE_SIZE_MB * 1024 * 1024)
+    if (oversized.length > 0) {
+      const names = oversized.map((f) => f.name).join(', ')
+      setErrorMessage(`File too large: ${names}. Maximum size is ${MAX_FILE_SIZE_MB}MB per file.`)
       return
     }
 

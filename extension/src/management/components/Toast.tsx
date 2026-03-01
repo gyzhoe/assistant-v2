@@ -3,8 +3,12 @@ import type { ToastMessage } from '../types'
 
 let addToastFn: ((t: ToastMessage) => void) | null = null
 
-export function showToast(text: string, type: ToastMessage['type'] = 'info', action?: ToastMessage['action']): void {
-  addToastFn?.({ id: crypto.randomUUID(), text, type, action })
+export function showToast(
+  text: string,
+  type: ToastMessage['type'] = 'info',
+  options?: { persistent?: boolean; action?: ToastMessage['action'] },
+): void {
+  addToastFn?.({ id: crypto.randomUUID(), text, type, persistent: options?.persistent, action: options?.action })
 }
 
 export function ToastContainer(): React.ReactElement {
@@ -22,8 +26,11 @@ export function ToastContainer(): React.ReactElement {
 
   const add = useCallback((t: ToastMessage) => {
     setToasts(prev => [...prev, t])
-    const timer = setTimeout(() => remove(t.id), 4000)
-    timers.current.set(t.id, timer)
+    // Persistent toasts (e.g. success with warnings) must be dismissed manually
+    if (!t.persistent) {
+      const timer = setTimeout(() => remove(t.id), 4000)
+      timers.current.set(t.id, timer)
+    }
   }, [remove])
 
   useEffect(() => {

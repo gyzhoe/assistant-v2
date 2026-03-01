@@ -36,7 +36,7 @@ export function KBContextPicker(): React.ReactElement {
       setIsSearching(true)
       setSearchError(null)
       try {
-        const resp = await apiClient.searchKBArticles(query.trim(), 5, ctrl.signal)
+        const resp = await apiClient.searchKBArticles(query.trim(), 5, 1, ctrl.signal)
         if (!ctrl.signal.aborted) {
           setResults(resp.articles)
         }
