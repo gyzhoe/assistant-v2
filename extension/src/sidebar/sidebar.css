@@ -1012,6 +1012,32 @@ body {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+.rating-feedback-region {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.rating-saved {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--ok-text);
+  white-space: nowrap;
+  animation: rating-saved-fade 2s ease forwards;
+}
+
+@keyframes rating-saved-fade {
+  0%   { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rating-saved {
+    animation: none;
+  }
+}
+
 .draft-toggle {
   font-size: 0.75rem;
   padding: 2px 8px;
