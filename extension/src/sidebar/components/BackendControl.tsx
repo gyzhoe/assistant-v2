@@ -288,7 +288,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
         <button
           className="collapsible-trigger"
           onClick={() => setCollapsed((c) => !c)}
-          aria-expanded={!collapsed}
+          aria-expanded={!collapsed ? "true" : "false"}
           aria-controls="status-panel-body"
         >
           <h2 className="section-heading">Status</h2>

@@ -18,6 +18,10 @@ import sys
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BACKEND_DIR, "native_host.log")
 
+# subprocess.CREATE_NO_WINDOW only exists on Windows; use 0 on other platforms
+# so tests can run on Linux CI.
+_CREATION_FLAGS: int = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
 
 def log(msg: str) -> None:
     with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -57,7 +61,7 @@ def start_backend() -> dict:
                 cwd=BACKEND_DIR,
                 stdout=fout,
                 stderr=ferr,
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=_CREATION_FLAGS,
             )
         log(f"Started PID={proc.pid}")
         return {"ok": True, "status": "starting", "pid": proc.pid}
@@ -100,7 +104,7 @@ def start_ollama() -> dict:
             ["ollama", "serve"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=_CREATION_FLAGS,
         )
         return {"ok": True, "status": "starting"}
     except Exception as e:
@@ -114,7 +118,7 @@ def _find_pids_on_port(port: int) -> list[int]:
         output = subprocess.check_output(
             ["netstat", "-ano", "-p", "TCP"],
             text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=_CREATION_FLAGS,
         )
     except Exception:
         return []
@@ -144,7 +148,7 @@ def stop_backend() -> dict:
                 ["taskkill", "/PID", str(pid), "/T", "/F"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=_CREATION_FLAGS,
             )
         except Exception as e:
             log(f"stop_backend: failed to kill PID {pid}: {e}")
@@ -160,7 +164,7 @@ def stop_ollama() -> dict:
                 ["taskkill", "/IM", exe, "/F"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=_CREATION_FLAGS,
             )
         except Exception as e:
             log(f"stop_ollama: failed to kill {exe}: {e}")
