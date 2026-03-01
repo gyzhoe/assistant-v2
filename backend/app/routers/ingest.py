@@ -57,7 +57,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
         )
 
     # Try to acquire the upload semaphore (non-blocking)
-    if not upload_semaphore._value:  # noqa: SLF001
+    if upload_semaphore.locked():
         raise HTTPException(
             status_code=409,
             detail="Another upload is already in progress. Please wait.",
@@ -166,7 +166,7 @@ async def ingest_url(
     url_str = str(body.url)
 
     # Shared semaphore with file upload — one ingestion at a time
-    if not upload_semaphore._value:  # noqa: SLF001
+    if upload_semaphore.locked():
         raise HTTPException(
             status_code=409,
             detail="Another ingestion is already in progress. Please wait.",

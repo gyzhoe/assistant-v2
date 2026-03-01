@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **C1**: Synced version strings to 1.8.0 across `config.py`, `package.json`, and `setup.iss`
+- **C2**: Wrapped blocking ChromaDB calls in `asyncio.to_thread` in health endpoint
+- **C3**: Wrapped blocking `subprocess.run` in `asyncio.to_thread` in health endpoint
+- **H1**: Regenerated `requirements.txt` via `uv pip compile` (removed unused langchain dependencies)
+- **H4/H5**: Replaced private `semaphore._value` access with public `.locked()` API across 4 call sites in ingest and KB routers
+- **H6**: Narrowed feedback endpoint error handling to specific connection errors; returns 503 for Ollama/ChromaDB failures instead of silently swallowing all exceptions
+- **H7**: Moved `httpx.Client` creation from per-request to `__init__` in `EmbedService`, `LLMService`, and `MicrosoftDocsService` (eliminates per-request connection overhead)
 - **H2**: Deduplicated type definitions (`IngestUploadResponse`, `IngestUrlResponse`, `HealthResponse`) between `shared/types.ts` and `management/types.ts`; management re-exports from shared
 - **H3**: Unified `ApiError` class into `shared/api-error.ts`; both sidebar and management API clients import from the same canonical source
 - **H8**: Narrowed `MutationObserver` target to `#ticketDetailForm` (falls back to `document.body`), disabled `attributes` and `characterData` tracking to reduce noise

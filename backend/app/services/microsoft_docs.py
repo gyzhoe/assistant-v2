@@ -65,6 +65,13 @@ def _set_cached(keywords: str, docs: list[WebContextDoc]) -> None:
 class MicrosoftDocsService:
     """Searches Microsoft Learn for relevant documentation."""
 
+    def __init__(self) -> None:
+        self._client = httpx.Client(
+            timeout=REQUEST_TIMEOUT,
+            follow_redirects=True,
+            max_redirects=3,
+        )
+
     async def search(self, keywords: str) -> list[WebContextDoc]:
         """Search Microsoft Learn and extract article content.
 
@@ -117,15 +124,13 @@ class MicrosoftDocsService:
     def _search_api(self, keywords: str) -> list[tuple[str, str]]:
         """Call Microsoft Learn search API. Returns [(title, url), ...]."""
         try:
-            with httpx.Client() as client:
-                resp = client.get(
-                    SEARCH_URL,
-                    params={"search": keywords, "locale": "en-us", "$top": "3"},
-                    timeout=REQUEST_TIMEOUT,
-                    headers={"Accept": "application/json"},
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            resp = self._client.get(
+                SEARCH_URL,
+                params={"search": keywords, "locale": "en-us", "$top": "3"},
+                headers={"Accept": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
             results: list[tuple[str, str]] = []
             for item in data.get("results", []):
@@ -147,20 +152,18 @@ class MicrosoftDocsService:
             return ""
 
         try:
-            with httpx.Client(follow_redirects=True, max_redirects=3) as client:
-                resp = client.get(
-                    url,
-                    timeout=REQUEST_TIMEOUT,
-                    headers={"Accept": "text/html"},
-                )
-                resp.raise_for_status()
+            resp = self._client.get(
+                url,
+                headers={"Accept": "text/html"},
+            )
+            resp.raise_for_status()
 
-                # Enforce size limit
-                if len(resp.content) > MAX_RESPONSE_BYTES:
-                    logger.debug("Article too large: %s (%d bytes)", url, len(resp.content))
-                    return ""
+            # Enforce size limit
+            if len(resp.content) > MAX_RESPONSE_BYTES:
+                logger.debug("Article too large: %s (%d bytes)", url, len(resp.content))
+                return ""
 
-                return self._extract_text(resp.text)
+            return self._extract_text(resp.text)
         except (httpx.HTTPError, ValueError):
             logger.debug("Failed to fetch article: %s", url, exc_info=True)
             return ""
