@@ -253,6 +253,33 @@ URLs are validated before fetching:
 
 ---
 
+## Deployment Notes
+
+### Rate Limiting
+
+The backend applies per-client IP rate limits using the direct TCP connection address.
+
+**Default (local-only) deployment:** This works correctly because all traffic
+originates from `localhost` and there is only one client.
+
+**Behind a reverse proxy:** All requests appear to come from the proxy's IP, so
+every user shares the same rate-limit bucket. To restore per-client limiting in a
+proxied deployment, either:
+
+1. Launch uvicorn with `--proxy-headers --forwarded-allow-ips <proxy-ip>` so that
+   `X-Forwarded-For` is trusted and the real client IP is used.
+2. Move rate limiting to the proxy layer (e.g., nginx `limit_req_zone`) and rely on
+   the proxy to enforce limits before requests reach the application.
+
+### /manage SPA Authentication
+
+The `/manage` static mount (KB management UI) is served without authentication.
+This is acceptable for the default local-only deployment where network access is
+restricted to the local machine. For network-exposed deployments, serve `/manage`
+behind an authenticated reverse proxy or add authentication middleware.
+
+---
+
 ## Chrome Runtime Message Types
 
 Defined in `extension/src/shared/messages.ts`.

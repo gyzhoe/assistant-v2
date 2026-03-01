@@ -32,8 +32,11 @@ export function getToken(): string {
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const currentToken = getToken()
+  // /health is exempt from auth — skip the token header to avoid sending
+  // credentials unnecessarily on an unauthenticated endpoint.
+  const isHealthEndpoint = path === '/health'
   const headers: Record<string, string> = {
-    ...(currentToken ? { 'X-Extension-Token': currentToken } : {}),
+    ...(currentToken && !isHealthEndpoint ? { 'X-Extension-Token': currentToken } : {}),
   }
 
   // Don't set Content-Type for FormData (browser sets multipart boundary)
