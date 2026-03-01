@@ -24,10 +24,12 @@ vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
 Element.prototype.scrollIntoView = vi.fn()
 
 // Mock apiClient at module level so ModelSelector and other components work
-const mockSubmitFeedback = vi.fn().mockResolvedValue(undefined)
+const mockSubmitFeedback = vi.fn().mockResolvedValue({ id: 'rated_test123' })
+const mockDeleteFeedback = vi.fn().mockResolvedValue(undefined)
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     submitFeedback: mockSubmitFeedback,
+    deleteFeedback: mockDeleteFeedback,
     models: vi.fn().mockResolvedValue(['qwen2.5:14b']),
     generate: vi.fn().mockResolvedValue({ reply: 'test', model: 'qwen2.5:14b' }),
     health: vi.fn().mockResolvedValue({ status: 'ok', ollama_reachable: true, chroma_ready: true, chroma_doc_counts: {}, version: '1.0.0' }),
@@ -59,28 +61,51 @@ const defaultState = {
 
 describe('useSubmitFeedback toggle', () => {
   beforeEach(() => {
-    mockSubmitFeedback.mockReset()
+    mockSubmitFeedback.mockReset().mockResolvedValue({ id: 'rated_test123' })
+    mockDeleteFeedback.mockReset().mockResolvedValue(undefined)
     useSidebarStore.setState(defaultState)
   })
 
-  it('clears rating and skips backend call when same rating clicked twice', async () => {
-    mockSubmitFeedback.mockResolvedValue(undefined)
+  it('clears rating and calls deleteFeedback when same rating clicked twice', async () => {
+    useSidebarStore.setState({ replyRating: null })
+
+    const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
+    const { renderHook, act } = await import('@testing-library/react')
+    const { result } = renderHook(() => useSubmitFeedback())
+
+    // First click — submit rating
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+    expect(mockSubmitFeedback).toHaveBeenCalledOnce()
+    expect(useSidebarStore.getState().replyRating).toBe('good')
+
+    // Second click (same rating) — toggle off and delete
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+    expect(useSidebarStore.getState().replyRating).toBeNull()
+    expect(mockDeleteFeedback).toHaveBeenCalledWith('rated_test123')
+  })
+
+  it('skips delete call when no doc_id is stored (no prior submit)', async () => {
     useSidebarStore.setState({ replyRating: 'good' })
 
     const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
     const { renderHook, act } = await import('@testing-library/react')
     const { result } = renderHook(() => useSubmitFeedback())
 
+    // Toggle off without prior submit in this hook instance — no doc_id
     await act(async () => {
       await result.current.submitRating('good')
     })
 
     expect(useSidebarStore.getState().replyRating).toBeNull()
-    expect(mockSubmitFeedback).not.toHaveBeenCalled()
+    expect(mockDeleteFeedback).not.toHaveBeenCalled()
   })
 
   it('switches rating and calls backend when different rating clicked', async () => {
-    mockSubmitFeedback.mockResolvedValue(undefined)
+    mockSubmitFeedback.mockResolvedValue({ id: 'rated_switch1' })
     useSidebarStore.setState({ replyRating: 'good' })
 
     const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
@@ -95,26 +120,86 @@ describe('useSubmitFeedback toggle', () => {
     expect(mockSubmitFeedback).toHaveBeenCalledOnce()
   })
 
-  it('clears bad rating and skips backend call when thumbs down clicked twice', async () => {
-    mockSubmitFeedback.mockResolvedValue(undefined)
-    useSidebarStore.setState({ replyRating: 'bad' })
+  it('clears bad rating and calls delete when thumbs down clicked twice', async () => {
+    useSidebarStore.setState({ replyRating: null })
 
     const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
     const { renderHook, act } = await import('@testing-library/react')
     const { result } = renderHook(() => useSubmitFeedback())
 
+    // First: submit bad rating
     await act(async () => {
       await result.current.submitRating('bad')
     })
+    expect(mockSubmitFeedback).toHaveBeenCalledOnce()
 
+    // Second: toggle off
+    await act(async () => {
+      await result.current.submitRating('bad')
+    })
     expect(useSidebarStore.getState().replyRating).toBeNull()
-    expect(mockSubmitFeedback).not.toHaveBeenCalled()
+    expect(mockDeleteFeedback).toHaveBeenCalledWith('rated_test123')
+  })
+})
+
+describe('useSubmitFeedback delete error handling', () => {
+  beforeEach(() => {
+    mockSubmitFeedback.mockReset().mockResolvedValue({ id: 'rated_err1' })
+    mockDeleteFeedback.mockReset()
+    useSidebarStore.setState(defaultState)
+  })
+
+  it('sets feedbackError when delete fails', async () => {
+    mockDeleteFeedback.mockRejectedValueOnce(new Error('Network error'))
+    useSidebarStore.setState({ replyRating: null })
+
+    const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
+    const { renderHook, act, waitFor } = await import('@testing-library/react')
+    const { result } = renderHook(() => useSubmitFeedback())
+
+    // Submit first
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+
+    // Toggle off — delete fails
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+
+    await waitFor(() => {
+      expect(result.current.feedbackError).toBe('Remove failed')
+    })
+  })
+
+  it('shows ratingRemoved on successful delete', async () => {
+    mockDeleteFeedback.mockResolvedValueOnce(undefined)
+    useSidebarStore.setState({ replyRating: null })
+
+    const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
+    const { renderHook, act, waitFor } = await import('@testing-library/react')
+    const { result } = renderHook(() => useSubmitFeedback())
+
+    // Submit first
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+
+    // Toggle off — delete succeeds
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+
+    await waitFor(() => {
+      expect(result.current.ratingRemoved).toBe(true)
+    })
   })
 })
 
 describe('useSubmitFeedback rollback', () => {
   beforeEach(() => {
-    mockSubmitFeedback.mockReset()
+    mockSubmitFeedback.mockReset().mockResolvedValue({ id: 'rated_rollback1' })
+    mockDeleteFeedback.mockReset().mockResolvedValue(undefined)
     useSidebarStore.setState(defaultState)
   })
 
@@ -136,7 +221,7 @@ describe('useSubmitFeedback rollback', () => {
   })
 
   it('keeps replyRating when API call succeeds', async () => {
-    mockSubmitFeedback.mockResolvedValueOnce(undefined)
+    mockSubmitFeedback.mockResolvedValueOnce({ id: 'rated_ok1' })
 
     const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
     const { renderHook } = await import('@testing-library/react')
@@ -151,7 +236,8 @@ describe('useSubmitFeedback rollback', () => {
 describe('ReplyPanel rating buttons', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
-    mockSubmitFeedback.mockReset().mockResolvedValue(undefined)
+    mockSubmitFeedback.mockReset().mockResolvedValue({ id: 'rated_panel1' })
+    mockDeleteFeedback.mockReset().mockResolvedValue(undefined)
     useSidebarStore.setState(defaultState)
   })
 
@@ -196,7 +282,7 @@ describe('ReplyPanel rating buttons', () => {
   })
 
   it('shows success confirmation after successful rating', async () => {
-    mockSubmitFeedback.mockResolvedValueOnce(undefined)
+    mockSubmitFeedback.mockResolvedValueOnce({ id: 'rated_confirm1' })
 
     const React = await import('react')
     const { render } = await import('@testing-library/react')
@@ -212,8 +298,32 @@ describe('ReplyPanel rating buttons', () => {
     })
   })
 
+  it('shows removed confirmation after successful toggle-off', async () => {
+    mockSubmitFeedback.mockResolvedValueOnce({ id: 'rated_remove1' })
+
+    const React = await import('react')
+    const { render } = await import('@testing-library/react')
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    const { ReplyPanel } = await import('../../src/sidebar/components/ReplyPanel')
+
+    const { container } = render(React.createElement(ReplyPanel))
+    const thumbsUp = container.querySelector('[aria-label="Rate as helpful"]') as HTMLButtonElement
+
+    // First click — submit
+    fireEvent.click(thumbsUp)
+    await waitFor(() => {
+      expect(container.querySelector('.rating-saved')).not.toBeNull()
+    })
+
+    // Second click — toggle off and delete
+    fireEvent.click(thumbsUp)
+    await waitFor(() => {
+      expect(container.querySelector('.rating-removed')).not.toBeNull()
+    })
+  })
+
   it('allows re-rating by clicking the other button', async () => {
-    mockSubmitFeedback.mockResolvedValue(undefined)
+    mockSubmitFeedback.mockResolvedValue({ id: 'rated_rerate1' })
 
     const React = await import('react')
     const { render } = await import('@testing-library/react')

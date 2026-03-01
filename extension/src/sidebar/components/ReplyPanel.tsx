@@ -13,7 +13,7 @@ import { ErrorState } from './ErrorState'
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
   const { generate } = useGenerateReply()
-  const { submitRating, feedbackError, ratingConfirmed } = useSubmitFeedback()
+  const { submitRating, feedbackError, ratingConfirmed, ratingRemoved } = useSubmitFeedback()
   const [contextCollapsed, setContextCollapsed] = useState(false)
 
   const pinnedCount = useSidebarStore((s) => s.pinnedArticles.length)
@@ -129,7 +129,10 @@ export function ReplyPanel(): React.ReactElement {
                   {ratingConfirmed && (
                     <span className="rating-saved">&#x2713; Saved</span>
                   )}
-                  {feedbackError && !ratingConfirmed && (
+                  {ratingRemoved && !ratingConfirmed && (
+                    <span className="rating-removed">&#x2713; Removed</span>
+                  )}
+                  {feedbackError && !ratingConfirmed && !ratingRemoved && (
                     <span className="support-text error-text" role="alert">{feedbackError}</span>
                   )}
                 </div>
