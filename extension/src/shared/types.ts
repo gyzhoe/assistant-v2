@@ -120,7 +120,7 @@ export interface KBArticleListItem {
   source: string
   chunk_count: number
   imported_at: string | null
-  tags: string[]
+  tags?: string[]
 }
 
 /** KB article list response */

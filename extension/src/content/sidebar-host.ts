@@ -44,9 +44,16 @@ export class SidebarHost {
       }, OBSERVER_DEBOUNCE_MS)
     })
 
-    this.observer.observe(document.body, {
+    const targetNode = document.querySelector('#ticketDetailForm') || document.body
+    this.observer.observe(targetNode, {
       childList: true,
       subtree: true,
+      attributes: false,
+      characterData: false,
+    })
+
+    window.addEventListener('beforeunload', () => {
+      this.stop()
     })
   }
 }

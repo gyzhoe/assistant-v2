@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { storage, DEFAULT_SETTINGS } from '../lib/storage'
 import { apiClient, sendNativeCommand } from '../lib/api-client'
 import type { AppSettings, SelectorConfig } from '../shared/types'
@@ -22,15 +22,36 @@ export default function OptionsPage(): React.ReactElement {
   const [selectorsExpanded, setSelectorsExpanded] = useState(false)
   const [autoDetectMsg, setAutoDetectMsg] = useState('')
   const [isDetecting, setIsDetecting] = useState(false)
+  const initialSettingsRef = useRef('')
+  const initialTokenRef = useRef('')
+
+  const isDirty =
+    JSON.stringify(settings) !== initialSettingsRef.current ||
+    apiToken !== initialTokenRef.current
 
   useEffect(() => {
-    storage.getSettings().then(setSettings)
+    storage.getSettings().then((s) => {
+      setSettings(s)
+      initialSettingsRef.current = JSON.stringify(s)
+    })
     apiClient.models().then(setModels).catch(() => {})
     chrome.storage.local.get(STORAGE_KEY_SECRETS, (result) => {
       const secrets = result[STORAGE_KEY_SECRETS] as { apiToken?: string } | undefined
-      setApiToken(secrets?.apiToken ?? '')
+      const token = secrets?.apiToken ?? ''
+      setApiToken(token)
+      initialTokenRef.current = token
     })
   }, [])
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
 
   const handleChange = (field: keyof AppSettings, value: string) => {
     setSettings((prev) => ({ ...prev, [field]: value }))
@@ -62,6 +83,8 @@ export default function OptionsPage(): React.ReactElement {
           }
         )
       })
+      initialSettingsRef.current = JSON.stringify(settings)
+      initialTokenRef.current = apiToken
       setSaveMsg('Settings saved.')
     } catch {
       setSaveMsg('Failed to save settings.')
@@ -293,6 +316,9 @@ export default function OptionsPage(): React.ReactElement {
         >
           {isSaving ? 'Saving\u2026' : 'Save Settings'}
         </button>
+        {isDirty && (
+          <span className="options-hint font-medium">(unsaved changes)</span>
+        )}
         {saveMsg && (
           <p className="options-save-msg" role="status" aria-live="polite">{saveMsg}</p>
         )}

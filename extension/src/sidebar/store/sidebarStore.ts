@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { DEFAULT_MODEL } from '../../shared/constants'
-import type { TicketData, GenerateResponse, KBArticlePin } from '../../shared/types'
+import { DEFAULT_MODEL, STORAGE_KEY_SETTINGS } from '../../shared/constants'
+import { DEFAULT_SETTINGS, storage } from '../../lib/storage'
+import type { TicketData, GenerateResponse, KBArticlePin, AppSettings } from '../../shared/types'
 
 interface SidebarState {
   ticketData: TicketData | null
@@ -15,6 +16,8 @@ interface SidebarState {
   isEditingReply: boolean
   replyRating: 'good' | 'bad' | null
   pinnedArticles: KBArticlePin[]
+  settings: AppSettings
+  settingsLoading: boolean
 
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
@@ -30,6 +33,7 @@ interface SidebarState {
   pinArticle: (article: KBArticlePin) => void
   unpinArticle: (articleId: string) => void
   cancelGeneration: () => void
+  updateSettings: (updates: Partial<AppSettings>) => Promise<void>
   reset: () => void
 }
 
@@ -46,6 +50,8 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   isEditingReply: false,
   replyRating: null,
   pinnedArticles: [],
+  settings: DEFAULT_SETTINGS,
+  settingsLoading: true,
 
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
@@ -73,6 +79,10 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     if (abortController) abortController.abort()
     set({ isGenerating: false, abortController: null })
   },
+  updateSettings: async (updates) => {
+    await storage.saveSettings(updates)
+    set((state) => ({ settings: { ...state.settings, ...updates } }))
+  },
   reset: () => {
     const { abortController } = get()
     if (abortController) abortController.abort()
@@ -89,3 +99,23 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     })
   },
 }))
+
+// Initialize settings from chrome.storage.sync and listen for changes.
+// Guarded for environments where chrome APIs are unavailable (e.g. vitest/jsdom).
+if (typeof chrome !== 'undefined' && chrome.storage?.sync) {
+  storage.getSettings().then((s) => {
+    useSidebarStore.setState({ settings: s, settingsLoading: false })
+  })
+
+  if (chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'sync' && changes[STORAGE_KEY_SETTINGS]?.newValue) {
+        const saved = changes[STORAGE_KEY_SETTINGS].newValue as Partial<AppSettings>
+        useSidebarStore.setState({
+          settings: { ...DEFAULT_SETTINGS, ...saved },
+          settingsLoading: false,
+        })
+      }
+    })
+  }
+}
