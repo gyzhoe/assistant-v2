@@ -1,4 +1,4 @@
-import type { FeedbackRequest, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
+import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
 import { ApiError } from '../shared/api-error'
 
@@ -112,12 +112,25 @@ export const apiClient = {
     }
   },
 
-  async submitFeedback(data: FeedbackRequest): Promise<void> {
+  async submitFeedback(data: FeedbackRequest): Promise<FeedbackResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
     const resp = await fetch(`${base}/feedback`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<FeedbackResponse>
+  },
+
+  async deleteFeedback(docId: string): Promise<void> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/feedback/${encodeURIComponent(docId)}`, {
+      method: 'DELETE',
+      headers,
     })
     if (!resp.ok) {
       const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))

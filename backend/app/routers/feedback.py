@@ -9,7 +9,8 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.models.request_models import FeedbackRequest
 from app.services.embed_service import EmbedService
@@ -21,8 +22,8 @@ RATED_REPLIES_COLLECTION = "rated_replies"
 router = APIRouter(tags=["feedback"])
 
 
-@router.post("/feedback", status_code=204, response_class=Response)
-async def submit_feedback(body: FeedbackRequest, request: Request) -> Response:
+@router.post("/feedback", status_code=200)
+async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONResponse:
     """Store a rated reply in ChromaDB for future few-shot retrieval."""
     try:
         chroma_client = request.app.state.chroma_client
@@ -61,4 +62,34 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> Response:
             detail="Embedding service unavailable. Feedback not stored.",
         )
 
-    return Response(status_code=204)
+    return JSONResponse(status_code=200, content={"id": doc_id})
+
+
+@router.delete("/feedback/{doc_id}", status_code=204)
+async def delete_feedback(doc_id: str, request: Request) -> JSONResponse:
+    """Delete a rated reply from ChromaDB by document ID."""
+    try:
+        chroma_client = request.app.state.chroma_client
+        col = await asyncio.to_thread(
+            chroma_client.get_or_create_collection,
+            name=RATED_REPLIES_COLLECTION,
+            metadata={"hnsw:space": "cosine"},
+        )
+
+        # Check if the document exists before deleting
+        result = await asyncio.to_thread(col.get, ids=[doc_id])
+        if not result["ids"]:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+
+        await asyncio.to_thread(col.delete, ids=[doc_id])
+        logger.info("Feedback deleted: id=%s", doc_id)
+    except HTTPException:
+        raise
+    except (ConnectionError, ConnectionRefusedError, OSError):
+        logger.warning("ChromaDB unavailable — feedback not deleted")
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable. Feedback not deleted.",
+        )
+
+    return JSONResponse(status_code=204, content=None)

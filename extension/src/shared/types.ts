@@ -102,6 +102,11 @@ export interface FeedbackRequest {
   rating: 'good' | 'bad'
 }
 
+/** Feedback (reply rating) response — returned by POST /feedback */
+export interface FeedbackResponse {
+  id: string
+}
+
 /** Ingest URL response */
 export interface IngestUrlResponse {
   url: string
