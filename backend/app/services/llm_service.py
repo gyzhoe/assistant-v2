@@ -17,6 +17,7 @@ class LLMService:
 
     def __init__(self) -> None:
         self.base_url = settings.ollama_base_url
+        self._client = httpx.Client(timeout=120.0)
 
     async def generate(self, prompt: str, model: str) -> str:
         """Generate a completion with retry logic. Raises ConnectionError if Ollama is unreachable."""
@@ -40,25 +41,23 @@ class LLMService:
 
     def _generate_sync(self, prompt: str, model: str) -> str:
         try:
-            with httpx.Client() as client:
-                resp = client.post(
-                    f"{self.base_url}/api/generate",
-                    json={
-                        "model": model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {
-                            "temperature": settings.llm_temperature,
-                            "top_p": settings.llm_top_p,
-                            "top_k": settings.llm_top_k,
-                            "repeat_penalty": settings.llm_repeat_penalty,
-                            "num_predict": settings.llm_num_predict,
-                        },
+            resp = self._client.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": settings.llm_temperature,
+                        "top_p": settings.llm_top_p,
+                        "top_k": settings.llm_top_k,
+                        "repeat_penalty": settings.llm_repeat_penalty,
+                        "num_predict": settings.llm_num_predict,
                     },
-                    timeout=120.0,
-                )
-                resp.raise_for_status()
-                return str(resp.json()["response"])
+                },
+            )
+            resp.raise_for_status()
+            return str(resp.json()["response"])
         except httpx.ConnectError as exc:
             raise ConnectionError(
                 f"Ollama service unreachable at {self.base_url}"

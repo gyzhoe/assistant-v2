@@ -215,7 +215,7 @@ async def create_article(
         pass  # Collection doesn't exist yet — fine
 
     # Check semaphore (non-blocking)
-    if not upload_semaphore._value:  # noqa: SLF001
+    if upload_semaphore.locked():
         raise HTTPException(
             status_code=409,
             detail="Another ingestion is already in progress. Please wait.",
@@ -334,7 +334,7 @@ async def update_article(
     original_imported_at = first_meta.get("imported_at", "")
 
     # Check semaphore (non-blocking)
-    if not upload_semaphore._value:  # noqa: SLF001
+    if upload_semaphore.locked():
         raise HTTPException(
             status_code=409,
             detail="Another ingestion is already in progress. Please wait.",

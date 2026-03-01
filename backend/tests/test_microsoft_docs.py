@@ -61,8 +61,6 @@ async def test_search_returns_docs() -> None:
         return mock_article_resp
 
     mock_client = MagicMock()
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get = fake_client_get
 
     with patch("app.services.microsoft_docs.httpx.Client", return_value=mock_client):
@@ -91,8 +89,6 @@ async def test_search_empty_keywords_returns_empty() -> None:
 @pytest.mark.asyncio
 async def test_search_api_timeout_returns_empty() -> None:
     mock_client = MagicMock()
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get.side_effect = httpx.TimeoutException("timeout")
 
     with patch("app.services.microsoft_docs.httpx.Client", return_value=mock_client):
@@ -109,8 +105,6 @@ async def test_search_api_error_returns_empty() -> None:
     mock_resp.request = MagicMock()
 
     mock_client = MagicMock()
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get.side_effect = httpx.HTTPStatusError(
         "Server Error", request=mock_resp.request, response=mock_resp
     )
@@ -156,8 +150,6 @@ async def test_cache_hit() -> None:
         return mock_article_resp
 
     mock_client = MagicMock()
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get = fake_get
 
     with patch("app.services.microsoft_docs.httpx.Client", return_value=mock_client):
@@ -183,8 +175,6 @@ async def test_cache_expired() -> None:
     mock_search_resp.raise_for_status = MagicMock()
 
     mock_client = MagicMock()
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get.return_value = mock_search_resp
 
     with patch("app.services.microsoft_docs.httpx.Client", return_value=mock_client):
@@ -226,8 +216,6 @@ def test_search_api_filters_non_learn_urls() -> None:
     mock_resp.raise_for_status = MagicMock()
 
     mock_client = MagicMock()
-    mock_client.__enter__ = MagicMock(return_value=mock_client)
-    mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get.return_value = mock_resp
 
     with patch("app.services.microsoft_docs.httpx.Client", return_value=mock_client):
