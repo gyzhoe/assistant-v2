@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] — Sprint 4 Production Hardening (2026-03-01)
+
+### Changed
+
+- **L13**: Rewrite all 4 middleware classes (`SecurityHeadersMiddleware`, `APITokenMiddleware`, `RateLimitMiddleware`, `RequestSizeLimitMiddleware`) from `BaseHTTPMiddleware` to pure ASGI for streaming support and reduced memory usage
+- **L17**: Replace `sessionStorage` API token in Management SPA with HttpOnly cookie session — `POST /auth/login`, `POST /auth/logout`, `GET /auth/check` endpoints, automatic session expiry and sweep
+
+### Added
+
+- **L10**: Backend test coverage: 23 new tests — CLI commands (`test_cli.py`), pipeline methods (`test_pipeline_extended.py`), logging config (`test_logging_config.py`)
+- **L10**: Frontend test coverage: 40 new unit tests across 6 files — management API, generate reply hook, SidebarHost, content script wiring, TokenGate, useTicketData
+- **L17**: Auth router (`backend/app/routers/auth.py`) with in-memory session store, 24h expiry, periodic sweep
+- **L17**: `session_max_age` configuration option in backend settings
+- **L27**: 15 E2E tests for Management SPA via Playwright — health, auth flow, article CRUD, article list, theme toggle
+- **L27**: Playwright config with `webServer` auto-start for backend
+- **L17**: 10 auth tests (`test_auth.py`) covering login/logout/check/sweep/middleware integration
+
+### Security
+
+- Management SPA token is now HttpOnly (JS cannot read it) + SameSite=Strict (CSRF-proof)
+- Extension sidebar unchanged — still uses `X-Extension-Token` header via `chrome.storage.local`
+
+### Test Coverage
+
+- Extension tests: 143 (+40 new from Sprint 4)
+- Backend tests: 291 (+23 new from Sprint 4)
+- E2E tests: 15 (new)
+- **Total:** 449 tests
+
 ## [1.10.0] — Sprint 3 (2026-03-01)
 
 ### Added
