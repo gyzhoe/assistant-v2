@@ -32,22 +32,22 @@ vi.stubGlobal('chrome', {
 
 // Mock the content script dependencies
 vi.mock('../../src/content/dom-reader', () => ({
-  DOMReader: vi.fn().mockImplementation(() => ({
-    ready: mockReady,
-    extract: mockExtract,
-  })),
+  DOMReader: class MockDOMReader {
+    ready = mockReady
+    extract = mockExtract
+  },
 }))
 
 vi.mock('../../src/content/dom-inserter', () => ({
-  DOMInserter: vi.fn().mockImplementation(() => ({
-    insertReply: mockInsertReply,
-  })),
+  DOMInserter: class MockDOMInserter {
+    insertReply = mockInsertReply
+  },
 }))
 
 vi.mock('../../src/content/sidebar-host', () => ({
-  SidebarHost: vi.fn().mockImplementation(() => ({
-    start: vi.fn(),
-  })),
+  SidebarHost: class MockSidebarHost {
+    start = vi.fn()
+  },
 }))
 
 describe('content/index.ts message handler', () => {
@@ -74,8 +74,9 @@ describe('content/index.ts message handler', () => {
     })
 
     await import('../../src/content/index')
-    // Wait for init() to complete
-    await new Promise((r) => setTimeout(r, 0))
+    // Wait for init() to complete — init() chains multiple dynamic imports + await ready(),
+    // requiring several microtask flushes
+    await new Promise((r) => setTimeout(r, 50))
   })
 
   it('INSERT_REPLY calls inserter and sends INSERT_SUCCESS', () => {
