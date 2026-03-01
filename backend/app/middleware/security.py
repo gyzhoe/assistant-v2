@@ -1,6 +1,8 @@
 """
 Enterprise security middleware for the AI Helpdesk Assistant backend.
 
+Pure ASGI implementations — no BaseHTTPMiddleware overhead.
+
 Provides:
 - API token authentication (shared secret between extension and backend)
 - Request size limiting
@@ -9,26 +11,64 @@ Provides:
 """
 
 import asyncio
+import json
 import logging
 import secrets
 import time
 from collections import defaultdict
-from collections.abc import Awaitable, Callable
+from collections.abc import MutableMapping
 
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Shared ASGI helper
+# ---------------------------------------------------------------------------
+
+
+async def _send_error_response(send: Send, status: int, body: dict[str, object]) -> None:
+    """Send JSON error directly via ASGI send (no FastAPI dependency)."""
+    payload = json.dumps(body).encode("utf-8")
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                [b"content-type", b"application/json"],
+                [b"content-length", str(len(payload)).encode("ascii")],
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": payload})
+
+
+def _get_header(scope: Scope, name: bytes) -> str:
+    """Extract a single header value from an ASGI scope (case-insensitive key)."""
+    headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
+    for key, value in headers:
+        if key.lower() == name:
+            return value.decode("latin-1")
+    return ""
+
+
+def _get_client_ip(scope: Scope) -> str:
+    """Extract the client IP from an ASGI scope."""
+    client: tuple[str, int] | None = scope.get("client")
+    if client:
+        return client[0]
+    return "unknown"
+
+
 # ---------------------------------------------------------------------------
 # API Token Authentication Middleware
 # ---------------------------------------------------------------------------
 
-class APITokenMiddleware(BaseHTTPMiddleware):
+
+class APITokenMiddleware:
     """
     Validates the X-Extension-Token header on all non-health requests.
 
@@ -42,26 +82,37 @@ class APITokenMiddleware(BaseHTTPMiddleware):
     EXEMPT_PATHS = {"/health", "/docs", "/openapi.json"}
 
     def __init__(self, app: ASGIApp) -> None:
-        super().__init__(app)
+        self.app = app
         self._token = settings.api_token
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if request.url.path in self.EXEMPT_PATHS:
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path: str = scope["path"]
+
+        if path in self.EXEMPT_PATHS:
+            await self.app(scope, receive, send)
+            return
 
         # If no token is configured, skip auth (dev mode only)
         if not self._token:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
-        provided = request.headers.get("X-Extension-Token", "")
+        provided = _get_header(scope, b"x-extension-token")
         if not provided or not secrets.compare_digest(provided, self._token):
-            logger.warning("Auth failure on %s from %s", request.url.path, request.client.host if request.client else "unknown")
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Unauthorized. Missing or invalid X-Extension-Token header."},
+            client_ip = _get_client_ip(scope)
+            logger.warning("Auth failure on %s from %s", path, client_ip)
+            await _send_error_response(
+                send,
+                401,
+                {"detail": "Unauthorized. Missing or invalid X-Extension-Token header."},
             )
+            return
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +123,7 @@ INGEST_RATE_LIMIT = 5  # max /ingest/upload requests per client IP per minute
 FEEDBACK_RATE_LIMIT = 10  # max /feedback requests per client IP per minute
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+class RateLimitMiddleware:
     """
     Simple in-process rate limiter.
     Limits /generate and /ingest/upload to configurable requests per client IP.
@@ -102,7 +153,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     RATE_LIMITED_PATHS = {"/generate", "/ingest/upload", "/ingest/url", "/feedback"}
 
     def __init__(self, app: ASGIApp, max_per_minute: int = 20) -> None:
-        super().__init__(app)
+        self.app = app
         self._max = max_per_minute
         self._window = 60.0  # seconds
         # Keyed by "{path}:{ip}" to track per-path, per-IP rate limits
@@ -132,13 +183,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         self._last_sweep = now
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if request.url.path not in self.RATE_LIMITED_PATHS:
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        client_ip = request.client.host if request.client else "unknown"
-        rate_key = f"{request.url.path}:{client_ip}"
-        limit = self._path_limits.get(request.url.path, self._max)
+        path: str = scope["path"]
+
+        if path not in self.RATE_LIMITED_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        client_ip = _get_client_ip(scope)
+        rate_key = f"{path}:{client_ip}"
+        limit = self._path_limits.get(path, self._max)
         now = time.monotonic()
 
         async with self._lock:
@@ -150,25 +208,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._counts[rate_key] = [t for t in timestamps if now - t < self._window]
 
             if len(self._counts[rate_key]) >= limit:
-                logger.warning("Rate limit exceeded for %s on %s", client_ip, request.url.path)
-                return JSONResponse(
-                    status_code=429,
-                    content={
+                logger.warning("Rate limit exceeded for %s on %s", client_ip, path)
+                await _send_error_response(
+                    send,
+                    429,
+                    {
                         "detail": f"Rate limit exceeded. Max {limit} requests per minute.",
                         "error_code": "RATE_LIMITED",
                     },
                 )
+                return
 
             self._counts[rate_key].append(now)
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
 # Request Size Limiting Middleware
 # ---------------------------------------------------------------------------
 
-class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+
+class RequestSizeLimitMiddleware:
     """
     Rejects requests whose body exceeds max_bytes.
     Prevents oversized payloads from being forwarded to Ollama.
@@ -181,30 +242,84 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         max_bytes: int = 65_536,
         exempt_paths: set[str] | None = None,
     ) -> None:
-        super().__init__(app)
+        self.app = app
         self._max_bytes = max_bytes
         self._exempt_paths = exempt_paths or set()
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        exempt = request.url.path in self._exempt_paths or any(
-            request.url.path.startswith(p + "/") for p in self._exempt_paths
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path: str = scope["path"]
+        method: str = scope.get("method", "GET")
+
+        # Check exemptions
+        exempt = path in self._exempt_paths or any(
+            path.startswith(p + "/") for p in self._exempt_paths
         )
         if exempt:
-            return await call_next(request)
-        content_length = request.headers.get("content-length")
-        if content_length:
-            if int(content_length) > self._max_bytes:
-                return self._too_large()
-        elif request.method in {"POST", "PUT", "PATCH"}:
-            body = await request.body()
-            if len(body) > self._max_bytes:
-                return self._too_large()
-        return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
-    def _too_large(self) -> JSONResponse:
-        return JSONResponse(
-            status_code=413,
-            content={
+        # Fast path: check Content-Length header
+        content_length_str = _get_header(scope, b"content-length")
+        if content_length_str:
+            try:
+                content_length = int(content_length_str)
+            except ValueError:
+                content_length = 0
+            if content_length > self._max_bytes:
+                await self._send_too_large(send)
+                return
+            # Content-Length is within limit; pass through
+            await self.app(scope, receive, send)
+            return
+
+        # GET/HEAD/OPTIONS typically have no body — skip streaming check
+        if method in {"GET", "HEAD", "OPTIONS"}:
+            await self.app(scope, receive, send)
+            return
+
+        # Streaming path: buffer body chunks, reject if total exceeds limit
+        bytes_received = 0
+        body_parts: list[bytes] = []
+        exceeded = False
+
+        while True:
+            message = await receive()
+            body_chunk = message.get("body", b"")
+            if isinstance(body_chunk, (bytes, bytearray)):
+                bytes_received += len(body_chunk)
+                body_parts.append(bytes(body_chunk))
+            if bytes_received > self._max_bytes:
+                exceeded = True
+                break
+            if not message.get("more_body", False):
+                break
+
+        if exceeded:
+            await self._send_too_large(send)
+            return
+
+        # Replay the consumed body to the inner app
+        full_body = b"".join(body_parts)
+        body_sent = False
+
+        async def replay_receive() -> dict[str, object]:
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": full_body, "more_body": False}
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
+
+    async def _send_too_large(self, send: Send) -> None:
+        await _send_error_response(
+            send,
+            413,
+            {
                 "detail": f"Request body too large. Max {self._max_bytes} bytes.",
                 "error_code": "PAYLOAD_TOO_LARGE",
             },
@@ -215,16 +330,35 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 # Security Headers Middleware
 # ---------------------------------------------------------------------------
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+
+class SecurityHeadersMiddleware:
     """Adds defensive HTTP security headers to all responses."""
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Cache-Control"] = "no-store"
-        response.headers["Referrer-Policy"] = "no-referrer"
-        # Remove server version banner
-        if "server" in response.headers:
-            del response.headers["server"]
-        return response
+    SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+        (b"cache-control", b"no-store"),
+        (b"referrer-policy", b"no-referrer"),
+    ]
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: MutableMapping[str, object]) -> None:
+            if message.get("type") == "http.response.start":
+                raw_headers: object = message.get("headers", [])
+                headers: list[list[bytes]] = list(raw_headers)  # type: ignore[call-overload]
+                # Remove server header if present
+                headers = [h for h in headers if h[0].lower() != b"server"]
+                # Add security headers
+                for name, value in self.SECURITY_HEADERS:
+                    headers.append([name, value])
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
