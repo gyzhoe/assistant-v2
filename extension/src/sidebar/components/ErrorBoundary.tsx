@@ -25,6 +25,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
     }
   }
 
+  private handleRetry = () => {
+    this.setState({ hasError: false, error: null })
+  }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -36,13 +40,22 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <p className="hint">
             Try refreshing the page. If the issue persists, copy the error and report it.
           </p>
-          <button
-            onClick={this.handleCopyError}
-            className="link-btn"
-            aria-label="Copy error details to clipboard"
-          >
-            Copy error details
-          </button>
+          <div className="error-fallback-actions">
+            <button
+              onClick={this.handleRetry}
+              className="secondary-btn"
+              aria-label="Try again"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={this.handleCopyError}
+              className="link-btn"
+              aria-label="Copy error details to clipboard"
+            >
+              Copy error details
+            </button>
+          </div>
         </div>
       )
     }
