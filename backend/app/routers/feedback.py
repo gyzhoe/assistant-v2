@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
 from app.models.request_models import FeedbackRequest
 from app.services.embed_service import EmbedService
@@ -66,7 +67,7 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONRespon
 
 
 @router.delete("/feedback/{doc_id}", status_code=204)
-async def delete_feedback(doc_id: str, request: Request) -> JSONResponse:
+async def delete_feedback(doc_id: str, request: Request) -> Response:
     """Delete a rated reply from ChromaDB by document ID."""
     try:
         chroma_client = request.app.state.chroma_client
@@ -92,4 +93,4 @@ async def delete_feedback(doc_id: str, request: Request) -> JSONResponse:
             detail="Database unavailable. Feedback not deleted.",
         )
 
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
