@@ -178,12 +178,15 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   // --- Backend controls ---
 
-  const handleStopBackend = () => {
+  const handleStopBackend = async () => {
     if (actionInFlightRef.current) return
     actionInFlightRef.current = true
     setStatus('stopping')
-    // Fire-and-forget — don't await; server may die before responding
-    apiClient.shutdown().catch(() => {})
+    // Native messaging (OS-level kill) first, HTTP fallback
+    const resp = await sendNativeCommand('stop_backend')
+    if (!resp.ok) {
+      apiClient.shutdown().catch(() => {})
+    }
     clearTimer()
     // Go straight to offline after a brief visual pause
     setTimeout(() => {
@@ -240,7 +243,11 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   const handleStopOllama = async () => {
     setOllamaAction('stopping')
-    try { await apiClient.ollamaStop() } catch { /* ignore */ }
+    // Native messaging (OS-level kill) first, HTTP fallback
+    const resp = await sendNativeCommand('stop_ollama')
+    if (!resp.ok) {
+      try { await apiClient.ollamaStop() } catch { /* ignore */ }
+    }
     clearTimer()
     setTimeout(() => {
       if (mountedRef.current) {
