@@ -5,7 +5,6 @@ Includes SSRF prevention to block requests to private/internal networks.
 Every redirect hop is re-validated to prevent redirect-based SSRF bypass.
 """
 
-import hashlib
 import ipaddress
 import logging
 import socket
@@ -14,9 +13,10 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
 
 from app.utils.chunker import chunk_by_tokens
+from ingestion.utils import content_id as _content_id
+from ingestion.utils import extract_html_text
 
 logger = logging.getLogger(__name__)
 
@@ -158,36 +158,6 @@ def fetch_url(url: str) -> tuple[str, str, str]:
         raise ValueError(f"Too many redirects (max {MAX_REDIRECTS})")
 
 
-def extract_content(html: str) -> tuple[str, str]:
-    """Extract readable text and title from HTML.
-
-    Returns (text, title).
-    """
-    soup = BeautifulSoup(html, "html.parser")
-
-    # Extract title
-    title_tag = soup.find("title")
-    title = title_tag.get_text(strip=True) if title_tag else ""
-
-    # Remove boilerplate elements
-    for tag in soup.find_all(["script", "style", "nav", "footer", "header", "aside"]):
-        tag.decompose()
-
-    # Try to find main content area
-    main = soup.find("main") or soup.find("article") or soup.find("div", {"role": "main"})
-    target = main if main else soup.body if soup.body else soup
-
-    text = target.get_text(separator="\n", strip=True)
-    # Collapse multiple blank lines
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return "\n".join(lines), title
-
-
-def _content_id(content: str) -> str:
-    """Stable SHA-256 document ID."""
-    return hashlib.sha256(content.encode()).hexdigest()
-
-
 def load_url(url: str) -> Iterator[tuple[str, str, dict[str, str]]]:
     """Fetch URL, extract content, chunk, and yield (doc_id, text, metadata) tuples.
 
@@ -200,7 +170,7 @@ def load_url(url: str) -> Iterator[tuple[str, str, dict[str, str]]]:
         text = content
         title = urlparse(final_url).path.split("/")[-1] or final_url
     else:
-        text, title = extract_content(content)
+        text, title = extract_html_text(content)
 
     if not title:
         title = final_url

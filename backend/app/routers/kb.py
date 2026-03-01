@@ -50,6 +50,7 @@ _CACHE_TTL = 300  # 5 minutes
 _article_cache: dict[str, dict[str, Any]] = {}
 _cache_timestamp: float = 0.0
 _total_chunks_cached: int = 0
+_cache_lock = asyncio.Lock()
 
 
 def invalidate_article_cache() -> None:
@@ -113,31 +114,36 @@ async def _get_article_index(
     """
     global _article_cache, _cache_timestamp, _total_chunks_cached
 
-    if _is_cache_valid():
-        return _article_cache, _total_chunks_cached
+    async with _cache_lock:
+        if _is_cache_valid():
+            return _article_cache, _total_chunks_cached
 
-    try:
-        col = await asyncio.to_thread(
-            chroma_client.get_collection, KB_COLLECTION,
+        try:
+            col = await asyncio.to_thread(
+                chroma_client.get_collection, KB_COLLECTION,
+            )
+        except (ValueError, Exception):
+            # Collection doesn't exist
+            _article_cache = {}
+            _total_chunks_cached = 0
+            _cache_timestamp = time.monotonic()
+            return _article_cache, _total_chunks_cached
+
+        result = await asyncio.to_thread(
+            col.get, include=["metadatas"],
         )
-    except (ValueError, Exception):
-        # Collection doesn't exist
-        _article_cache = {}
-        _total_chunks_cached = 0
+
+        ids: list[str] = result.get("ids", [])
+        metadatas = cast(
+            list[dict[str, Any]], result.get("metadatas", []),
+        )
+
+        _article_cache, _total_chunks_cached = _build_article_index(
+            ids, metadatas,
+        )
         _cache_timestamp = time.monotonic()
+
         return _article_cache, _total_chunks_cached
-
-    result = await asyncio.to_thread(
-        col.get, include=["metadatas"],
-    )
-
-    ids: list[str] = result.get("ids", [])
-    metadatas = cast(list[dict[str, Any]], result.get("metadatas", []))
-
-    _article_cache, _total_chunks_cached = _build_article_index(ids, metadatas)
-    _cache_timestamp = time.monotonic()
-
-    return _article_cache, _total_chunks_cached
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -190,24 +196,40 @@ async def create_article(
     request: Request, body: CreateArticleRequest,
 ) -> CreateArticleResponse:
     """Create a new KB article from markdown content."""
-    # Generate article_id from title + source marker
+    # Generate article_id from truncated SHA-256 of title + source marker.
+    # 16 hex chars = 64 bits → collision probability ~1 in 2^32 at 2^32
+    # documents (birthday paradox). Checked below before insert.
     article_id = hashlib.sha256(
         (body.title + "manual").encode(),
     ).hexdigest()[:16]
 
-    # Check for duplicate
+    # Check for duplicate title or hash collision
     chroma_client = request.app.state.chroma_client
     try:
         col = await asyncio.to_thread(
             chroma_client.get_collection, KB_COLLECTION,
         )
         existing = await asyncio.to_thread(
-            col.get, where={"article_id": article_id}, limit=1,
+            col.get,
+            where={"article_id": article_id},
+            limit=1,
+            include=["metadatas"],
         )
         if existing.get("ids"):
+            existing_meta = existing.get("metadatas", [{}])[0]
+            existing_title = existing_meta.get("title", "")
+            if existing_title == body.title:
+                raise HTTPException(
+                    status_code=409,
+                    detail="An article with this title already exists.",
+                )
+            # Hash collision — different title, same article_id
             raise HTTPException(
                 status_code=409,
-                detail="An article with this title already exists.",
+                detail=(
+                    "Article ID collision detected. "
+                    "Please change the title slightly and retry."
+                ),
             )
     except HTTPException:
         raise
@@ -344,10 +366,7 @@ async def update_article(
         try:
             start_t = time.perf_counter()
 
-            # 2. Delete existing chunks
-            await asyncio.to_thread(col.delete, ids=ids)
-
-            # 3. Re-chunk new content
+            # 2. Re-chunk new content
             sections = chunk_by_markdown_headings(body.content)
 
             if not sections:
@@ -356,10 +375,13 @@ async def update_article(
                     detail="No content to ingest after processing.",
                 )
 
-            # 4. Build chunk stream preserving original article_id and imported_at
+            # 3. Build chunk stream preserving original article_id and imported_at
+            new_chunk_ids: list[str] = []
+
             def chunk_stream() -> Iterator[tuple[str, str, dict[str, str]]]:
                 for idx, (section_title, chunk_text) in enumerate(sections):
                     chunk_id = f"{article_id}_chunk_{idx}"
+                    new_chunk_ids.append(chunk_id)
                     metadata = {
                         "article_id": article_id,
                         "title": body.title,
@@ -370,7 +392,7 @@ async def update_article(
                     }
                     yield chunk_id, chunk_text, metadata
 
-            # 5. Embed and upsert
+            # 4. Upsert new chunks first (safe: old data survives on failure)
             embed_service = EmbedService()
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
@@ -380,6 +402,11 @@ async def update_article(
             total = await asyncio.to_thread(
                 pipeline.upsert_stream, col, chunk_stream(),
             )
+
+            # 5. Delete old chunks that are no longer needed
+            stale_ids = [cid for cid in ids if cid not in set(new_chunk_ids)]
+            if stale_ids:
+                await asyncio.to_thread(col.delete, ids=stale_ids)
 
             elapsed_ms = int((time.perf_counter() - start_t) * 1000)
             invalidate_article_cache()

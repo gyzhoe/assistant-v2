@@ -19,15 +19,11 @@ CSV format: header row with the same field names (case-insensitive).
 """
 
 import csv
-import hashlib
 import json
 from collections.abc import Iterator
 from pathlib import Path
 
-
-def _content_id(content: str) -> str:
-    """Stable SHA-256 document ID — re-ingesting same content is idempotent."""
-    return hashlib.sha256(content.encode()).hexdigest()
+from ingestion.utils import content_id as _content_id
 
 
 def load_tickets_json(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:

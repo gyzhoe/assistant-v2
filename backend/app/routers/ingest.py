@@ -131,7 +131,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
             ) from exc
         finally:
             if tmp_path is not None:
-                _cleanup_temp(tmp_path)
+                await _cleanup_temp(tmp_path)
 
 
 @router.post("/ingest/collections/{name}/clear")
@@ -274,7 +274,7 @@ async def _stream_to_temp(
             written += len(chunk)
             if written > max_bytes:
                 tmp.close()
-                _cleanup_temp(tmp_path)
+                await _cleanup_temp(tmp_path)
                 raise _PayloadTooLargeError(max_bytes)
             tmp.write(chunk)
         tmp.close()
@@ -282,7 +282,7 @@ async def _stream_to_temp(
         raise
     except Exception:
         tmp.close()
-        _cleanup_temp(tmp_path)
+        await _cleanup_temp(tmp_path)
         raise
 
     return tmp_path
@@ -296,7 +296,7 @@ class _PayloadTooLargeError(Exception):
         super().__init__(f"File exceeds maximum upload size of {max_bytes} bytes.")
 
 
-def _cleanup_temp(path: Path, retries: int = 3, delay: float = 0.5) -> None:
+async def _cleanup_temp(path: Path, retries: int = 3, delay: float = 0.5) -> None:
     """Remove temp file with retries for Windows AV locks."""
     for attempt in range(retries):
         try:
@@ -304,5 +304,5 @@ def _cleanup_temp(path: Path, retries: int = 3, delay: float = 0.5) -> None:
             return
         except OSError:
             if attempt < retries - 1:
-                time.sleep(delay)
+                await asyncio.sleep(delay)
     logger.warning("Could not delete temp file: %s", path)

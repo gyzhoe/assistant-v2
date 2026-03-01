@@ -336,6 +336,8 @@ def _build_prompt(
     description = body.ticket_description or "(not available)"
     custom = "\n".join(f"  {k}: {v}" for k, v in body.custom_fields.items()) if body.custom_fields else "(none)"
     examples_section = _build_examples_section(few_shot_examples)
+    env_ctx = settings.environment_context.strip()
+    environment_section = f"ENVIRONMENT\n{env_ctx}\n\n" if env_ctx else ""
     return f"""You are a first-line IT helpdesk technician drafting a reply to a user's ticket.
 
 TICKET
@@ -348,13 +350,7 @@ Custom Fields:
 KNOWLEDGE BASE
 {context_text if context_text else "(no matching articles found)"}
 
-ENVIRONMENT
-- Managed university network using 802.1X authentication.
-- Managed devices have hostnames matching GBW-*-**** and connect automatically via dot1x.
-- Personal devices must self-register for CampusNet. If self-registration fails, local IT (our department) registers the device manually.
-- Internal resources require wired or VPN connection — guest/CampusNet Wi-Fi has limited access.
-
-GROUNDING RULES
+{environment_section}GROUNDING RULES
 1. ONLY use information from the KNOWLEDGE BASE and ENVIRONMENT sections above. If neither contains a relevant answer, say so and escalate.
 2. NEVER invent software versions, URLs, KB article references, ticket numbers, or procedures not present in the context above.
 3. If the KNOWLEDGE BASE shows "(no matching articles found)", rely on ENVIRONMENT facts and general IT knowledge only. Do NOT fabricate KB references.

@@ -12,11 +12,11 @@ from ingestion.url_loader import (
     ResponseTooLargeError,
     SSRFError,
     _is_private_ip,
-    extract_content,
     fetch_url,
     load_url,
     validate_url,
 )
+from ingestion.utils import extract_html_text
 
 # ---------------------------------------------------------------------------
 # validate_url — SSRF prevention
@@ -331,11 +331,11 @@ def test_fetch_url_too_many_redirects() -> None:
 
 
 # ---------------------------------------------------------------------------
-# extract_content
+# extract_html_text
 # ---------------------------------------------------------------------------
 
 
-def test_extract_content_strips_boilerplate() -> None:
+def test_extract_html_text_strips_boilerplate() -> None:
     html = """
     <html>
     <head><title>My Article</title></head>
@@ -349,7 +349,7 @@ def test_extract_content_strips_boilerplate() -> None:
     </body>
     </html>
     """
-    text, title = extract_content(html)
+    text, title = extract_html_text(html)
     assert title == "My Article"
     assert "Main content here." in text
     assert "Navigation" not in text
@@ -358,16 +358,16 @@ def test_extract_content_strips_boilerplate() -> None:
     assert "alert" not in text
 
 
-def test_extract_content_extracts_title() -> None:
+def test_extract_html_text_extracts_title() -> None:
     html = "<html><head><title>Test Title</title></head><body><p>Body</p></body></html>"
-    text, title = extract_content(html)
+    text, title = extract_html_text(html)
     assert title == "Test Title"
     assert "Body" in text
 
 
-def test_extract_content_no_title() -> None:
+def test_extract_html_text_no_title() -> None:
     html = "<html><body><p>No title page</p></body></html>"
-    text, title = extract_content(html)
+    text, title = extract_html_text(html)
     assert title == ""
     assert "No title page" in text
 

@@ -5,7 +5,6 @@ HTML: splits by <h2>/<h3> headings using BeautifulSoup.
 PDF: page-by-page with 500-token sliding window and 50-token overlap.
 """
 
-import hashlib
 import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -15,13 +14,9 @@ from bs4 import BeautifulSoup, Tag
 from pypdf import PdfReader
 
 from app.utils.chunker import chunk_by_tokens
+from ingestion.utils import content_id as _content_id
 
 logger = logging.getLogger(__name__)
-
-
-def _content_id(content: str) -> str:
-    """Stable SHA-256 document ID — re-ingesting same content is idempotent."""
-    return hashlib.sha256(content.encode()).hexdigest()
 
 
 # ── HTML loader ───────────────────────────────────────────────────────────────

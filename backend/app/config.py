@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     # Microsoft Learn live search at generation time
     microsoft_docs_enabled: bool = True
 
+    # Optional environment context injected into the LLM prompt.
+    # Set this in .env to describe your network/environment for better replies.
+    # Example: "Managed corporate network. Devices use certificate-based auth."
+    # Leave empty to omit the ENVIRONMENT section from the prompt.
+    environment_context: str = ""
+
     @model_validator(mode="after")
     def reject_wildcard_cors_with_token(self) -> Self:
         """Reject CORS_ORIGIN=* when API_TOKEN is set.
