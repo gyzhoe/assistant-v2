@@ -63,16 +63,21 @@ describe('useSubmitFeedback rollback', () => {
     useSidebarStore.setState(defaultState)
   })
 
-  it('rolls back replyRating to null when API call fails', async () => {
+  it('keeps replyRating and sets feedbackError when API call fails', async () => {
     mockSubmitFeedback.mockRejectedValueOnce(new Error('Network error'))
 
     const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
-    const { renderHook } = await import('@testing-library/react')
+    const { renderHook, act, waitFor } = await import('@testing-library/react')
     const { result } = renderHook(() => useSubmitFeedback())
 
-    await result.current.submitRating('good')
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
 
-    expect(useSidebarStore.getState().replyRating).toBeNull()
+    expect(useSidebarStore.getState().replyRating).toBe('good')
+    await waitFor(() => {
+      expect(result.current.feedbackError).toBe('Rating not saved')
+    })
   })
 
   it('keeps replyRating when API call succeeds', async () => {

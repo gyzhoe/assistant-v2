@@ -45,7 +45,7 @@ export interface KBStats {
 
 /** Delete article response */
 export interface DeleteResponse {
-  status: string
+  article_id: string
   chunks_deleted: number
 }
 

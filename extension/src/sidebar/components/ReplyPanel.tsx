@@ -13,7 +13,7 @@ import { ErrorState } from './ErrorState'
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
   const { generate } = useGenerateReply()
-  const { submitRating } = useSubmitFeedback()
+  const { submitRating, feedbackError } = useSubmitFeedback()
   const [contextCollapsed, setContextCollapsed] = useState(false)
 
   const pinnedCount = useSidebarStore((s) => s.pinnedArticles.length)
@@ -125,6 +125,9 @@ export function ReplyPanel(): React.ReactElement {
                     &#x1F44E;
                   </button>
                 </div>
+                {feedbackError && (
+                  <span className="support-text error-text" role="alert">{feedbackError}</span>
+                )}
                 <button
                   type="button"
                   className="secondary-btn draft-toggle"

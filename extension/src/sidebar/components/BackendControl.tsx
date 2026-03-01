@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient, sendNativeCommand } from '../../lib/api-client'
 import { ThemeToggle } from './ThemeToggle'
@@ -24,6 +24,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const [collapsed, setCollapsed] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
+  const actionInFlightRef = useRef(false)
 
   const ticketData = useSidebarStore((s) => s.ticketData)
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
@@ -77,6 +78,8 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   // --- Backend controls ---
 
   const handleStopBackend = () => {
+    if (actionInFlightRef.current) return
+    actionInFlightRef.current = true
     setStatus('stopping')
     // Fire-and-forget — don't await; server may die before responding
     apiClient.shutdown().catch(() => {})
@@ -87,11 +90,14 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       setStatus('offline')
       setOllamaOk(false)
       setVersion('')
+      actionInFlightRef.current = false
       schedulePoll()
     }, 800)
   }
 
   const handleStartBackend = async () => {
+    if (actionInFlightRef.current) return
+    actionInFlightRef.current = true
     setStatus('starting')
     setNativeError('')
     const resp = await sendNativeCommand('start_backend')
@@ -99,11 +105,15 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     if (!resp.ok) {
       setNativeError(resp.error ?? 'Native messaging unavailable')
       setStatus('offline')
+      actionInFlightRef.current = false
       return
     }
     clearTimer()
     setTimeout(() => {
-      if (mountedRef.current) checkHealth().finally(() => schedulePoll())
+      if (mountedRef.current) {
+        actionInFlightRef.current = false
+        checkHealth().finally(() => schedulePoll())
+      }
     }, 3000)
   }
 
@@ -141,12 +151,12 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   // --- Readiness badges ---
 
-  const readiness = useMemo(() => [
+  const readiness = [
     { label: 'Ticket detected', ok: Boolean(isTicketPage && ticketData) },
     { label: 'Backend connected', ok: status === 'online' },
     { label: 'Ollama ready', ok: ollamaOk },
     { label: 'Model selected', ok: selectedModel.length > 0 },
-  ], [isTicketPage, ticketData, status, ollamaOk, selectedModel])
+  ]
 
   const allReady = readiness.every((r) => r.ok)
 
@@ -171,23 +181,16 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
           aria-controls="status-panel-body"
         >
           <h2 className="section-heading">Status</h2>
+          <span className="heading-right">
+            <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
+            <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
+          </span>
         </button>
         <ThemeToggle
           theme={themeSetting}
           resolvedTheme={resolvedTheme}
           onCycle={onCycleTheme}
         />
-        <div
-          className="heading-right"
-          onClick={() => setCollapsed((c) => !c)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setCollapsed((c) => !c) }}
-          aria-label={collapsed ? 'Expand status panel' : 'Collapse status panel'}
-        >
-          <span className={`status-chip ${chipClass}`}>{chipLabel}</span>
-          <span className={`chevron ${collapsed ? '' : 'open'}`} aria-hidden="true" />
-        </div>
       </div>
 
       {!collapsed && (

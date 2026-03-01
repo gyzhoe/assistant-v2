@@ -88,14 +88,6 @@ body {
 }
 
 /* ─── App layout ───────────────────────────────────── */
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--header-bg);
-}
 
 /* Brand mark — simple text mark, no gradient box */
 .brand-mark {
@@ -689,7 +681,7 @@ body {
 
 .skeleton-line-80 { width: 80%; }
 .skeleton-line-75 { width: 75%; }
-.skeleton-line-85 { width: 83.3333%; }
+.skeleton-line-85 { width: 85%; }
 .skeleton-line-gap { margin-top: 8px; }
 
 /* ─── Insert button wrapper ───────────────────────── */

@@ -320,7 +320,11 @@ export default function OptionsPage(): React.ReactElement {
           <span className="options-hint font-medium">(unsaved changes)</span>
         )}
         {saveMsg && (
-          <p className="options-save-msg" role="status" aria-live="polite">{saveMsg}</p>
+          <p
+            className={saveMsg.startsWith('Failed') ? 'options-save-msg options-save-msg--error' : 'options-save-msg options-save-msg--success'}
+            role="status"
+            aria-live="polite"
+          >{saveMsg}</p>
         )}
       </div>
 

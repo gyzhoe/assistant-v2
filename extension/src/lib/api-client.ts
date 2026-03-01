@@ -54,21 +54,21 @@ export const apiClient = {
   },
 
   async shutdown(): Promise<void> {
-    const base = await getBackendUrl()
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
     // Server may die before responding — use a short timeout and ignore errors
-    await fetch(`${base}/shutdown`, { method: 'POST', signal: AbortSignal.timeout(2000) }).catch(() => {})
+    await fetch(`${base}/shutdown`, { method: 'POST', headers, signal: AbortSignal.timeout(2000) }).catch(() => {})
   },
 
   async ollamaStart(): Promise<{ status: string }> {
-    const base = await getBackendUrl()
-    const resp = await fetch(`${base}/ollama/start`, { method: 'POST' })
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/ollama/start`, { method: 'POST', headers })
     if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to start Ollama' })
     return resp.json() as Promise<{ status: string }>
   },
 
   async ollamaStop(): Promise<{ status: string }> {
-    const base = await getBackendUrl()
-    const resp = await fetch(`${base}/ollama/stop`, { method: 'POST' })
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/ollama/stop`, { method: 'POST', headers })
     if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to stop Ollama' })
     return resp.json() as Promise<{ status: string }>
   },

@@ -839,8 +839,8 @@ body {
   font-size: 0.8125rem;
 }
 
-.import-drop-hint {
-  font-size: 0.75rem !important;
+.import-drop-zone .import-drop-hint {
+  font-size: 0.75rem;
   opacity: 0.65;
 }
 
@@ -980,7 +980,9 @@ body {
 }
 
 .token-gate-desc {
-  display: none;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 0;
 }
 
 .token-gate-form {
