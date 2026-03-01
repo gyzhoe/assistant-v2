@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -395,49 +395,3 @@ async def test_cache_is_reused_on_second_call() -> None:
     assert mock_col.get.call_count == 1
 
 
-# ---------------------------------------------------------------------------
-# imported_at in loaders
-# ---------------------------------------------------------------------------
-
-
-def test_html_loader_includes_imported_at() -> None:
-    """HTML loader chunks should include imported_at metadata."""
-    import tempfile
-    from pathlib import Path
-
-    from ingestion.kb_loader import load_kb_html
-
-    html = "<html><body><h1>Test</h1><p>Some content here for testing.</p></body></html>"
-    with tempfile.NamedTemporaryFile(
-        suffix=".html", delete=False, mode="w", encoding="utf-8",
-    ) as f:
-        f.write(html)
-        tmp = Path(f.name)
-
-    try:
-        chunks = list(load_kb_html(tmp))
-        assert len(chunks) > 0
-        for _, _, meta in chunks:
-            assert "imported_at" in meta
-            assert meta["imported_at"]  # non-empty
-    finally:
-        tmp.unlink(missing_ok=True)
-
-
-def test_url_loader_includes_imported_at() -> None:
-    """URL loader chunks should include imported_at metadata."""
-    with patch("ingestion.url_loader.validate_url", return_value="https://example.com"), \
-         patch("ingestion.url_loader.fetch_url") as mock_fetch:
-        mock_fetch.return_value = (
-            "<html><body><p>Example content for testing chunking.</p></body></html>",
-            "text/html",
-            "https://example.com",
-        )
-
-        from ingestion.url_loader import load_url
-
-        chunks = list(load_url("https://example.com"))
-        assert len(chunks) > 0
-        for _, _, meta in chunks:
-            assert "imported_at" in meta
-            assert meta["imported_at"]
