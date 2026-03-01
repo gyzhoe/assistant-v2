@@ -3,7 +3,7 @@
 ; Compile with: iscc /DMyAppVersion=1.3.0 setup.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.0"
+  #define MyAppVersion "1.8.0"
 #endif
 
 #define MyAppName     "AI Helpdesk Assistant"
