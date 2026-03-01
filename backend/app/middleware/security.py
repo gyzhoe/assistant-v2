@@ -70,16 +70,17 @@ def _get_client_ip(scope: Scope) -> str:
 
 class APITokenMiddleware:
     """
-    Validates the X-Extension-Token header on all non-health requests.
+    Validates authentication on all non-exempt requests.
 
-    The extension sends a shared secret configured in both:
-      - Backend: API_TOKEN env var (required in production)
-      - Extension: stored in chrome.storage.local (never synced)
+    Accepts EITHER:
+      1. X-Extension-Token header (extension sidebar)
+      2. Valid whd_session cookie (management SPA)
 
-    /health is exempt so operators can monitor without the token.
+    /health, /docs, /openapi.json, and /auth/* are exempt.
     """
 
     EXEMPT_PATHS = {"/health", "/docs", "/openapi.json"}
+    EXEMPT_PREFIXES = ("/auth/",)
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -96,23 +97,39 @@ class APITokenMiddleware:
             await self.app(scope, receive, send)
             return
 
+        if any(path.startswith(prefix) for prefix in self.EXEMPT_PREFIXES):
+            await self.app(scope, receive, send)
+            return
+
         # If no token is configured, skip auth (dev mode only)
         if not self._token:
             await self.app(scope, receive, send)
             return
 
+        # Method 1: X-Extension-Token header (extension sidebar)
         provided = _get_header(scope, b"x-extension-token")
-        if not provided or not secrets.compare_digest(provided, self._token):
-            client_ip = _get_client_ip(scope)
-            logger.warning("Auth failure on %s from %s", path, client_ip)
-            await _send_error_response(
-                send,
-                401,
-                {"detail": "Unauthorized. Missing or invalid X-Extension-Token header."},
-            )
+        if provided and secrets.compare_digest(provided, self._token):
+            await self.app(scope, receive, send)
             return
 
-        await self.app(scope, receive, send)
+        # Method 2: Valid session cookie (management SPA)
+        from app.routers.auth import get_session_id_from_headers, session_store
+
+        raw_headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
+        session_id = get_session_id_from_headers(raw_headers)
+        if session_id:
+            is_valid = await session_store.validate(session_id)
+            if is_valid:
+                await self.app(scope, receive, send)
+                return
+
+        client_ip = _get_client_ip(scope)
+        logger.warning("Auth failure on %s from %s", path, client_ip)
+        await _send_error_response(
+            send,
+            401,
+            {"detail": "Unauthorized. Missing or invalid credentials."},
+        )
 
 
 # ---------------------------------------------------------------------------

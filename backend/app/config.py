@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Rate limiting: max /generate calls per client IP per minute
     rate_limit_per_minute: int = 20
 
+    # Session max age in seconds (default 24 hours) — for management SPA cookies
+    session_max_age: int = 86400
+
     # Request body size limit in bytes (default 64 KB)
     max_request_bytes: int = 65_536
 

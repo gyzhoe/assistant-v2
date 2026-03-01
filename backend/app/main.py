@@ -17,7 +17,7 @@ from app.middleware.security import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
-from app.routers import feedback, generate, health, ingest, kb, models
+from app.routers import auth, feedback, generate, health, ingest, kb, models
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.cors_origin],
-        allow_credentials=False,
+        allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "X-Extension-Token"],
     )
@@ -80,6 +80,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(APITokenMiddleware)
 
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(health.router)
     app.include_router(generate.router)
     app.include_router(models.router)
