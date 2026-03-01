@@ -179,7 +179,9 @@ export class DOMReader {
     if (input) return this.extractText(input)
 
     // Fall back to the cell's own text, ignoring label-like cells
-    const text = cell.textContent?.trim() ?? ''
+    const clone = cell.cloneNode(true) as Element
+    clone.querySelectorAll('script, style, noscript').forEach((s) => s.remove())
+    const text = clone.textContent?.trim() ?? ''
     if (text && !cell.classList.contains('labelStandard')) return text
 
     return ''
@@ -235,6 +237,8 @@ export class DOMReader {
     if (el instanceof HTMLSelectElement) {
       return el.options[el.selectedIndex]?.text?.trim() ?? ''
     }
-    return el.textContent?.trim() ?? ''
+    const clone = el.cloneNode(true) as Element
+    clone.querySelectorAll('script, style, noscript').forEach((s) => s.remove())
+    return clone.textContent?.trim() ?? ''
   }
 }
