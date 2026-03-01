@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **KB Management**: Fix dark mode for confirm dialog — render Radix AlertDialog.Portal inside `.app-shell` container so CSS custom properties are inherited, removing hardcoded light-theme fallback values (H10)
+
 ## [1.8.0] — 2026-02-28
 
 ### Added
