@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_MODEL, STORAGE_KEY_SETTINGS } from '../../shared/constants'
+import { DEFAULT_MODEL, MAX_PINNED_ARTICLES, STORAGE_KEY_SETTINGS } from '../../shared/constants'
 import { DEFAULT_SETTINGS, storage } from '../../lib/storage'
 import type { TicketData, GenerateResponse, KBArticlePin, AppSettings } from '../../shared/types'
 
@@ -66,7 +66,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   setReplyRating: (rating) => set({ replyRating: rating }),
   pinArticle: (article) => {
     const { pinnedArticles } = get()
-    if (pinnedArticles.length >= 10) return
+    if (pinnedArticles.length >= MAX_PINNED_ARTICLES) return
     if (pinnedArticles.some((a) => a.article_id === article.article_id)) return
     set({ pinnedArticles: [...pinnedArticles, article] })
   },

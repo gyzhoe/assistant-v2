@@ -25,7 +25,13 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
+
+  // Clear delete timer on unmount
+  useEffect(() => {
+    return () => { if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current) }
+  }, [])
 
   // Reset page when filters change
   useEffect(() => { setPage(1) }, [search, sourceType])
@@ -67,10 +73,11 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
       }
     )
 
-    // Delayed delete with undo support
-    const timer = setTimeout(() => {
+    // Delayed delete with undo support (8s to allow undo)
+    deleteTimerRef.current = setTimeout(() => {
       deleteMutation.mutate(articleId)
-    }, 3000)
+    }, 8000)
+    const timer = deleteTimerRef.current
 
     showToast(`Deleted "${title}"`, 'success', {
       label: 'Undo',

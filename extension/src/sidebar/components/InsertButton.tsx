@@ -56,7 +56,7 @@ export function InsertButton(): React.ReactElement {
     insertState === 'loading' ? 'Inserting…' :
     insertState === 'success' ? 'Inserted \u2713' :
     insertState === 'error' ? 'Insert failed' :
-    'Insert into WHD reply'
+    'Insert reply'
 
   return (
     <div className="insert-button-wrapper">

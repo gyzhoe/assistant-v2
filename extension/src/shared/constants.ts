@@ -69,6 +69,9 @@ export const DEFAULT_BACKEND_URL = 'http://localhost:8765'
 /** Default LLM model */
 export const DEFAULT_MODEL = 'qwen2.5:14b'
 
+/** Maximum number of pinned KB articles */
+export const MAX_PINNED_ARTICLES = 10
+
 /** MutationObserver debounce delay in ms */
 export const OBSERVER_DEBOUNCE_MS = 300
 

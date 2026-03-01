@@ -58,6 +58,8 @@ export function useGenerateReply() {
         } else {
           message = body?.message ?? body?.detail ?? `Generation failed (${err.status})`
         }
+      } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        message = 'Network error — check connection and backend status'
       } else if (err instanceof Error) {
         message = err.message
       }

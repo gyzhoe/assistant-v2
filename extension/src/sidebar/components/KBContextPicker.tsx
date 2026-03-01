@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient, ApiError } from '../../lib/api-client'
-import { debugError } from '../../shared/constants'
+import { debugError, MAX_PINNED_ARTICLES } from '../../shared/constants'
 import type { KBArticleListItem } from '../../shared/types'
 
 const DEBOUNCE_MS = 300
@@ -65,6 +65,8 @@ export function KBContextPicker(): React.ReactElement {
   const isPinned = (articleId: string) =>
     pinnedArticles.some((a) => a.article_id === articleId)
 
+  const atPinCap = pinnedArticles.length >= MAX_PINNED_ARTICLES
+
   return (
     <div className="kb-picker" aria-label="Knowledge context picker">
       <span className="kb-picker-label">Knowledge Context</span>
@@ -86,6 +88,11 @@ export function KBContextPicker(): React.ReactElement {
             </span>
           ))}
         </div>
+      )}
+
+      {/* Pin cap warning */}
+      {atPinCap && (
+        <p className="support-text" role="status">Maximum {MAX_PINNED_ARTICLES} articles pinned</p>
       )}
 
       {/* Search input */}
@@ -112,9 +119,14 @@ export function KBContextPicker(): React.ReactElement {
               <button
                 type="button"
                 className="kb-result-add"
-                disabled={isPinned(article.article_id)}
+                disabled={isPinned(article.article_id) || atPinCap}
                 onClick={() => pinArticle({ article_id: article.article_id, title: article.title })}
-                aria-label={isPinned(article.article_id) ? `${article.title} already pinned` : `Pin ${article.title}`}
+                aria-label={
+                  isPinned(article.article_id) ? `${article.title} already pinned` :
+                  atPinCap ? `Maximum ${MAX_PINNED_ARTICLES} articles pinned` :
+                  `Pin ${article.title}`
+                }
+                title={atPinCap && !isPinned(article.article_id) ? `Maximum ${MAX_PINNED_ARTICLES} articles pinned` : undefined}
               >
                 {isPinned(article.article_id) ? '\u2713' : '+'}
               </button>
