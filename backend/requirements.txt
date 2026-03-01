@@ -23,7 +23,7 @@ beautifulsoup4==4.14.3
     # via ai-helpdesk-backend (pyproject.toml)
 build==1.4.0
     # via chromadb
-certifi==2026.1.4
+certifi==2026.2.25
     # via
     #   httpcore
     #   httpx
