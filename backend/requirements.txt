@@ -140,7 +140,7 @@ packaging==26.0
     #   onnxruntime
 posthog==5.4.0
     # via chromadb
-protobuf==6.33.5
+protobuf==7.34.0
     # via
     #   googleapis-common-protos
     #   onnxruntime
