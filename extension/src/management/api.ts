@@ -16,28 +16,38 @@ import { ApiError } from '@/shared/api-error'
 
 export { ApiError }
 
-let token = ''
-
-export function setToken(t: string): void {
-  token = t
-  sessionStorage.setItem('kb-manage-token', t)
+interface AuthCheckResponse {
+  authenticated: boolean
 }
 
-export function getToken(): string {
-  if (!token) {
-    token = sessionStorage.getItem('kb-manage-token') ?? ''
-  }
-  return token
+export async function login(token: string): Promise<boolean> {
+  const resp = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+    credentials: 'same-origin',
+  })
+  return resp.ok
+}
+
+export async function checkSession(): Promise<boolean> {
+  const resp = await fetch('/auth/check', {
+    credentials: 'same-origin',
+  })
+  if (!resp.ok) return false
+  const data = (await resp.json()) as AuthCheckResponse
+  return data.authenticated
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/auth/logout', {
+    method: 'POST',
+    credentials: 'same-origin',
+  })
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const currentToken = getToken()
-  // /health is exempt from auth — skip the token header to avoid sending
-  // credentials unnecessarily on an unauthenticated endpoint.
-  const isHealthEndpoint = path === '/health'
-  const headers: Record<string, string> = {
-    ...(currentToken && !isHealthEndpoint ? { 'X-Extension-Token': currentToken } : {}),
-  }
+  const headers: Record<string, string> = {}
 
   // Don't set Content-Type for FormData (browser sets multipart boundary)
   if (!(options?.body instanceof FormData)) {
@@ -47,6 +57,7 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(path, {
     ...options,
     headers: { ...headers, ...(options?.headers as Record<string, string>) },
+    credentials: 'same-origin',
   })
 
   if (!resp.ok) {

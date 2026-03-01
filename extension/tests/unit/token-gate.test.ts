@@ -1,16 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { act } from 'react'
 
-// Mock the api module's setToken
-const mockSetToken = vi.fn()
+// Mock the api module's login function
+const mockLogin = vi.fn()
 vi.mock('../../src/management/api', () => ({
-  setToken: (...args: unknown[]) => mockSetToken(...args),
+  login: (...args: unknown[]) => mockLogin(...args),
 }))
-
-// Mock sessionStorage (needed for module import)
-vi.stubGlobal('sessionStorage', {
-  getItem: vi.fn(() => null),
-  setItem: vi.fn(),
-})
 
 describe('TokenGate', () => {
   beforeEach(() => {
@@ -50,7 +45,9 @@ describe('TokenGate', () => {
     expect(onAuth).not.toHaveBeenCalled()
   })
 
-  it('calls onAuthenticated with valid token', async () => {
+  it('calls onAuthenticated after successful login', async () => {
+    mockLogin.mockResolvedValueOnce(true)
+
     const React = await import('react')
     const { render, fireEvent } = await import('@testing-library/react')
     const { TokenGate } = await import('../../src/management/components/TokenGate')
@@ -62,10 +59,37 @@ describe('TokenGate', () => {
     fireEvent.change(input, { target: { value: 'valid-token' } })
 
     const form = container.querySelector('form')!
-    fireEvent.submit(form)
+    await act(async () => {
+      fireEvent.submit(form)
+    })
 
-    expect(mockSetToken).toHaveBeenCalledWith('valid-token')
+    expect(mockLogin).toHaveBeenCalledWith('valid-token')
     expect(onAuth).toHaveBeenCalledOnce()
+  })
+
+  it('shows error when login fails', async () => {
+    mockLogin.mockResolvedValueOnce(false)
+
+    const React = await import('react')
+    const { render, fireEvent } = await import('@testing-library/react')
+    const { TokenGate } = await import('../../src/management/components/TokenGate')
+
+    const onAuth = vi.fn()
+    const { container } = render(React.createElement(TokenGate, { onAuthenticated: onAuth }))
+
+    const input = container.querySelector('input[type="password"]') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'bad-token' } })
+
+    const form = container.querySelector('form')!
+    await act(async () => {
+      fireEvent.submit(form)
+    })
+
+    expect(mockLogin).toHaveBeenCalledWith('bad-token')
+    expect(onAuth).not.toHaveBeenCalled()
+    const alerts = container.querySelectorAll('[role="alert"]')
+    const errorTexts = Array.from(alerts).map((el) => el.textContent)
+    expect(errorTexts).toContain('Invalid API token.')
   })
 
   it('displays external errorMessage prop', async () => {

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { managementApi, ApiError, getToken } from './api'
+import { managementApi, ApiError, checkSession } from './api'
 import { Header } from './components/Header'
 import { StatCards } from './components/StatCards'
 import { ArticleList } from './components/ArticleList'
@@ -21,6 +21,7 @@ export function App(): React.ReactElement {
     return saved === 'dark' || saved === 'light' ? saved : getSystemTheme()
   })
   const [needsAuth, setNeedsAuth] = useState(false)
+  const [sessionChecked, setSessionChecked] = useState(false)
   const [authErrorMessage, setAuthErrorMessage] = useState<string | undefined>(undefined)
   const [authKey, setAuthKey] = useState(0)
   const [importOpen, setImportOpen] = useState(false)
@@ -36,12 +37,25 @@ export function App(): React.ReactElement {
     })
   }, [])
 
-  // Initial auth probe — if token already in sessionStorage, use it
+  // Check existing session cookie on mount
+  useEffect(() => {
+    checkSession()
+      .then(valid => {
+        setNeedsAuth(!valid)
+        setSessionChecked(true)
+      })
+      .catch(() => {
+        setNeedsAuth(true)
+        setSessionChecked(true)
+      })
+  }, [])
+
   const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ['stats', authKey],
     queryFn: () => managementApi.getStats(),
     staleTime: 60_000,
     retry: false,
+    enabled: sessionChecked && !needsAuth,
   })
 
   const { data: health, isLoading: healthLoading } = useQuery({
@@ -49,11 +63,12 @@ export function App(): React.ReactElement {
     queryFn: () => managementApi.getHealth(),
     staleTime: 60_000,
     retry: false,
+    enabled: sessionChecked && !needsAuth,
   })
 
-  // Check for 401 on stats
+  // Check for 401 on stats — session may have expired
   useEffect(() => {
-    if (statsError instanceof ApiError && statsError.status === 401 && !getToken()) {
+    if (statsError instanceof ApiError && statsError.status === 401) {
       setNeedsAuth(true)
     }
   }, [statsError])
@@ -87,6 +102,14 @@ export function App(): React.ReactElement {
     setEditArticleId(id)
     setView('edit')
   }, [])
+
+  if (!sessionChecked) {
+    return (
+      <div className="app-shell" data-theme={theme}>
+        <Header theme={theme} onToggleTheme={toggleTheme} onImportClick={handleImportClick} />
+      </div>
+    )
+  }
 
   if (needsAuth) {
     return (

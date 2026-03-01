@@ -4,14 +4,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
-// Mock sessionStorage
-const sessionStore: Record<string, string> = {}
-vi.stubGlobal('sessionStorage', {
-  getItem: vi.fn((key: string) => sessionStore[key] ?? null),
-  setItem: vi.fn((key: string, val: string) => { sessionStore[key] = val }),
-  removeItem: vi.fn((key: string) => { delete sessionStore[key] }),
-})
-
 function mockOkResponse(body: unknown = {}) {
   return { ok: true, json: async () => body }
 }
@@ -23,42 +15,87 @@ function mockErrorResponse(status: number, body: unknown = {}) {
 describe('managementApi', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-    // Clear session store between tests
-    for (const key of Object.keys(sessionStore)) delete sessionStore[key]
-    // Reset module-level token state
     vi.resetModules()
   })
 
-  // ---- setToken / getToken ----
+  // ---- Cookie-based auth: login ----
 
-  it('setToken and getToken roundtrip', async () => {
-    const { setToken, getToken } = await import('../../src/management/api')
-    setToken('my-secret')
-    expect(getToken()).toBe('my-secret')
-    expect(sessionStorage.setItem).toHaveBeenCalledWith('kb-manage-token', 'my-secret')
+  it('login sends POST to /auth/login with credentials', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ authenticated: true }) })
+
+    const { login } = await import('../../src/management/api')
+    const result = await login('my-secret')
+
+    expect(result).toBe(true)
+    expect(mockFetch).toHaveBeenCalledWith('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'my-secret' }),
+      credentials: 'same-origin',
+    })
   })
 
-  // ---- Token header injection ----
+  it('login returns false on 401', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401 })
 
-  it('injects X-Extension-Token header on authenticated requests', async () => {
+    const { login } = await import('../../src/management/api')
+    const result = await login('wrong-token')
+
+    expect(result).toBe(false)
+  })
+
+  // ---- Cookie-based auth: checkSession ----
+
+  it('checkSession returns true when session is valid', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ authenticated: true }) })
+
+    const { checkSession } = await import('../../src/management/api')
+    const result = await checkSession()
+
+    expect(result).toBe(true)
+    expect(mockFetch).toHaveBeenCalledWith('/auth/check', { credentials: 'same-origin' })
+  })
+
+  it('checkSession returns false when session is invalid', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ authenticated: false }) })
+
+    const { checkSession } = await import('../../src/management/api')
+    const result = await checkSession()
+
+    expect(result).toBe(false)
+  })
+
+  // ---- Cookie-based auth: logout ----
+
+  it('logout sends POST to /auth/logout with credentials', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ authenticated: false }) })
+
+    const { logout } = await import('../../src/management/api')
+    await logout()
+
+    expect(mockFetch).toHaveBeenCalledWith('/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+    })
+  })
+
+  // ---- credentials: same-origin on all fetchApi calls ----
+
+  it('includes credentials: same-origin on API requests', async () => {
     mockFetch.mockResolvedValueOnce(mockOkResponse({ articles: [], total_articles: 0, page: 1, page_size: 20 }))
 
-    const { setToken, managementApi } = await import('../../src/management/api')
-    setToken('test-token')
+    const { managementApi } = await import('../../src/management/api')
     await managementApi.listArticles({ page: 1, page_size: 20 })
 
-    const headers = mockFetch.mock.calls[0][1].headers
-    expect(headers['X-Extension-Token']).toBe('test-token')
+    const options = mockFetch.mock.calls[0][1]
+    expect(options.credentials).toBe('same-origin')
   })
 
-  // ---- Health endpoint exempt from token ----
+  it('does not send X-Extension-Token header (cookie handles auth)', async () => {
+    mockFetch.mockResolvedValueOnce(mockOkResponse({ articles: [], total_articles: 0, page: 1, page_size: 20 }))
 
-  it('does not send token header on /health endpoint', async () => {
-    mockFetch.mockResolvedValueOnce(mockOkResponse({ status: 'ok' }))
-
-    const { setToken, managementApi } = await import('../../src/management/api')
-    setToken('test-token')
-    await managementApi.getHealth()
+    const { managementApi } = await import('../../src/management/api')
+    await managementApi.listArticles({ page: 1, page_size: 20 })
 
     const headers = mockFetch.mock.calls[0][1].headers
     expect(headers['X-Extension-Token']).toBeUndefined()
@@ -200,14 +237,6 @@ describe('managementApi', () => {
     expect(call[1].method).toBe('POST')
     const body = JSON.parse(call[1].body as string)
     expect(body).toEqual({ url: 'https://example.com' })
-  })
-
-  // ---- getToken reads from sessionStorage when module-level is empty ----
-
-  it('getToken falls back to sessionStorage', async () => {
-    sessionStore['kb-manage-token'] = 'stored-token'
-    const { getToken } = await import('../../src/management/api')
-    expect(getToken()).toBe('stored-token')
   })
 
   // ---- listArticles with source_type filter ----
