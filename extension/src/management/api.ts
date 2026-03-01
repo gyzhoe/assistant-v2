@@ -12,17 +12,9 @@ import type {
   UpdateTagsResponse,
   TagListResponse,
 } from './types'
+import { ApiError } from '@/shared/api-error'
 
-/** API error with status code and optional body */
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: Record<string, unknown> = {}
-  ) {
-    super(`API error ${status}`)
-    this.name = 'ApiError'
-  }
-}
+export { ApiError }
 
 let token = ''
 

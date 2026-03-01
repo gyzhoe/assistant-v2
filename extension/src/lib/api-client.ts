@@ -1,5 +1,6 @@
 import type { FeedbackRequest, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
+import { ApiError } from '../shared/api-error'
 
 async function getBackendUrl(): Promise<string> {
   return new Promise((resolve) => {
@@ -173,11 +174,4 @@ export function sendNativeCommand(action: string): Promise<NativeResponse> {
   })
 }
 
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly body: unknown
-  ) {
-    super(`API error ${status}`)
-  }
-}
+export { ApiError } from '../shared/api-error'

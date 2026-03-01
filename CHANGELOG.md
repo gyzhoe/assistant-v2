@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **H2**: Deduplicated type definitions (`IngestUploadResponse`, `IngestUrlResponse`, `HealthResponse`) between `shared/types.ts` and `management/types.ts`; management re-exports from shared
+- **H3**: Unified `ApiError` class into `shared/api-error.ts`; both sidebar and management API clients import from the same canonical source
+- **H8**: Narrowed `MutationObserver` target to `#ticketDetailForm` (falls back to `document.body`), disabled `attributes` and `characterData` tracking to reduce noise
+- **H9**: Moved settings into the Zustand sidebar store with `chrome.storage.sync` initialization and `onChanged` listener; `useSettings` hook now reads from store (single source of truth shared across all consumers)
+- **H11**: Added unsaved changes detection to Options page with `beforeunload` prompt and visual "(unsaved changes)" hint; refs reset on save
+
 ## [1.8.0] — 2026-02-28
 
 ### Added
