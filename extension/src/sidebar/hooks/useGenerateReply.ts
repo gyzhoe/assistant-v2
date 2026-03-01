@@ -68,7 +68,9 @@ export function useGenerateReply() {
       setIsGenerating(false)
       setAbortController(null)
     }
-  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix, setReply, setIsGenerating, setGenerateError, setLastResponse, setIsInserted, setAbortController, setIsEditingReply, setReplyRating])
+  // Zustand setters (setReply, setIsGenerating, etc.) are stable references — safe to omit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix])
 
   return { generate }
 }

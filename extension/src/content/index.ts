@@ -4,15 +4,17 @@ import type { SidebarToContentMessage } from '../shared/messages'
 import type { DOMInserter } from './dom-inserter'
 
 let inserter: DOMInserter | null = null
+// Cached reader instance — reused across messages instead of re-creating per request
+let cachedReader: DOMReader | null = null
 
 async function init(): Promise<void> {
   const { DOMInserter: DOMInserterClass } = await import('./dom-inserter')
   const { SidebarHost: SidebarHostClass } = await import('./sidebar-host')
 
-  const reader = new DOMReader()
-  await reader.ready()
+  cachedReader = new DOMReader()
+  await cachedReader.ready()
   inserter = new DOMInserterClass()
-  const host = new SidebarHostClass(reader)
+  const host = new SidebarHostClass(cachedReader)
   host.start()
 }
 
@@ -37,7 +39,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === 'REQUEST_TICKET_DATA') {
-      const reader = new DOMReader()
+      const reader = cachedReader ?? new DOMReader()
       reader.ready().then(() => {
         const data = reader.extract()
         if (data) {

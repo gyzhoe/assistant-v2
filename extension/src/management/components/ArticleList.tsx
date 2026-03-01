@@ -36,7 +36,7 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
   // Reset page when filters change
   useEffect(() => { setPage(1) }, [search, sourceType])
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: ['articles', { page, search, source_type: sourceType }],
     queryFn: () => managementApi.listArticles({ page, page_size: PAGE_SIZE, search: search || undefined, source_type: sourceType || undefined }),
     placeholderData: (prev) => prev,
@@ -80,11 +80,13 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
     const timer = deleteTimerRef.current
 
     showToast(`Deleted "${title}"`, 'success', {
-      label: 'Undo',
-      onClick: () => {
-        clearTimeout(timer)
-        void queryClient.invalidateQueries({ queryKey: ['articles'] })
-        void queryClient.invalidateQueries({ queryKey: ['stats'] })
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          clearTimeout(timer)
+          void queryClient.invalidateQueries({ queryKey: ['articles'] })
+          void queryClient.invalidateQueries({ queryKey: ['stats'] })
+        },
       },
     })
   }, [page, search, sourceType, queryClient, deleteMutation])
@@ -148,7 +150,7 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
         </div>
       ) : (
         <>
-          <div className="article-rows">
+          <div className="article-rows" aria-busy={isFetching && !!data ? 'true' : undefined}>
             {articles.map(article => (
               <div
                 key={article.article_id}

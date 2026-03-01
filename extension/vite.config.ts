@@ -1,3 +1,5 @@
+// Vite 7.x + Vitest 2.x: verified compatible (see package.json devDependencies).
+// No config changes needed for MV3 extension builds with this version combination.
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'

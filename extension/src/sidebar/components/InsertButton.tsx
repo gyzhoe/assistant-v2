@@ -33,7 +33,9 @@ export function InsertButton(): React.ReactElement {
       chrome.runtime.onMessage.removeListener(listener)
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [setIsInserted])
+  // setIsInserted is a stable Zustand setter — safe to omit from deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleInsert = () => {
     if (!reply || insertState === 'loading') return

@@ -52,6 +52,7 @@ export class SidebarHost {
       characterData: false,
     })
 
+    // Ensure observer and timers are cleaned up when the page navigates away
     window.addEventListener('beforeunload', () => {
       this.stop()
     })

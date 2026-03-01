@@ -22,5 +22,7 @@ export function useTicketData(): void {
 
     chrome.runtime.onMessage.addListener(listener)
     return () => chrome.runtime.onMessage.removeListener(listener)
-  }, [setTicketData, setIsTicketPage])
+  // setTicketData and setIsTicketPage are stable Zustand setters — safe to omit from deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 }

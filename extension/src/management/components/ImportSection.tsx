@@ -11,6 +11,21 @@ interface ImportSectionProps {
 
 const ACCEPTED_TYPES = '.pdf,.html,.htm,.json,.csv'
 const MAX_SIZE_MB = 10
+const ALLOWED_PROTOCOLS = ['http:', 'https:']
+
+/** Returns an error message if the URL is invalid, or null if it's acceptable. */
+function validateImportUrl(raw: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return 'Please enter a valid URL (e.g. https://example.com/article)'
+  }
+  if (!ALLOWED_PROTOCOLS.includes(parsed.protocol)) {
+    return 'Only http:// and https:// URLs are allowed'
+  }
+  return null
+}
 
 export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionProps): React.ReactElement {
   const [dragOver, setDragOver] = useState(false)
@@ -18,6 +33,7 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
   const [uploadingFile, setUploadingFile] = useState('')
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
   const [urlValue, setUrlValue] = useState('')
+  const [urlError, setUrlError] = useState<string | null>(null)
   const [importingUrl, setImportingUrl] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
@@ -43,7 +59,12 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
       setUploadProgress({ current: i + 1, total: fileArr.length })
       try {
         const result = await managementApi.uploadFile(file)
-        showToast(`Imported "${result.filename}" (${result.chunks_ingested} chunks)`, 'success')
+        // If the response includes a warning, keep the toast visible until dismissed
+        if (result.warning) {
+          showToast(`Imported "${result.filename}" (${result.chunks_ingested} chunks) — ${result.warning}`, 'success', { persistent: true })
+        } else {
+          showToast(`Imported "${result.filename}" (${result.chunks_ingested} chunks)`, 'success')
+        }
         invalidateAll()
       } catch (err) {
         const detail = err instanceof ApiError ? ((err.body as { detail?: string })?.detail ?? `Failed to import "${file.name}"`) : `Failed to import "${file.name}"`
@@ -62,16 +83,34 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
     void handleFiles(e.dataTransfer.files)
   }, [uploading, handleFiles])
 
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    setUrlValue(e.target.value)
+    // Clear error as user types
+    if (urlError) setUrlError(null)
+  }
+
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = urlValue.trim()
     if (!trimmed) return
 
+    const validationError = validateImportUrl(trimmed)
+    if (validationError) {
+      setUrlError(validationError)
+      return
+    }
+
     setImportingUrl(true)
     try {
       const result = await managementApi.ingestUrl(trimmed)
-      showToast(`Imported URL (${result.chunks_ingested} chunks)`, 'success')
+      // Keep warning toasts visible until user dismisses them
+      if (result.warning) {
+        showToast(`Imported URL (${result.chunks_ingested} chunks) — ${result.warning}`, 'success', { persistent: true })
+      } else {
+        showToast(`Imported URL (${result.chunks_ingested} chunks)`, 'success')
+      }
       setUrlValue('')
+      setUrlError(null)
       invalidateAll()
     } catch (err) {
       showToast(err instanceof ApiError ? ((err.body as { detail?: string })?.detail ?? 'Failed to import URL') : 'Failed to import URL', 'error')
@@ -144,21 +183,28 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
             <span>or import from URL</span>
           </div>
           <form className="import-url-form" onSubmit={handleUrlSubmit}>
-            <input
-              type="url"
-              className="import-url-input"
-              placeholder="https://example.com/article"
-              value={urlValue}
-              onChange={e => setUrlValue(e.target.value)}
-              disabled={isDisabled}
-            />
-            <button
-              type="submit"
-              className="primary-btn"
-              disabled={isDisabled || !urlValue.trim()}
-            >
-              {importingUrl ? 'Importing...' : 'Import URL'}
-            </button>
+            <div className="import-url-row">
+              <input
+                type="text"
+                className={`import-url-input${urlError ? ' input-error' : ''}`}
+                placeholder="https://example.com/article"
+                value={urlValue}
+                onChange={handleUrlChange}
+                disabled={isDisabled}
+                aria-describedby={urlError ? 'url-error' : undefined}
+                aria-invalid={urlError ? 'true' : undefined}
+              />
+              <button
+                type="submit"
+                className="primary-btn"
+                disabled={isDisabled || !urlValue.trim()}
+              >
+                {importingUrl ? 'Importing...' : 'Import URL'}
+              </button>
+            </div>
+            {urlError && (
+              <p id="url-error" className="import-url-error" role="alert">{urlError}</p>
+            )}
           </form>
         </div>
       )}

@@ -2,6 +2,7 @@ import type { Config } from 'tailwindcss'
 
 export default {
   content: ['./src/**/*.{ts,tsx,html}'],
+  safelist: ['sr-only'],
   theme: {
     extend: {
       colors: {
@@ -27,6 +28,7 @@ export default {
       },
       fontFamily: {
         sans: ['Segoe UI', 'system-ui', 'sans-serif'],
+        mono: ['Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       },
       animation: {
         shimmer: 'shimmer 1.5s infinite',
