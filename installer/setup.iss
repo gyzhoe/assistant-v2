@@ -59,6 +59,9 @@ Source: "..\backend\pyproject.toml";  DestDir: "{app}\backend";           Flags:
 ; Extension dist (pre-built by CI)
 Source: "..\extension\dist\*";        DestDir: "{app}\extension";         Flags: ignoreversion recursesubdirs createallsubdirs; Components: extension
 
+; Management SPA static files (served by FastAPI at /manage)
+Source: "..\backend\static\manage\*"; DestDir: "{app}\backend\static\manage"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
+
 ; uv standalone binary (downloaded by CI)
 Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
