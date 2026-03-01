@@ -67,14 +67,14 @@ async def test_feedback_missing_required_fields_returns_422() -> None:
 
 @pytest.mark.asyncio
 @patch("app.routers.feedback.EmbedService")
-async def test_feedback_chromadb_failure_still_returns_204(
+async def test_feedback_connection_failure_returns_503(
     mock_embed_cls: MagicMock,
 ) -> None:
-    """Even if ChromaDB raises, the endpoint returns 204 (silent failure)."""
+    """Connection errors (Ollama/ChromaDB down) return 503 Service Unavailable."""
     mock_embed_cls.return_value.embed = AsyncMock(side_effect=ConnectionError("boom"))
     async with _make_client() as ac:
         resp = await ac.post("/feedback", json=_valid_payload())
-    assert resp.status_code == 204
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio

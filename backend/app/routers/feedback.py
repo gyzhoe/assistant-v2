@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from app.models.request_models import FeedbackRequest
 from app.services.embed_service import EmbedService
@@ -54,7 +54,11 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> Response:
             "Feedback stored: id=%s rating=%s category=%s",
             doc_id, body.rating, body.category[:40],
         )
-    except Exception:
-        logger.exception("Failed to store feedback — ignoring to not disrupt UX")
+    except (ConnectionError, ConnectionRefusedError, OSError):
+        logger.warning("Ollama/ChromaDB unavailable — feedback not stored")
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding service unavailable. Feedback not stored.",
+        )
 
     return Response(status_code=204)

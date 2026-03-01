@@ -43,10 +43,10 @@ async def health_check(request: Request) -> dict[str, object]:
     chroma_doc_counts: dict[str, int] = {}
     try:
         chroma_client = request.app.state.chroma_client
-        collections = chroma_client.list_collections()
+        collections = await asyncio.to_thread(chroma_client.list_collections)
         chroma_ready = True
         for col in collections:
-            chroma_doc_counts[col.name] = col.count()
+            chroma_doc_counts[col.name] = await asyncio.to_thread(col.count)
     except Exception:
         chroma_ready = False
 
@@ -103,18 +103,20 @@ async def start_ollama() -> dict[str, str]:
 async def stop_ollama() -> dict[str, str]:
     """Stop the Ollama server process."""
     if sys.platform == "win32":
-        subprocess.run(
+        await asyncio.to_thread(
+            subprocess.run,
             ["taskkill", "/IM", "ollama.exe", "/F"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
         )
-        subprocess.run(
+        await asyncio.to_thread(
+            subprocess.run,
             ["taskkill", "/IM", "ollama_llama_server.exe", "/F"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
         )
     else:
-        subprocess.run(["pkill", "-f", "ollama"], check=False)
+        await asyncio.to_thread(subprocess.run, ["pkill", "-f", "ollama"], check=False)
     return {"status": "stopping"}

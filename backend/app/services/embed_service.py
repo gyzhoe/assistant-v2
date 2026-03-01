@@ -21,6 +21,7 @@ class EmbedService:
     def __init__(self, model: str = "nomic-embed-text") -> None:
         self.model = model
         self.base_url = settings.ollama_base_url
+        self._client = httpx.Client(timeout=30.0)
 
     @property
     def embed_fn(self) -> Callable[[str], list[float]]:
@@ -49,19 +50,17 @@ class EmbedService:
 
     def _embed_sync(self, text: str) -> list[float]:
         try:
-            with httpx.Client() as client:
-                resp = client.post(
-                    f"{self.base_url}/api/embeddings",
-                    json={"model": self.model, "prompt": text},
-                    timeout=30.0,
+            resp = self._client.post(
+                f"{self.base_url}/api/embeddings",
+                json={"model": self.model, "prompt": text},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if "embedding" not in data:
+                raise ConnectionError(
+                    f"Ollama embed response missing 'embedding' key: {list(data.keys())}"
                 )
-                resp.raise_for_status()
-                data = resp.json()
-                if "embedding" not in data:
-                    raise ConnectionError(
-                        f"Ollama embed response missing 'embedding' key: {list(data.keys())}"
-                    )
-                return list(data["embedding"])
+            return list(data["embedding"])
         except httpx.ConnectError as exc:
             raise ConnectionError(
                 f"Ollama embed service unreachable at {self.base_url}"
