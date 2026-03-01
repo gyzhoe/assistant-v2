@@ -81,9 +81,9 @@ private attribute that could break across Python versions.
 
 ---
 
-## 4. useSubmitFeedback silently resets rating on API error
+## ~~4. useSubmitFeedback silently resets rating on API error~~ RESOLVED
 
-**Labels:** `bug`
+**Labels:** `bug` | **Resolved in:** PR #90 (Sprint 2, M20)
 **Scope:** `fix(extension)`
 **File:** `extension/src/sidebar/hooks/useSubmitFeedback.ts`
 
@@ -99,6 +99,8 @@ feedback was saved when it wasn't.
 - Show an error toast or inline error message
 - Either keep the selected state with a retry option, or clearly indicate
   the rating was not saved
+
+**Fix:** Added inline error message to feedback panel on API failure.
 
 ---
 
@@ -149,9 +151,9 @@ file that can be customized per deployment.
 
 ---
 
-## 7. pinArticle silently ignores pins at 10-article cap
+## ~~7. pinArticle silently ignores pins at 10-article cap~~ RESOLVED
 
-**Labels:** `bug`, `ux`
+**Labels:** `bug`, `ux` | **Resolved in:** PR #90 (Sprint 2, M19)
 **Scope:** `fix(extension)`
 **File:** `extension/src/sidebar/store/sidebarStore.ts:63`
 
@@ -167,3 +169,5 @@ does nothing — no toast, no disabled state, no visual feedback.
 - Disable the pin button when at cap, with a tooltip explaining the limit
 - Show a toast: "Maximum 10 articles can be pinned"
 - Extract the magic number `10` to a named constant
+
+**Fix:** Added `MAX_PINNED_ARTICLES` constant and pin cap toast notification when limit is reached.

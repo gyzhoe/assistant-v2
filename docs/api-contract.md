@@ -57,12 +57,12 @@ Retrieves RAG context and generates a reply using the local LLM.
 ### Request fields
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `ticket_subject` | string | yes | — | Ticket subject line |
-| `ticket_description` | string | yes | — | Full problem description |
+| `ticket_subject` | string | no | `""` | Ticket subject line |
+| `ticket_description` | string | no | `""` | Full problem description |
 | `requester_name` | string | no | `""` | Requester's name |
 | `category` | string | no | `""` | WHD ticket category |
 | `status` | string | no | `""` | WHD ticket status |
-| `model` | string | no | `"llama3.2:3b"` | Ollama model to use |
+| `model` | string | no | `"qwen2.5:14b"` | Ollama model to use |
 | `max_context_docs` | integer | no | `5` | Max RAG documents to include |
 | `stream` | boolean | no | `false` | Streaming not yet implemented |
 | `include_web_context` | boolean | no | `true` | Include Microsoft Learn search results as additional context |
@@ -185,10 +185,10 @@ Clears all documents from a ChromaDB collection. Idempotent.
 }
 ```
 
-### Response `404 Not Found` — Invalid collection name
+### Response `422 Unprocessable Entity` — Invalid collection name
 ```json
 {
-  "detail": "Unknown collection: foo"
+  "detail": "Unknown collection: foo. Allowed: kb_articles, whd_tickets"
 }
 ```
 
