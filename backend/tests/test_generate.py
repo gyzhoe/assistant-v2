@@ -304,3 +304,41 @@ class TestBuildPrompt:
         prompt = _build_prompt(self._request(), "[KB | HIGH relevance | score: 0.85]\nReset VPN")
         assert "HIGH relevance" in prompt
         assert "Reset VPN" in prompt
+
+
+# ---------------------------------------------------------------------------
+# RI2: custom_fields validation
+# ---------------------------------------------------------------------------
+
+
+class TestCustomFieldsValidation:
+    """Tests for custom_fields length/count limits on GenerateRequest."""
+
+    def test_valid_custom_fields(self) -> None:
+        req = GenerateRequest(custom_fields={"Building": "A1", "Room": "101"})
+        assert req.custom_fields == {"Building": "A1", "Room": "101"}
+
+    def test_too_many_keys(self) -> None:
+        fields = {f"key_{i}": "val" for i in range(11)}
+        with pytest.raises(ValueError, match="maximum 10 keys"):
+            GenerateRequest(custom_fields=fields)
+
+    def test_key_too_long(self) -> None:
+        with pytest.raises(ValueError, match="key too long"):
+            GenerateRequest(custom_fields={"x" * 101: "val"})
+
+    def test_value_too_long(self) -> None:
+        with pytest.raises(ValueError, match="value too long"):
+            GenerateRequest(custom_fields={"key": "x" * 501})
+
+    def test_control_chars_stripped(self) -> None:
+        req = GenerateRequest(
+            custom_fields={"key\x00": "val\x01ue"},
+        )
+        assert req.custom_fields == {"key": "value"}
+
+    def test_newline_tab_preserved(self) -> None:
+        req = GenerateRequest(
+            custom_fields={"key": "line1\nline2\ttab"},
+        )
+        assert req.custom_fields["key"] == "line1\nline2\ttab"

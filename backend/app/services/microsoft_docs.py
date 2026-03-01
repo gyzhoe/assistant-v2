@@ -7,14 +7,15 @@ and extracts content to provide as additional context for reply generation.
 import asyncio
 import hashlib
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
 
 from app.config import settings
+from ingestion.utils import extract_html_text
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class WebContextDoc:
 
 # Simple in-memory cache: {cache_key: (timestamp, results)}
 _cache: dict[str, tuple[float, list[WebContextDoc]]] = {}
+_cache_lock = threading.Lock()
 
 
 def _cache_key(keywords: str) -> str:
@@ -43,23 +45,25 @@ def _cache_key(keywords: str) -> str:
 
 
 def _get_cached(keywords: str) -> list[WebContextDoc] | None:
-    key = _cache_key(keywords)
-    entry = _cache.get(key)
-    if entry is None:
-        return None
-    ts, docs = entry
-    if time.monotonic() - ts > CACHE_TTL_SECONDS:
-        del _cache[key]
-        return None
-    return docs
+    with _cache_lock:
+        key = _cache_key(keywords)
+        entry = _cache.get(key)
+        if entry is None:
+            return None
+        ts, docs = entry
+        if time.monotonic() - ts > CACHE_TTL_SECONDS:
+            del _cache[key]
+            return None
+        return docs
 
 
 def _set_cached(keywords: str, docs: list[WebContextDoc]) -> None:
-    # Evict oldest entries when cache exceeds max size
-    if len(_cache) >= MAX_CACHE_ENTRIES:
-        oldest_key = min(_cache, key=lambda k: _cache[k][0])
-        del _cache[oldest_key]
-    _cache[_cache_key(keywords)] = (time.monotonic(), docs)
+    with _cache_lock:
+        # Evict oldest entries when cache exceeds max size
+        if len(_cache) >= MAX_CACHE_ENTRIES:
+            oldest_key = min(_cache, key=lambda k: _cache[k][0])
+            del _cache[oldest_key]
+        _cache[_cache_key(keywords)] = (time.monotonic(), docs)
 
 
 class MicrosoftDocsService:
@@ -170,17 +174,5 @@ class MicrosoftDocsService:
 
     def _extract_text(self, html: str) -> str:
         """Extract readable text from HTML, stripping boilerplate."""
-        soup = BeautifulSoup(html, "html.parser")
-
-        # Remove boilerplate elements
-        for tag in soup.find_all(["script", "style", "nav", "footer", "header", "aside"]):
-            tag.decompose()
-
-        # Try to find main content area
-        main = soup.find("main") or soup.find("article") or soup.find("div", {"role": "main"})
-        target = main if main else soup.body if soup.body else soup
-
-        text = target.get_text(separator="\n", strip=True)
-        # Collapse multiple blank lines
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        return "\n".join(lines)
+        text, _ = extract_html_text(html)
+        return text

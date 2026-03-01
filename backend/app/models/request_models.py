@@ -1,6 +1,7 @@
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 # Enterprise input limits — prevents oversized payloads reaching Ollama
 # and mitigates prompt injection via extremely long ticket content.
@@ -8,6 +9,13 @@ _SUBJECT_MAX = 500
 _DESCRIPTION_MAX = 16_000   # ~4k tokens — generous for real tickets
 _SHORT_FIELD_MAX = 200
 _MODEL_MAX = 100
+
+# custom_fields limits
+_CF_MAX_KEYS = 10
+_CF_MAX_KEY_LEN = 100
+_CF_MAX_VAL_LEN = 500
+# Match control chars < 0x20 except \n (0x0a) and \t (0x09)
+_CF_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 class GenerateRequest(BaseModel):
@@ -42,6 +50,38 @@ class GenerateRequest(BaseModel):
                 msg = f"Each pinned article ID must be at most {_SHORT_FIELD_MAX} characters"
                 raise ValueError(msg)
         return v
+
+    @model_validator(mode="after")
+    def validate_custom_fields(self) -> "GenerateRequest":
+        """Enforce limits on custom_fields: max 10 keys, key/value
+        lengths, and strip control characters (except newline/tab)."""
+        cf = self.custom_fields
+        if len(cf) > _CF_MAX_KEYS:
+            msg = f"custom_fields: maximum {_CF_MAX_KEYS} keys allowed"
+            raise ValueError(msg)
+
+        cleaned: dict[str, str] = {}
+        for key, val in cf.items():
+            if len(key) > _CF_MAX_KEY_LEN:
+                msg = (
+                    f"custom_fields key too long "
+                    f"({len(key)} > {_CF_MAX_KEY_LEN}): "
+                    f"{key[:30]}..."
+                )
+                raise ValueError(msg)
+            if len(val) > _CF_MAX_VAL_LEN:
+                msg = (
+                    f"custom_fields value too long for "
+                    f"'{key[:30]}' "
+                    f"({len(val)} > {_CF_MAX_VAL_LEN})"
+                )
+                raise ValueError(msg)
+            cleaned[_CF_CONTROL_RE.sub("", key)] = (
+                _CF_CONTROL_RE.sub("", val)
+            )
+
+        self.custom_fields = cleaned
+        return self
 
 
 class IngestUrlRequest(BaseModel):

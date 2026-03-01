@@ -91,10 +91,9 @@ async def test_update_article_success() -> None:
     assert data["chunks_ingested"] > 0
     assert data["processing_time_ms"] >= 0
 
-    # Verify old chunks were deleted
-    mock_col.delete.assert_called_once()
-
-    # Verify new chunks were upserted
+    # M5: upsert-then-delete — new chunks upserted first, then stale
+    # old chunks removed. Here both old IDs (art1_chunk_0, art1_chunk_1)
+    # match the new IDs, so no stale deletion is needed.
     upsert_calls = mock_col.upsert.call_args_list
     assert len(upsert_calls) > 0
 
@@ -269,6 +268,64 @@ async def test_update_article_updates_tags() -> None:
         metas = call.kwargs.get("metadatas") or call[1].get("metadatas", [])
         for m in metas:
             assert m["tags"] == "VPN,REMOTE ACCESS"
+
+
+@pytest.mark.asyncio
+async def test_update_article_deletes_stale_chunks() -> None:
+    """When new content has fewer chunks, stale old chunks are deleted."""
+    # Old article has 3 chunks; new content produces 1 chunk.
+    _, mock_col, ac = _setup_app(
+        collection_data={
+            "ids": ["art1_chunk_0", "art1_chunk_1", "art1_chunk_2"],
+            "documents": ["A", "B", "C"],
+            "metadatas": [
+                {
+                    "article_id": "art1",
+                    "title": "Old",
+                    "section": "S0",
+                    "source_type": "manual",
+                    "imported_at": "2026-02-28T12:00:00+00:00",
+                    "tags": "",
+                },
+                {
+                    "article_id": "art1",
+                    "title": "Old",
+                    "section": "S1",
+                    "source_type": "manual",
+                    "imported_at": "2026-02-28T12:00:00+00:00",
+                    "tags": "",
+                },
+                {
+                    "article_id": "art1",
+                    "title": "Old",
+                    "section": "S2",
+                    "source_type": "manual",
+                    "imported_at": "2026-02-28T12:00:00+00:00",
+                    "tags": "",
+                },
+            ],
+        },
+    )
+
+    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
+        mock_embed_cls.return_value.embed_fn = _mock_embed
+
+        async with ac:
+            resp = await ac.put("/kb/articles/art1", json={
+                "title": "Smaller",
+                "content": "Single paragraph, no headings.",
+                "tags": [],
+            })
+
+    assert resp.status_code == 200
+    assert resp.json()["chunks_ingested"] == 1
+
+    # Stale chunks (art1_chunk_1, art1_chunk_2) should be deleted
+    mock_col.delete.assert_called_once()
+    deleted_ids = mock_col.delete.call_args[1].get(
+        "ids",
+    ) or mock_col.delete.call_args[0][0]
+    assert set(deleted_ids) == {"art1_chunk_1", "art1_chunk_2"}
 
 
 @pytest.mark.asyncio
