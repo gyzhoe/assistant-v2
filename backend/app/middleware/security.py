@@ -81,6 +81,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     for IPs whose most-recent request is older than the window.  This prevents
     unbounded growth of ``_counts`` when the server receives traffic from many
     distinct source IPs over time.
+
+    NOTE: This rate limiter uses the client IP from the direct TCP connection.
+    Behind a reverse proxy (nginx, Caddy, etc.), all requests appear to come from
+    the proxy's IP address, making per-client limiting ineffective — every client
+    shares the same bucket and hits the limit together.
+
+    For proxy deployments, choose one of:
+      1. Trust X-Forwarded-For: launch uvicorn with ``--proxy-headers`` and
+         ``--forwarded-allow-ips`` set to the proxy IP(s) so that
+         ``request.client.host`` reflects the real client IP.
+      2. Move rate limiting to the proxy layer (nginx ``limit_req_zone``, etc.)
+         and rely on the proxy to enforce per-client limits before requests reach
+         this application.
+
+    This deployment runs locally (localhost only), so this limitation does not
+    apply in the default configuration.
     """
 
     RATE_LIMITED_PATHS = {"/generate", "/ingest/upload", "/ingest/url", "/feedback"}

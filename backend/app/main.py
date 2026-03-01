@@ -89,6 +89,13 @@ def create_app() -> FastAPI:
 
     # Static file serving for KB management SPA — must come AFTER API routes
     # so /kb/* API endpoints take priority over static file catch-all.
+    #
+    # NOTE: The /manage static mount serves the KB management SPA without
+    # authentication. This is intentional for the default local-only deployment
+    # (localhost:8765), where network access is already restricted to the local
+    # machine. For network-exposed deployments (e.g., serving from a shared
+    # server), add authentication middleware or serve /manage behind an
+    # authenticated reverse proxy before exposing it to untrusted clients.
     _manage_dir = Path(__file__).resolve().parent.parent / "static" / "manage"
     if _manage_dir.is_dir():
         app.mount(
