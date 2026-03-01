@@ -37,6 +37,9 @@ jobs:
       - name: Build
         run: npm run build --workspace=extension
 
+      - name: Build management SPA
+        run: npm run build:management --workspace=extension
+
       - name: Verify all manifest paths exist in dist
         run: |
           cd extension/dist
