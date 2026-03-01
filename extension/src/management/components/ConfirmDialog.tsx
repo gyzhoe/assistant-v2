@@ -17,9 +17,11 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps): React.ReactElement {
+  const container = document.querySelector('.app-shell') as HTMLElement | null
+
   return (
     <AlertDialog.Root open={open} onOpenChange={isOpen => { if (!isOpen) onCancel() }}>
-      <AlertDialog.Portal>
+      <AlertDialog.Portal container={container}>
         <AlertDialog.Overlay className="confirm-overlay" />
         <AlertDialog.Content className="confirm-content">
           <AlertDialog.Title className="confirm-title">{title}</AlertDialog.Title>
