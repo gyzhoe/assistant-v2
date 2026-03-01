@@ -49,7 +49,7 @@ durationpy==0.10
     # via kubernetes
 fastapi==0.133.0
     # via ai-helpdesk-backend (pyproject.toml)
-filelock==3.24.3
+filelock==3.25.0
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
