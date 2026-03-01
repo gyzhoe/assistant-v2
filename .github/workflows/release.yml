@@ -27,7 +27,7 @@ jobs:
       - run: npm run build:management --workspace=extension
 
       - name: Upload extension dist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: extension-dist
           path: extension/dist/
