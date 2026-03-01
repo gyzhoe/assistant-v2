@@ -347,6 +347,36 @@ body {
   padding: 1px 6px;
 }
 
+/* ─── Ticket description preview ───────────────────── */
+.ticket-desc {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ticket-desc-text {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ticket-desc-text.ticket-desc-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.ticket-desc-toggle {
+  font-size: 0.6875rem;
+  align-self: flex-start;
+}
+
 /* ─── Controls ─────────────────────────────────────── */
 .control-row {
   display: flex;
@@ -562,6 +592,13 @@ body {
   color: var(--muted);
 }
 
+.error-fallback-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 /* ─── Backend control ─────────────────────────────── */
 .service-row {
   display: flex;
@@ -683,6 +720,13 @@ body {
 .skeleton-line-75 { width: 75%; }
 .skeleton-line-85 { width: 85%; }
 .skeleton-line-gap { margin-top: 8px; }
+
+.skeleton-elapsed {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  opacity: 0.75;
+  text-align: center;
+}
 
 /* ─── Insert button wrapper ───────────────────────── */
 .insert-button-wrapper {
@@ -1246,4 +1290,178 @@ body {
 
 .kb-url-input:disabled {
   opacity: 0.5;
+}
+
+/* Per-file upload status indicators */
+.kb-file-status {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  width: 16px;
+  text-align: center;
+}
+
+.kb-file-status.uploading {
+  color: var(--muted);
+  animation: pulse 1s infinite;
+}
+
+.kb-file-status.success {
+  color: var(--ok-text);
+}
+
+.kb-file-status.error {
+  color: var(--error-text);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-file-status.uploading {
+    animation: none;
+  }
+}
+
+.kb-file-row.file-error {
+  border-color: color-mix(in srgb, var(--error-text) 30%, transparent);
+  background: color-mix(in srgb, var(--error) 30%, transparent);
+}
+
+.kb-file-error-msg {
+  font-size: 0.6875rem;
+  color: var(--error-text);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-progress-detail {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Onboarding card */
+.onboarding-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.onboarding-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.onboarding-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.onboarding-step-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+.onboarding-step-indicator.pending {
+  border: 1.5px solid var(--chip-border);
+  color: var(--muted);
+  background: transparent;
+}
+
+.onboarding-step-indicator.done {
+  border: 1.5px solid var(--ok-text);
+  color: var(--ok-text);
+  background: var(--ok);
+}
+
+.onboarding-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.onboarding-step-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.onboarding-step-hint {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.onboarding-step-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.onboarding-step-hint a:hover {
+  text-decoration: underline;
+}
+
+.onboarding-step-hint code {
+  font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.625rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--soft-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.onboarding-dismiss {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 120ms ease;
+}
+
+.onboarding-dismiss:hover {
+  color: var(--text);
+}
+
+.onboarding-dismiss:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
 }

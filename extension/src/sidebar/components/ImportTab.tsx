@@ -1,13 +1,27 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import { apiClient, ApiError } from '../../lib/api-client'
 import { useKnowledgeImport } from '../hooks/useKnowledgeImport'
+import type { FileUploadStatus } from '../hooks/useKnowledgeImport'
 
 const ACCEPTED = '.json,.csv,.html,.htm,.pdf'
 
+function FileStatusIndicator({ status, error }: { status: FileUploadStatus; error: string | null }) {
+  switch (status) {
+    case 'uploading':
+      return <span className="kb-file-status uploading" title="Uploading">...</span>
+    case 'success':
+      return <span className="kb-file-status success" title="Uploaded">{'\u2713'}</span>
+    case 'error':
+      return <span className="kb-file-status error" title={error ?? 'Failed'}>{'\u2717'}</span>
+    default:
+      return null
+  }
+}
+
 export function ImportTab(): React.ReactElement {
   const {
-    stagedFiles, uploadStatus, progress, errorMessage, results,
-    addFiles, removeFile, clearFiles, startUpload, cancelUpload, resetState,
+    stagedFiles, uploadStatus, progress, errorMessage, results, fileSummary,
+    addFiles, removeFile, clearFiles, startUpload, retryFailed, cancelUpload, resetState,
   } = useKnowledgeImport()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -92,7 +106,7 @@ export function ImportTab(): React.ReactElement {
     }
   }, [])
 
-  // Success summary
+  // Success summary (all files succeeded)
   if (uploadStatus === 'success') {
     const totalChunks = results.reduce((sum, r) => sum + r.chunks_ingested, 0)
     const warnings = results.filter((r) => r.warning).map((r) => r.warning)
@@ -110,7 +124,46 @@ export function ImportTab(): React.ReactElement {
     )
   }
 
-  // Error state
+  // Partial success — some succeeded, some failed
+  if (uploadStatus === 'partial') {
+    const totalChunks = results.reduce((sum, r) => sum + r.chunks_ingested, 0)
+    return (
+      <div className="kb-progress">
+        <div className="alert-banner warn">
+          <p className="alert-title">Partial import</p>
+          <p className="alert-message">
+            {fileSummary.succeeded} of {fileSummary.total} files imported ({totalChunks} chunks). {fileSummary.failed} failed.
+          </p>
+        </div>
+
+        {/* Per-file status list */}
+        <div className="kb-file-list">
+          {stagedFiles.map((f) => (
+            <div key={f.id} className={`kb-file-row${f.uploadStatus === 'error' ? ' file-error' : ''}`}>
+              <FileStatusIndicator status={f.uploadStatus} error={f.errorMessage} />
+              <span className="kb-file-type-badge">{f.extension.replace('.', '')}</span>
+              <span className="kb-file-name" title={f.name}>{f.name}</span>
+              {f.uploadStatus === 'success' && f.result && (
+                <span className="kb-file-size">{f.result.chunks_ingested} chunks</span>
+              )}
+              {f.uploadStatus === 'error' && f.errorMessage && (
+                <span className="kb-file-error-msg" title={f.errorMessage}>{f.errorMessage}</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="control-row">
+          <button className="secondary-btn" onClick={resetState}>Clear</button>
+          <button className="primary-btn" onClick={retryFailed}>
+            Retry Failed ({fileSummary.failed})
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // All-error state
   if (uploadStatus === 'error') {
     return (
       <div className="kb-progress">
@@ -118,9 +171,26 @@ export function ImportTab(): React.ReactElement {
           <p className="alert-title">Import failed</p>
           <p className="alert-message">{errorMessage}</p>
         </div>
+
+        {/* Per-file error details */}
+        {stagedFiles.some((f) => f.uploadStatus === 'error') && (
+          <div className="kb-file-list">
+            {stagedFiles.map((f) => (
+              <div key={f.id} className={`kb-file-row${f.uploadStatus === 'error' ? ' file-error' : ''}`}>
+                <FileStatusIndicator status={f.uploadStatus} error={f.errorMessage} />
+                <span className="kb-file-type-badge">{f.extension.replace('.', '')}</span>
+                <span className="kb-file-name" title={f.name}>{f.name}</span>
+                {f.uploadStatus === 'error' && f.errorMessage && (
+                  <span className="kb-file-error-msg" title={f.errorMessage}>{f.errorMessage}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="control-row">
           <button className="secondary-btn" onClick={resetState}>Clear</button>
-          <button className="primary-btn" onClick={startUpload}>Retry</button>
+          <button className="primary-btn" onClick={retryFailed}>Retry All</button>
         </div>
       </div>
     )
@@ -134,6 +204,11 @@ export function ImportTab(): React.ReactElement {
         <p className="kb-progress-text">
           Processing file {progress.current}/{progress.total}: {progress.currentFile}
         </p>
+        {(progress.succeeded > 0 || progress.failed > 0) && (
+          <p className="kb-progress-detail">
+            {progress.succeeded} succeeded{progress.failed > 0 ? `, ${progress.failed} failed` : ''}
+          </p>
+        )}
         <div className="kb-progress-track">
           <div className="kb-progress-fill" style={{ width: `${pct}%` }} />
         </div>

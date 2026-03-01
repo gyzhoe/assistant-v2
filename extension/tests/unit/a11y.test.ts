@@ -41,9 +41,12 @@ describe('Accessibility attributes', () => {
     )
     spy.mockRestore()
 
-    const btn = container.querySelector('button')
-    expect(btn).not.toBeNull()
-    expect(btn!.getAttribute('aria-label')).toBe('Copy error details to clipboard')
+    const buttons = container.querySelectorAll('button')
+    expect(buttons.length).toBeGreaterThanOrEqual(2)
+    const retryBtn = buttons[0]
+    const copyBtn = buttons[1]
+    expect(retryBtn.getAttribute('aria-label')).toBe('Try again')
+    expect(copyBtn.getAttribute('aria-label')).toBe('Copy error details to clipboard')
   })
 
   it('ErrorState retry button has aria-label', async () => {

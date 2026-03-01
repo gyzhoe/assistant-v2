@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient, sendNativeCommand } from '../../lib/api-client'
 import { ThemeToggle } from './ThemeToggle'
+import { DEFAULT_MODEL } from '../../shared/constants'
 import type { AppSettings } from '../../shared/types'
 
 type BackendStatus = 'online' | 'offline' | 'checking' | 'stopping' | 'starting'
@@ -14,6 +15,74 @@ interface BackendControlProps {
 
 const POLL_INTERVAL_MS = 5000
 const FAST_POLL_MS = 1500
+const ONBOARDING_DISMISSED_KEY = 'onboardingDismissed'
+
+function OnboardingCard({
+  backendOk,
+  ollamaOk,
+  modelOk,
+  onDismiss,
+}: {
+  backendOk: boolean
+  ollamaOk: boolean
+  modelOk: boolean
+  onDismiss: () => void
+}) {
+  const steps = [
+    {
+      label: 'Install Ollama',
+      done: ollamaOk,
+      hint: (
+        <>
+          Download from{' '}
+          <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">
+            ollama.com
+          </a>
+          , then run it.
+        </>
+      ),
+    },
+    {
+      label: 'Pull a model',
+      done: modelOk,
+      hint: (
+        <>
+          Run <code>ollama pull {DEFAULT_MODEL}</code> in your terminal.
+        </>
+      ),
+    },
+    {
+      label: 'Start the backend',
+      done: backendOk,
+      hint: <>Start the AI Helpdesk backend server (port 8765).</>,
+    },
+  ]
+
+  return (
+    <div className="onboarding-card" role="region" aria-label="Getting started">
+      <h3 className="onboarding-title">Getting Started</h3>
+      <p className="onboarding-subtitle">
+        Complete these steps to start using the AI assistant.
+      </p>
+      <div className="onboarding-steps">
+        {steps.map((step) => (
+          <div key={step.label} className="onboarding-step">
+            <span className={`onboarding-step-indicator ${step.done ? 'done' : 'pending'}`}>
+              {step.done ? '\u2713' : '\u00B7'}
+            </span>
+            <div className="onboarding-step-body">
+              <span className="onboarding-step-label">{step.label}</span>
+              {!step.done && <span className="onboarding-step-hint">{step.hint}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="onboarding-dismiss" onClick={onDismiss} type="button">
+        Dismiss
+      </button>
+    </div>
+  )
+}
 
 export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: BackendControlProps): React.ReactElement {
   const [status, setStatus] = useState<BackendStatus>('checking')
@@ -22,6 +91,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const [version, setVersion] = useState('')
   const [nativeError, setNativeError] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+  const [onboardingDismissed, setOnboardingDismissed] = useState(true) // default true to avoid flash
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
   const actionInFlightRef = useRef(false)
@@ -29,6 +99,15 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const ticketData = useSidebarStore((s) => s.ticketData)
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
   const selectedModel = useSidebarStore((s) => s.selectedModel)
+
+  // Load onboarding dismissed state
+  useEffect(() => {
+    chrome.storage.local.get(ONBOARDING_DISMISSED_KEY, (result) => {
+      if (mountedRef.current) {
+        setOnboardingDismissed(result[ONBOARDING_DISMISSED_KEY] === true)
+      }
+    })
+  }, [])
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -74,6 +153,28 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       clearTimer()
     }
   }, [checkHealth, schedulePoll])
+
+  // Auto-dismiss onboarding when all service checks pass
+  const backendOk = status === 'online'
+  const modelOk = selectedModel.length > 0
+  const allServicesOk = backendOk && ollamaOk && modelOk
+
+  useEffect(() => {
+    if (allServicesOk && !onboardingDismissed) {
+      setOnboardingDismissed(true)
+      chrome.storage.local.set({ [ONBOARDING_DISMISSED_KEY]: true })
+    }
+  }, [allServicesOk, onboardingDismissed])
+
+  const handleDismissOnboarding = useCallback(() => {
+    setOnboardingDismissed(true)
+    chrome.storage.local.set({ [ONBOARDING_DISMISSED_KEY]: true })
+  }, [])
+
+  // Show onboarding when ALL service checks fail and user hasn't dismissed.
+  // Don't show during initial 'checking' phase to avoid a flash.
+  const showOnboarding =
+    status === 'offline' && !ollamaOk && !onboardingDismissed
 
   // --- Backend controls ---
 
@@ -153,16 +254,16 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   const readiness = [
     { label: 'Ticket detected', ok: Boolean(isTicketPage && ticketData) },
-    { label: 'Backend connected', ok: status === 'online' },
+    { label: 'Backend connected', ok: backendOk },
     { label: 'Ollama ready', ok: ollamaOk },
-    { label: 'Model selected', ok: selectedModel.length > 0 },
+    { label: 'Model selected', ok: modelOk },
   ]
 
   const allReady = readiness.every((r) => r.ok)
 
   const chipLabel =
-    status === 'checking' || status === 'starting' ? 'Checking…' :
-    status === 'stopping' ? 'Stopping…' :
+    status === 'checking' || status === 'starting' ? 'Checking\u2026' :
+    status === 'stopping' ? 'Stopping\u2026' :
     status === 'offline' ? 'Offline' :
     allReady ? 'Ready' : 'Attention'
 
@@ -191,18 +292,42 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
           resolvedTheme={resolvedTheme}
           onCycle={onCycleTheme}
         />
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={() => chrome.runtime.openOptionsPage()}
+          aria-label="Open settings"
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="2" />
+            <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
+          </svg>
+        </button>
       </div>
 
       {!collapsed && (
         <div id="status-panel-body" className="collapsible-body">
+          {/* --- Onboarding card (shown when all services are down) --- */}
+          {showOnboarding && (
+            <OnboardingCard
+              backendOk={backendOk}
+              ollamaOk={ollamaOk}
+              modelOk={modelOk}
+              onDismiss={handleDismissOnboarding}
+            />
+          )}
+
           {/* --- Readiness badges --- */}
-          <div className="badge-grid">
-            {readiness.map((r) => (
-              <span key={r.label} className={`badge${r.ok ? ' ok' : ''}`}>
-                {r.ok ? '\u2713' : '\u2022'} {r.label}
-              </span>
-            ))}
-          </div>
+          {!showOnboarding && (
+            <div className="badge-grid">
+              {readiness.map((r) => (
+                <span key={r.label} className={`badge${r.ok ? ' ok' : ''}`}>
+                  {r.ok ? '\u2713' : '\u2022'} {r.label}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* --- Services (online) --- */}
           {status === 'online' && (
