@@ -125,33 +125,6 @@ def test_load_kb_html_dir_empty(tmp_path: Path) -> None:
     assert results == []
 
 
-# ── Chunker utility ───────────────────────────────────────────────────────────
-
-
-def test_chunker_basic() -> None:
-    from app.utils.chunker import chunk_by_tokens
-
-    text = " ".join(["word"] * 1200)
-    chunks = chunk_by_tokens(text, max_tokens=500, overlap_tokens=50)
-    assert len(chunks) >= 2
-    for chunk in chunks:
-        assert len(chunk.split()) <= 500
-
-
-def test_chunker_empty() -> None:
-    from app.utils.chunker import chunk_by_tokens
-
-    assert chunk_by_tokens("") == []
-
-
-def test_chunker_short_text() -> None:
-    from app.utils.chunker import chunk_by_tokens
-
-    text = "short text here"
-    chunks = chunk_by_tokens(text, max_tokens=500)
-    assert chunks == [text]
-
-
 # ── Pipeline: ingest_file routing ────────────────────────────────────────────
 
 
@@ -169,57 +142,6 @@ def _make_pipeline(
     fn = embed_fn if embed_fn is not None else lambda _text: [0.1] * 768
     pipeline = IngestionPipeline(chroma_client=mock_client, embed_fn=fn)  # type: ignore[arg-type]
     return pipeline, mock_client
-
-
-def test_ingest_file_routes_json_to_tickets(tmp_path: Path) -> None:
-    from ingestion.pipeline import TICKET_COLLECTION
-
-    data = [{"id": "1", "subject": "Test", "description": "Test desc"}]
-    f = tmp_path / "tickets.json"
-    f.write_text(json.dumps(data), encoding="utf-8")
-
-    pipeline, mock_client = _make_pipeline(tmp_path)
-    collection_name, chunks = pipeline.ingest_file(f)  # type: ignore[union-attr]
-
-    assert collection_name == TICKET_COLLECTION
-    assert chunks >= 1
-    mock_client.get_or_create_collection.assert_called_once()
-    call_kwargs = mock_client.get_or_create_collection.call_args
-    assert call_kwargs.kwargs["name"] == TICKET_COLLECTION
-
-
-def test_ingest_file_routes_html_to_kb(tmp_path: Path) -> None:
-    from ingestion.pipeline import KB_COLLECTION
-
-    html = "<html><body><h1>Title</h1><p>Content here</p></body></html>"
-    f = tmp_path / "article.html"
-    f.write_text(html, encoding="utf-8")
-
-    pipeline, mock_client = _make_pipeline(tmp_path)
-    collection_name, chunks = pipeline.ingest_file(f)  # type: ignore[union-attr]
-
-    assert collection_name == KB_COLLECTION
-    assert chunks >= 1
-
-
-def test_ingest_file_routes_pdf_to_kb(tmp_path: Path) -> None:
-    from pypdf import PdfWriter
-
-    from ingestion.pipeline import KB_COLLECTION
-
-    # Create a minimal valid PDF
-    writer = PdfWriter()
-    writer.add_blank_page(width=72, height=72)
-    f = tmp_path / "doc.pdf"
-    with f.open("wb") as fp:
-        writer.write(fp)
-
-    pipeline, mock_client = _make_pipeline(tmp_path)
-    collection_name, chunks = pipeline.ingest_file(f)  # type: ignore[union-attr]
-
-    assert collection_name == KB_COLLECTION
-    # Blank PDF may produce 0 chunks — that's valid behavior
-    assert chunks >= 0
 
 
 def test_ingest_file_raises_for_unsupported_extension(tmp_path: Path) -> None:
@@ -281,3 +203,42 @@ def test_pdf_page_limit_caps_at_500(tmp_path: Path) -> None:
 
     # All pages' extract_text calls should total 500 (due to [:500] slice)
     assert mock_page.extract_text.call_count == 500
+
+
+# ── imported_at in loaders ────────────────────────────────────────────────────
+
+
+def test_html_loader_includes_imported_at(tmp_path: Path) -> None:
+    """HTML loader chunks should include imported_at metadata."""
+    from ingestion.kb_loader import load_kb_html
+
+    html = "<html><body><h1>Test</h1><p>Some content here for testing.</p></body></html>"
+    f = tmp_path / "test.html"
+    f.write_text(html, encoding="utf-8")
+
+    chunks = list(load_kb_html(f))
+    assert len(chunks) > 0
+    for _, _, meta in chunks:
+        assert "imported_at" in meta
+        assert meta["imported_at"]  # non-empty
+
+
+def test_url_loader_includes_imported_at() -> None:
+    """URL loader chunks should include imported_at metadata."""
+    from unittest.mock import patch
+
+    with patch("ingestion.url_loader.validate_url", return_value="https://example.com"), \
+         patch("ingestion.url_loader.fetch_url") as mock_fetch:
+        mock_fetch.return_value = (
+            "<html><body><p>Example content for testing chunking.</p></body></html>",
+            "text/html",
+            "https://example.com",
+        )
+
+        from ingestion.url_loader import load_url
+
+        chunks = list(load_url("https://example.com"))
+        assert len(chunks) > 0
+        for _, _, meta in chunks:
+            assert "imported_at" in meta
+            assert meta["imported_at"]

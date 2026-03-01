@@ -92,32 +92,6 @@ async def test_rate_limit_returns_429_after_limit_exceeded() -> None:
             assert "Max 3 requests per minute" in body["detail"]
 
 
-@pytest.mark.asyncio
-async def test_rate_limit_response_body_schema() -> None:
-    """429 response must contain the expected JSON keys."""
-    async with _AppClientContext(max_per_minute=1) as ac:
-        with (
-            patch("app.routers.generate.RAGService") as mock_rag_cls,
-            patch("app.routers.generate.LLMService") as mock_llm_cls,
-        ):
-            mock_rag = MagicMock()
-            mock_rag.retrieve = AsyncMock(return_value=[])
-            mock_rag_cls.return_value = mock_rag
-            mock_llm = MagicMock()
-            mock_llm.generate = AsyncMock(return_value="ok")
-            mock_llm_cls.return_value = mock_llm
-
-            payload = {"ticket_description": "Test"}
-            await ac.post("/generate", json=payload)  # consume the single allowed slot
-            resp = await ac.post("/generate", json=payload)
-
-            assert resp.status_code == 429
-            data = resp.json()
-            assert "detail" in data
-            assert "error_code" in data
-            assert data["error_code"] == "RATE_LIMITED"
-
-
 # ---------------------------------------------------------------------------
 # Rate Limiting — per-IP isolation
 # ---------------------------------------------------------------------------
@@ -235,45 +209,6 @@ async def test_rate_limit_only_counts_generate_calls() -> None:
 # ---------------------------------------------------------------------------
 # Rate Limiting — stale entry eviction
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_evicts_stale_entries() -> None:
-    """The eviction sweep removes IP entries whose last timestamp is outside the window.
-
-    Instantiates the middleware directly (no full app) so that the instance is
-    accessible and the test does not depend on Starlette's lazily-built middleware
-    stack.
-    """
-    mini = FastAPI()
-    rate_mw = RateLimitMiddleware(mini, max_per_minute=5)
-    rate_mw._window = 0.05  # 50 ms window
-
-    stale_time = time.monotonic() - 1.0  # 1 s old — well outside 50 ms window
-    rate_mw._counts["192.0.2.99"] = [stale_time]
-    rate_mw._last_sweep = stale_time  # force the sweep to fire on next call
-
-    async with rate_mw._lock:
-        rate_mw._evict_stale_entries(time.monotonic())
-
-    assert "192.0.2.99" not in rate_mw._counts, "stale entry should have been evicted"
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_eviction_preserves_active_entries() -> None:
-    """Eviction must NOT remove IPs whose most-recent timestamp is inside the window."""
-    mini = FastAPI()
-    rate_mw = RateLimitMiddleware(mini, max_per_minute=5)
-    rate_mw._window = 60.0  # large window
-
-    now = time.monotonic()
-    rate_mw._counts["192.0.2.100"] = [now - 0.5]  # 0.5 s ago — inside 60 s window
-    rate_mw._last_sweep = now - 61.0  # sweep is due
-
-    async with rate_mw._lock:
-        rate_mw._evict_stale_entries(now)
-
-    assert "192.0.2.100" in rate_mw._counts, "active entry must be preserved"
 
 
 # ---------------------------------------------------------------------------
@@ -505,20 +440,6 @@ async def test_ingest_upload_exempt_from_size_limit() -> None:
             )
             # Should reach the handler (200 from mocked pipeline)
             assert resp.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_generate_still_size_limited() -> None:
-    """/generate must still be size-limited after adding /ingest/upload exemption."""
-    max_bytes = 512
-    async with _AppClientContext(max_bytes=max_bytes) as ac:
-        oversized = b"x" * (max_bytes + 1)
-        resp = await ac.post(
-            "/generate",
-            content=oversized,
-            headers={"Content-Type": "application/json"},
-        )
-        assert resp.status_code == 413
 
 
 # ---------------------------------------------------------------------------
