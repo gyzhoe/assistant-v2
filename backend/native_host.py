@@ -1,8 +1,8 @@
 """
 Native messaging host for AI Helpdesk Assistant.
 
-Allows the browser extension to start the backend server and Ollama
-when they are not already running. Communicates via Chrome/Edge native
+Allows the browser extension to start and stop the backend server and Ollama
+via OS-level process management. Communicates via Chrome/Edge native
 messaging protocol (4-byte length prefix + JSON over stdio).
 
 Registered via installer/scripts/register-native-host.ps1.
@@ -10,12 +10,17 @@ Registered via installer/scripts/register-native-host.ps1.
 
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BACKEND_DIR, "native_host.log")
+
+# subprocess.CREATE_NO_WINDOW only exists on Windows; use 0 on other platforms
+# so tests can run on Linux CI.
+_CREATION_FLAGS: int = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 def log(msg: str) -> None:
@@ -56,7 +61,7 @@ def start_backend() -> dict:
                 cwd=BACKEND_DIR,
                 stdout=fout,
                 stderr=ferr,
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=_CREATION_FLAGS,
             )
         log(f"Started PID={proc.pid}")
         return {"ok": True, "status": "starting", "pid": proc.pid}
@@ -99,12 +104,71 @@ def start_ollama() -> dict:
             ["ollama", "serve"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=_CREATION_FLAGS,
         )
         return {"ok": True, "status": "starting"}
     except Exception as e:
         log(f"Error starting Ollama: {e}")
         return {"ok": False, "error": str(e)}
+
+
+def _find_pids_on_port(port: int) -> list[int]:
+    """Parse ``netstat -ano -p TCP`` to find PIDs listening on *port*."""
+    try:
+        output = subprocess.check_output(
+            ["netstat", "-ano", "-p", "TCP"],
+            text=True,
+            creationflags=_CREATION_FLAGS,
+        )
+    except Exception:
+        return []
+
+    pids: set[int] = set()
+    pattern = re.compile(rf":\s*{port}\s+.*LISTENING\s+(\d+)", re.IGNORECASE)
+    for line in output.splitlines():
+        m = pattern.search(line)
+        if m:
+            pid = int(m.group(1))
+            if pid != 0:
+                pids.add(pid)
+    return sorted(pids)
+
+
+def stop_backend() -> dict:
+    """Stop the backend by killing processes listening on port 8765."""
+    pids = _find_pids_on_port(8765)
+    if not pids:
+        log("stop_backend: no process found on port 8765")
+        return {"ok": True, "status": "not_running"}
+
+    log(f"stop_backend: killing PIDs {pids}")
+    for pid in pids:
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=_CREATION_FLAGS,
+            )
+        except Exception as e:
+            log(f"stop_backend: failed to kill PID {pid}: {e}")
+    return {"ok": True, "status": "stopped", "pids": pids}
+
+
+def stop_ollama() -> dict:
+    """Stop Ollama by killing its process tree."""
+    log("stop_ollama: killing ollama.exe and ollama_llama_server.exe")
+    for exe in ("ollama.exe", "ollama_llama_server.exe"):
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", exe, "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=_CREATION_FLAGS,
+            )
+        except Exception as e:
+            log(f"stop_ollama: failed to kill {exe}: {e}")
+    return {"ok": True, "status": "stopped"}
 
 
 def main() -> None:
@@ -119,6 +183,10 @@ def main() -> None:
         send_message(start_backend())
     elif action == "start_ollama":
         send_message(start_ollama())
+    elif action == "stop_backend":
+        send_message(stop_backend())
+    elif action == "stop_ollama":
+        send_message(stop_ollama())
     elif action == "get_token":
         send_message(get_token())
     else:

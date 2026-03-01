@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient } from '../../lib/api-client'
 import { DEFAULT_MODEL } from '../../shared/constants'
@@ -6,8 +6,10 @@ import { DEFAULT_MODEL } from '../../shared/constants'
 export function ModelSelector(): React.ReactElement {
   const selectedModel = useSidebarStore((s) => s.selectedModel)
   const setSelectedModel = useSidebarStore((s) => s.setSelectedModel)
+  const ollamaReachable = useSidebarStore((s) => s.ollamaReachable)
   const [models, setModels] = useState<string[]>([DEFAULT_MODEL])
   const [fetchError, setFetchError] = useState(false)
+  const prevOllamaRef = useRef(ollamaReachable)
 
   const fetchModels = useCallback(() => {
     setFetchError(false)
@@ -24,6 +26,14 @@ export function ModelSelector(): React.ReactElement {
   useEffect(() => {
     fetchModels()
   }, [fetchModels])
+
+  // Re-fetch when Ollama transitions from unreachable → reachable
+  useEffect(() => {
+    if (ollamaReachable && !prevOllamaRef.current) {
+      fetchModels()
+    }
+    prevOllamaRef.current = ollamaReachable
+  }, [ollamaReachable, fetchModels])
 
   // Re-fetch models when the document becomes visible (e.g. after backend reconnect)
   useEffect(() => {
