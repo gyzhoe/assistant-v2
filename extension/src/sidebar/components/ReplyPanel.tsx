@@ -13,7 +13,7 @@ import { ErrorState } from './ErrorState'
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
   const { generate } = useGenerateReply()
-  const { submitRating, feedbackError } = useSubmitFeedback()
+  const { submitRating, feedbackError, ratingConfirmed } = useSubmitFeedback()
   const [contextCollapsed, setContextCollapsed] = useState(false)
 
   const pinnedCount = useSidebarStore((s) => s.pinnedArticles.length)
@@ -110,8 +110,8 @@ export function ReplyPanel(): React.ReactElement {
                     type="button"
                     className={`rating-btn${replyRating === 'good' ? ' selected' : ''}${replyRating === 'bad' ? ' dimmed' : ''}`}
                     onClick={() => submitRating('good')}
-                    disabled={replyRating !== null}
                     aria-label="Rate as helpful"
+                    aria-pressed={replyRating === 'good'}
                   >
                     &#x1F44D;
                   </button>
@@ -119,15 +119,20 @@ export function ReplyPanel(): React.ReactElement {
                     type="button"
                     className={`rating-btn${replyRating === 'bad' ? ' selected' : ''}${replyRating === 'good' ? ' dimmed' : ''}`}
                     onClick={() => submitRating('bad')}
-                    disabled={replyRating !== null}
                     aria-label="Rate as unhelpful"
+                    aria-pressed={replyRating === 'bad'}
                   >
                     &#x1F44E;
                   </button>
                 </div>
-                {feedbackError && (
-                  <span className="support-text error-text" role="alert">{feedbackError}</span>
-                )}
+                <div aria-live="polite" className="rating-feedback-region">
+                  {ratingConfirmed && (
+                    <span className="rating-saved">&#x2713; Saved</span>
+                  )}
+                  {feedbackError && !ratingConfirmed && (
+                    <span className="support-text error-text" role="alert">{feedbackError}</span>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="secondary-btn draft-toggle"

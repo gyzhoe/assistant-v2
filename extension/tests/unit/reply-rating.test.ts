@@ -57,6 +57,61 @@ const defaultState = {
   replyRating: null,
 }
 
+describe('useSubmitFeedback toggle', () => {
+  beforeEach(() => {
+    mockSubmitFeedback.mockReset()
+    useSidebarStore.setState(defaultState)
+  })
+
+  it('clears rating and skips backend call when same rating clicked twice', async () => {
+    mockSubmitFeedback.mockResolvedValue(undefined)
+    useSidebarStore.setState({ replyRating: 'good' })
+
+    const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
+    const { renderHook, act } = await import('@testing-library/react')
+    const { result } = renderHook(() => useSubmitFeedback())
+
+    await act(async () => {
+      await result.current.submitRating('good')
+    })
+
+    expect(useSidebarStore.getState().replyRating).toBeNull()
+    expect(mockSubmitFeedback).not.toHaveBeenCalled()
+  })
+
+  it('switches rating and calls backend when different rating clicked', async () => {
+    mockSubmitFeedback.mockResolvedValue(undefined)
+    useSidebarStore.setState({ replyRating: 'good' })
+
+    const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
+    const { renderHook, act } = await import('@testing-library/react')
+    const { result } = renderHook(() => useSubmitFeedback())
+
+    await act(async () => {
+      await result.current.submitRating('bad')
+    })
+
+    expect(useSidebarStore.getState().replyRating).toBe('bad')
+    expect(mockSubmitFeedback).toHaveBeenCalledOnce()
+  })
+
+  it('clears bad rating and skips backend call when thumbs down clicked twice', async () => {
+    mockSubmitFeedback.mockResolvedValue(undefined)
+    useSidebarStore.setState({ replyRating: 'bad' })
+
+    const { useSubmitFeedback } = await import('../../src/sidebar/hooks/useSubmitFeedback')
+    const { renderHook, act } = await import('@testing-library/react')
+    const { result } = renderHook(() => useSubmitFeedback())
+
+    await act(async () => {
+      await result.current.submitRating('bad')
+    })
+
+    expect(useSidebarStore.getState().replyRating).toBeNull()
+    expect(mockSubmitFeedback).not.toHaveBeenCalled()
+  })
+})
+
 describe('useSubmitFeedback rollback', () => {
   beforeEach(() => {
     mockSubmitFeedback.mockReset()
@@ -112,7 +167,7 @@ describe('ReplyPanel rating buttons', () => {
     expect(thumbsDown).not.toBeNull()
   })
 
-  it('disables buttons after rating is submitted', async () => {
+  it('keeps buttons enabled after rating is submitted (re-rating allowed)', async () => {
     useSidebarStore.setState({ replyRating: 'good' })
 
     const React = await import('react')
@@ -122,8 +177,60 @@ describe('ReplyPanel rating buttons', () => {
     const { container } = render(React.createElement(ReplyPanel))
     const thumbsUp = container.querySelector('[aria-label="Rate as helpful"]') as HTMLButtonElement
     const thumbsDown = container.querySelector('[aria-label="Rate as unhelpful"]') as HTMLButtonElement
-    expect(thumbsUp.disabled).toBe(true)
-    expect(thumbsDown.disabled).toBe(true)
+    expect(thumbsUp.disabled).toBe(false)
+    expect(thumbsDown.disabled).toBe(false)
+  })
+
+  it('sets aria-pressed on the selected rating button', async () => {
+    useSidebarStore.setState({ replyRating: 'bad' })
+
+    const React = await import('react')
+    const { render } = await import('@testing-library/react')
+    const { ReplyPanel } = await import('../../src/sidebar/components/ReplyPanel')
+
+    const { container } = render(React.createElement(ReplyPanel))
+    const thumbsUp = container.querySelector('[aria-label="Rate as helpful"]') as HTMLButtonElement
+    const thumbsDown = container.querySelector('[aria-label="Rate as unhelpful"]') as HTMLButtonElement
+    expect(thumbsUp.getAttribute('aria-pressed')).toBe('false')
+    expect(thumbsDown.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('shows success confirmation after successful rating', async () => {
+    mockSubmitFeedback.mockResolvedValueOnce(undefined)
+
+    const React = await import('react')
+    const { render } = await import('@testing-library/react')
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    const { ReplyPanel } = await import('../../src/sidebar/components/ReplyPanel')
+
+    const { container } = render(React.createElement(ReplyPanel))
+    const thumbsUp = container.querySelector('[aria-label="Rate as helpful"]') as HTMLButtonElement
+    fireEvent.click(thumbsUp)
+
+    await waitFor(() => {
+      expect(container.querySelector('.rating-saved')).not.toBeNull()
+    })
+  })
+
+  it('allows re-rating by clicking the other button', async () => {
+    mockSubmitFeedback.mockResolvedValue(undefined)
+
+    const React = await import('react')
+    const { render } = await import('@testing-library/react')
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    const { ReplyPanel } = await import('../../src/sidebar/components/ReplyPanel')
+
+    const { container } = render(React.createElement(ReplyPanel))
+    const thumbsUp = container.querySelector('[aria-label="Rate as helpful"]') as HTMLButtonElement
+    const thumbsDown = container.querySelector('[aria-label="Rate as unhelpful"]') as HTMLButtonElement
+
+    fireEvent.click(thumbsUp)
+    await waitFor(() => expect(useSidebarStore.getState().replyRating).toBe('good'))
+
+    fireEvent.click(thumbsDown)
+    await waitFor(() => expect(useSidebarStore.getState().replyRating).toBe('bad'))
+    expect(thumbsDown.classList.contains('selected')).toBe(true)
+    expect(thumbsUp.classList.contains('dimmed')).toBe(true)
   })
 
   it('applies selected class to chosen rating and dimmed to other', async () => {
