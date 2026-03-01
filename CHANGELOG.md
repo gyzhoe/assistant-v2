@@ -7,21 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] — Sprint 2 (2026-03-01)
+
 ### Fixed
 
-- **C1**: Synced version strings to 1.8.0 across `config.py`, `package.json`, and `setup.iss`
-- **C2**: Wrapped blocking ChromaDB calls in `asyncio.to_thread` in health endpoint
-- **C3**: Wrapped blocking `subprocess.run` in `asyncio.to_thread` in health endpoint
-- **H1**: Regenerated `requirements.txt` via `uv pip compile` (removed unused langchain dependencies)
-- **H4/H5**: Replaced private `semaphore._value` access with public `.locked()` API across 4 call sites in ingest and KB routers
-- **H6**: Narrowed feedback endpoint error handling to specific connection errors; returns 503 for Ollama/ChromaDB failures instead of silently swallowing all exceptions
-- **H7**: Moved `httpx.Client` creation from per-request to `__init__` in `EmbedService`, `LLMService`, and `MicrosoftDocsService` (eliminates per-request connection overhead)
-- **KB Management**: Fix dark mode for confirm dialog — render Radix AlertDialog.Portal inside `.app-shell` container so CSS custom properties are inherited, removing hardcoded light-theme fallback values (H10)
-- **H2**: Deduplicated type definitions (`IngestUploadResponse`, `IngestUrlResponse`, `HealthResponse`) between `shared/types.ts` and `management/types.ts`; management re-exports from shared
-- **H3**: Unified `ApiError` class into `shared/api-error.ts`; both sidebar and management API clients import from the same canonical source
-- **H8**: Narrowed `MutationObserver` target to `#ticketDetailForm` (falls back to `document.body`), disabled `attributes` and `characterData` tracking to reduce noise
-- **H9**: Moved settings into the Zustand sidebar store with `chrome.storage.sync` initialization and `onChanged` listener; `useSettings` hook now reads from store (single source of truth shared across all consumers)
-- **H11**: Added unsaved changes detection to Options page with `beforeunload` prompt and visual "(unsaved changes)" hint; refs reset on save
+- **M1**: Async cleanup for temp files during ingestion (no blocking sleep)
+- **M2**: Thread-safe article cache with `asyncio.Lock` in KB router
+- **M3**: Thread-safe Microsoft Docs cache with `threading.Lock` in service
+- **M4**: Article ID collision detection with distinct error messages
+- **M5**: Atomic `update_article` via upsert-then-delete pattern to preserve data on failure
+- **M12**: Added `uv.lock` to repository for reproducible dependency builds
+- **M11**: Added auth headers (`X-Extension-Token`) to shutdown and Ollama API calls (`/ollama/start`, `/ollama/stop`)
+- **M13**: Added management SPA build step to CI workflow (runs after main extension build)
+- **M14**: Added `backend/static/manage/` directory to installer `setup.iss` and release workflow
+- **M17**: Double-click guard on BackendControl start/stop buttons to prevent concurrent requests
+- **M18**: Cleanup `setTimeout` on ArticleList unmount to prevent memory leaks
+- **M19**: Pin cap toast notification + `MAX_PINNED_ARTICLES` constant extraction
+- **M20**: Inline error message on feedback rating failure (replaces silent reset)
+- **M21**: Success/error color differentiation for save messages in ArticleEditor
+- **M22**: Model fetch failure hint in sidebar + re-fetch on reconnect
+- **M23**: Network error detection in generation flow with user-facing messages
+- **M25**: Undo timeout extended from 3s to 8s for accessibility
+- **RI2**: `custom_fields` validation (max 10 keys, 100-char keys, 500-char values, control char stripping)
+- **RI5**: Consolidated duplicate collapse triggers in BackendControl component
+- **RI6**: Extracted hardcoded institution environment context to `ENVIRONMENT_CONTEXT` config setting
+- **L1-L9**: Type fixes, unused `useMemo` removal, dead code cleanup (`chunk_by_paragraphs`), deduplicated utilities (`_content_id`, HTML extraction)
+- **L12**: Fixed type assertion issue in management page
+- **L29**: Removed unnecessary `useMemo` wrapper
+- **L31**: Display property fix for feedback panel
+- **L38**: Label update in ArticleEditor
+- **KB Management**: Fix dark mode for confirm dialog — render Radix AlertDialog.Portal inside `.app-shell` container so CSS custom properties are inherited (H10)
+- **CSS**: Dead code removal, token cleanup, transition standardization
+
+### Changed
+
+- API contract documentation updated to accurately reflect default values for all optional fields
+- `clear_collection` error code corrected from 404 to 422 for invalid collection names
 
 ## [1.8.0] — 2026-02-28
 
