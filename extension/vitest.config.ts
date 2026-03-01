@@ -10,5 +10,10 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
     },
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['node_modules', 'tests', 'dist'],
+    },
   },
 })
