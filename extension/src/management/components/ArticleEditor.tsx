@@ -280,7 +280,7 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
               type="button"
               className="tag-browse-toggle"
               onClick={() => setShowTagSuggestions(v => !v)}
-              aria-expanded={showTagSuggestions}
+              aria-expanded={showTagSuggestions ? "true" : "false"}
               aria-label="Browse tag suggestions"
             >
               <svg
@@ -321,7 +321,7 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
                         }
                       }}
                       disabled={!selected && tags.length >= 20}
-                      aria-pressed={selected}
+                      aria-pressed={selected ? "true" : "false"}
                     >
                       {selected ? '\u2713 ' : '+ '}{t}
                     </button>

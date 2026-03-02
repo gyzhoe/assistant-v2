@@ -64,7 +64,7 @@ export function KnowledgePanel(): React.ReactElement {
       <button
         className="section-heading-row collapsible-trigger"
         onClick={() => setCollapsed((c) => !c)}
-        aria-expanded={!collapsed}
+        aria-expanded={!collapsed ? "true" : "false"}
         aria-controls="kb-panel-body"
       >
         <h2 className="section-heading">Knowledge Base</h2>

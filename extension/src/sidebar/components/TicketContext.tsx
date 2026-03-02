@@ -28,7 +28,7 @@ export function TicketContext({ ticket }: TicketContextProps): React.ReactElemen
             type="button"
             className="link-btn ticket-desc-toggle"
             onClick={() => setDescExpanded((e) => !e)}
-            aria-expanded={descExpanded}
+            aria-expanded={descExpanded ? "true" : "false"}
           >
             {descExpanded ? 'Show less' : 'Show more'}
           </button>
