@@ -41,16 +41,23 @@ export function KnowledgePanel(): React.ReactElement {
     }, POLL_INTERVAL_MS)
   }, [fetchCounts, clearTimer])
 
+  // Only poll when expanded; stop polling when collapsed
   useEffect(() => {
     mountedRef.current = true
-    fetchCounts().finally(() => {
-      if (mountedRef.current) schedulePoll()
-    })
+    if (!collapsed) {
+      // Panel just expanded — fetch immediately, then start polling
+      fetchCounts().finally(() => {
+        if (mountedRef.current) schedulePoll()
+      })
+    } else {
+      // Panel collapsed — stop polling
+      clearTimer()
+    }
     return () => {
       mountedRef.current = false
       clearTimer()
     }
-  }, [fetchCounts, schedulePoll, clearTimer])
+  }, [collapsed, fetchCounts, schedulePoll, clearTimer])
 
   const handleRefresh = useCallback(() => {
     clearTimer()

@@ -145,4 +145,61 @@ describe('SidebarHost', () => {
     // extract should NOT have been called again — debounce was cleared
     expect(mockReader.extract).toHaveBeenCalledTimes(1)
   })
+
+  it('uses #ticketDetailForm as observer target when available', async () => {
+    const form = document.createElement('form')
+    form.id = 'ticketDetailForm'
+    document.body.appendChild(form)
+
+    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe')
+
+    const { SidebarHost } = await import('../../src/content/sidebar-host')
+    const host = new SidebarHost(mockReader as never)
+    host.start()
+
+    expect(observeSpy).toHaveBeenCalledWith(form, expect.objectContaining({
+      childList: true,
+      subtree: true,
+    }))
+
+    observeSpy.mockRestore()
+    host.stop()
+  })
+
+  it('falls back to intermediate ancestors before document.body', async () => {
+    // No #ticketDetailForm, but #mainContent exists
+    const main = document.createElement('div')
+    main.id = 'mainContent'
+    document.body.appendChild(main)
+
+    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe')
+
+    const { SidebarHost } = await import('../../src/content/sidebar-host')
+    const host = new SidebarHost(mockReader as never)
+    host.start()
+
+    expect(observeSpy).toHaveBeenCalledWith(main, expect.anything())
+
+    observeSpy.mockRestore()
+    host.stop()
+  })
+
+  it('includes attributeFilter for value, selected, class', async () => {
+    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe')
+
+    const { SidebarHost } = await import('../../src/content/sidebar-host')
+    const host = new SidebarHost(mockReader as never)
+    host.start()
+
+    expect(observeSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      attributes: true,
+      attributeFilter: ['value', 'selected', 'class'],
+    }))
+
+    observeSpy.mockRestore()
+    host.stop()
+  })
 })

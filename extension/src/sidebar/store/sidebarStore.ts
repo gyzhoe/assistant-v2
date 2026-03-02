@@ -96,8 +96,9 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     set({ isGenerating: false, abortController: null })
   },
   updateSettings: async (updates) => {
-    await storage.saveSettings(updates)
-    set((state) => ({ settings: { ...state.settings, ...updates } }))
+    const merged = { ...get().settings, ...updates }
+    await storage.saveSettings(merged)
+    set({ settings: merged })
   },
   saveReplyForTicket: (ticketUrl) => {
     const { reply } = get()

@@ -268,8 +268,14 @@ export function ImportTab(): React.ReactElement {
             className="primary-btn"
             onClick={handleUrlImport}
             disabled={!urlInput.trim() || urlLoading || isUploading}
+            aria-busy={urlLoading}
           >
-            {urlLoading ? 'Importing...' : 'Import URL'}
+            {urlLoading ? (
+              <>
+                <span className="url-import-spinner" aria-hidden="true" />
+                Importing...
+              </>
+            ) : 'Import URL'}
           </button>
         </div>
         {urlError && <p className="support-text error-text" role="alert">{urlError}</p>}

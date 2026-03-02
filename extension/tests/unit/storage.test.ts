@@ -48,11 +48,24 @@ describe('storage', () => {
   })
 
   it('saveSettings writes to chrome.storage.sync', async () => {
-    const { storage } = await import('../../src/lib/storage')
-    await storage.saveSettings({ backendUrl: 'http://newhost:8080' })
+    const { storage, DEFAULT_SETTINGS } = await import('../../src/lib/storage')
+    await storage.saveSettings({ ...DEFAULT_SETTINGS, backendUrl: 'http://newhost:8080' })
     expect(mockSyncSet).toHaveBeenCalled()
     const savedArg = mockSyncSet.mock.calls[0][0]
     expect(savedArg['appSettings']).toBeDefined()
     expect(savedArg['appSettings'].backendUrl).toBe('http://newhost:8080')
+  })
+
+  it('saveSettings writes directly without reading first (no race)', async () => {
+    const { storage, DEFAULT_SETTINGS } = await import('../../src/lib/storage')
+    mockSyncGet.mockClear()
+
+    await storage.saveSettings({ ...DEFAULT_SETTINGS, theme: 'dark' })
+
+    // saveSettings should NOT call chrome.storage.sync.get — it writes directly
+    expect(mockSyncGet).not.toHaveBeenCalled()
+    expect(mockSyncSet).toHaveBeenCalledTimes(1)
+    const savedArg = mockSyncSet.mock.calls[0][0]
+    expect(savedArg['appSettings'].theme).toBe('dark')
   })
 })
