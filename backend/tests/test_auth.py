@@ -234,3 +234,46 @@ async def test_auth_endpoints_exempt_from_token_middleware() -> None:
         # /auth/logout should be accessible without token header
         resp = await ac.post("/auth/logout")
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# 11. Configurable secure cookie flag (M2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_login_cookie_secure_flag_false_by_default() -> None:
+    """When session_cookie_secure is False (default), cookies should not have Secure."""
+    async with _auth_client() as ac:
+        resp = await ac.post("/auth/login", json={"token": "test-secret"})
+        assert resp.status_code == 200
+        set_cookie = resp.headers.get("set-cookie", "").lower()
+        assert "secure" not in set_cookie or "samesite" in set_cookie
+
+
+@pytest.mark.asyncio
+async def test_login_cookie_secure_flag_when_enabled() -> None:
+    """When session_cookie_secure is True, cookies should have the Secure flag."""
+    with patch("app.config.settings.session_cookie_secure", True):
+        async with _auth_client() as ac:
+            resp = await ac.post("/auth/login", json={"token": "test-secret"})
+            assert resp.status_code == 200
+            set_cookie = resp.headers.get("set-cookie", "").lower()
+            assert "secure" in set_cookie
+
+
+@pytest.mark.asyncio
+async def test_logout_cookie_secure_flag_when_enabled() -> None:
+    """Logout should also respect session_cookie_secure."""
+    with patch("app.config.settings.session_cookie_secure", True):
+        async with _auth_client() as ac:
+            # Login first
+            login_resp = await ac.post("/auth/login", json={"token": "test-secret"})
+            assert login_resp.status_code == 200
+            ac.cookies.update(login_resp.cookies)
+
+            # Logout
+            logout_resp = await ac.post("/auth/logout")
+            assert logout_resp.status_code == 200
+            set_cookie = logout_resp.headers.get("set-cookie", "").lower()
+            assert "secure" in set_cookie

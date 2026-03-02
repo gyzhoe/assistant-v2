@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.middleware.csrf import CSRF_COOKIE_NAME, generate_csrf_token
+from app.services.audit import audit_log
 from app.services.session_store import (
     MemorySessionStore,
     SQLiteSessionStore,
@@ -58,19 +59,24 @@ async def login(request: Request) -> JSONResponse:
     body = await request.json()
     provided_token: str = body.get("token", "")
 
+    client_ip = request.client.host if request.client else ""
+
     # If no API token is configured (dev mode), login always succeeds.
     if settings.api_token:
         if not provided_token or not secrets.compare_digest(
             provided_token, settings.api_token
         ):
+            audit_log("login", client_ip=client_ip, outcome="failure")
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Invalid API token."},
             )
 
     max_age = settings.session_max_age
-    client_ip = request.client.host if request.client else ""
     session_id = await session_store.create(max_age, client_ip=client_ip)
+    audit_log("login", client_ip=client_ip, session_id=session_id)
+
+    secure = settings.session_cookie_secure
 
     response = JSONResponse(content={"authenticated": True})
     response.set_cookie(
@@ -78,7 +84,7 @@ async def login(request: Request) -> JSONResponse:
         value=session_id,
         httponly=True,
         samesite="strict",
-        secure=False,  # localhost — no TLS
+        secure=secure,
         path="/",
         max_age=max_age,
     )
@@ -88,7 +94,7 @@ async def login(request: Request) -> JSONResponse:
         value=generate_csrf_token(),
         httponly=False,
         samesite="strict",
-        secure=False,
+        secure=secure,
         path="/",
         max_age=max_age,
     )
@@ -98,23 +104,27 @@ async def login(request: Request) -> JSONResponse:
 @router.post("/logout")
 async def logout(request: Request) -> JSONResponse:
     """Clear the session cookie and remove the session from the store."""
+    client_ip = request.client.host if request.client else ""
     session_id = request.cookies.get(COOKIE_NAME, "")
     if session_id:
         await session_store.remove(session_id)
+    audit_log("logout", client_ip=client_ip, session_id=session_id)
+
+    secure = settings.session_cookie_secure
 
     response = JSONResponse(content={"authenticated": False})
     response.delete_cookie(
         key=COOKIE_NAME,
         httponly=True,
         samesite="strict",
-        secure=False,
+        secure=secure,
         path="/",
     )
     response.delete_cookie(
         key=CSRF_COOKIE_NAME,
         httponly=False,
         samesite="strict",
-        secure=False,
+        secure=secure,
         path="/",
     )
     return response

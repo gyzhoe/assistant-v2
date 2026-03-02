@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
 from app.config import settings
+from app.services.audit import audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,9 @@ async def health_detail(request: Request) -> dict[str, object]:
 async def shutdown_backend(request: Request) -> dict[str, str]:
     """Gracefully shut down the backend server after a short delay."""
     _require_localhost(request)
+
+    client_ip = request.client.host if request.client else ""
+    audit_log("shutdown", client_ip=client_ip)
 
     async def _delayed_kill() -> None:
         await asyncio.sleep(0.5)

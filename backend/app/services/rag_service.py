@@ -36,9 +36,11 @@ class RAGService:
         ticket_target = max_docs // 2 + 1
 
         if category:
-            # Two-phase: filtered + unfiltered KB
+            # Two-phase: filtered + unfiltered KB, both run speculatively
+            # in parallel to avoid a sequential third query when the
+            # filtered results are insufficient.
             filtered_target = kb_target // 2 + 1
-            ticket_docs, kb_filtered = await asyncio.gather(
+            ticket_docs, kb_filtered, kb_unfiltered = await asyncio.gather(
                 self._query_collection(
                     self.TICKET_COLLECTION, embedding, ticket_target,
                 ),
@@ -50,14 +52,14 @@ class RAGService:
                     # unfiltered results anyway.
                     where={"tags": {"$contains": category}},
                 ),
+                self._query_collection(
+                    self.KB_COLLECTION, embedding, kb_target,
+                ),
             )
 
-            # Phase 2: fill remaining KB slots with unfiltered results
+            # Merge: fill remaining KB slots with unfiltered results
             remaining = kb_target - len(kb_filtered)
             if remaining > 0:
-                kb_unfiltered = await self._query_collection(
-                    self.KB_COLLECTION, embedding, remaining + len(kb_filtered),
-                )
                 # Deduplicate by article_id + content prefix (200 chars
                 # to avoid collisions between chunks with similar openings)
                 seen_keys = {

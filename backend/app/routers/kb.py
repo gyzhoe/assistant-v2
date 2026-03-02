@@ -33,6 +33,7 @@ from app.models.request_models import (
     UpdateTagsRequest,
 )
 from app.routers.shared import upload_semaphore
+from app.services.audit import audit_log
 from app.utils.chunker import chunk_by_markdown_headings
 from ingestion.pipeline import KB_COLLECTION, IngestionPipeline
 
@@ -614,6 +615,12 @@ async def delete_article(
 
     await asyncio.to_thread(col.delete, ids=ids)
     invalidate_article_cache()
+
+    client_ip = request.client.host if request.client else ""
+    audit_log(
+        "article_delete", client_ip=client_ip,
+        detail=f"article_id={article_id} chunks={len(ids)}",
+    )
 
     return ArticleDeleteResponse(
         article_id=article_id,
