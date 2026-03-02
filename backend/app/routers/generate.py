@@ -25,9 +25,9 @@ router = APIRouter(tags=["generate"])
 async def generate_reply(body: GenerateRequest, request: Request) -> GenerateResponse:
     """Retrieve RAG context and generate a helpdesk reply via Ollama."""
     chroma_client = request.app.state.chroma_client
-    rag = RAGService(chroma_client=chroma_client)
-    llm = LLMService()
-    ms_docs = MicrosoftDocsService()
+    rag: RAGService = request.app.state.rag_service
+    llm: LLMService = request.app.state.llm_service
+    ms_docs: MicrosoftDocsService = request.app.state.ms_docs_service
 
     logger.info("Generate request: model=%s subject=%s", body.model, body.ticket_subject[:80])
     start = time.perf_counter()
@@ -87,8 +87,9 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
             context_text = web_context
 
     # Retrieve dynamic few-shot examples from rated replies
+    embed_svc: EmbedService = request.app.state.embed_service
     few_shot_examples = await _get_dynamic_examples(
-        chroma_client, query, body.category,
+        chroma_client, query, body.category, embed_svc,
     )
 
     prompt = _build_prompt(body, context_text, few_shot_examples)
@@ -132,6 +133,7 @@ async def _get_dynamic_examples(
     chroma_client: ClientAPI,
     query: str,
     category: str,
+    embed_svc: EmbedService,
 ) -> list[dict[str, str]]:
     """Retrieve good-rated replies from ChromaDB for dynamic few-shot prompting.
 
@@ -139,7 +141,6 @@ async def _get_dynamic_examples(
     Falls back to empty list on any error (collection missing, empty, etc.).
     """
     try:
-        embed_svc = EmbedService()
         col = await asyncio.to_thread(
             chroma_client.get_collection, RATED_REPLIES_COLLECTION,
         )
@@ -240,7 +241,7 @@ def _format_context_doc(doc: ContextDoc) -> str:
 async def _fetch_pinned_articles(
     chroma_client: ClientAPI, article_ids: list[str],
 ) -> list[ContextDoc]:
-    """Fetch the first chunk of each pinned article from ChromaDB."""
+    """Fetch the first chunk of each pinned article from ChromaDB in parallel."""
     try:
         col = await asyncio.to_thread(
             chroma_client.get_collection, KB_COLLECTION,
@@ -252,11 +253,10 @@ async def _fetch_pinned_articles(
         )
         return []
 
-    # Fetch one chunk per article — limit=1 avoids non-deterministic chunk
-    # selection since ChromaDB returns chunks in undefined order and there
-    # is no chunk_index metadata to sort by.
-    pinned: list[ContextDoc] = []
-    for aid in article_ids:
+    async def _fetch_one(aid: str) -> ContextDoc | None:
+        # Fetch one chunk per article — limit=1 avoids non-deterministic chunk
+        # selection since ChromaDB returns chunks in undefined order and there
+        # is no chunk_index metadata to sort by.
         where_filter: dict[str, Any] = {"article_id": {"$eq": aid}}
         try:
             result = await asyncio.to_thread(
@@ -270,19 +270,21 @@ async def _fetch_pinned_articles(
                 "Failed to fetch pinned article '%s' from ChromaDB",
                 aid, exc_info=True,
             )
-            continue
+            return None
 
         docs = cast(list[str], result.get("documents") or [])
         metas = cast(list[dict[str, Any]], result.get("metadatas") or [])
         if docs and metas:
-            pinned.append(ContextDoc(
+            return ContextDoc(
                 content=docs[0],
                 source="kb",
                 score=1.0,
                 metadata={**metas[0], "source_type": "pinned"},
-            ))
+            )
+        return None
 
-    return pinned
+    results = await asyncio.gather(*(_fetch_one(aid) for aid in article_ids))
+    return [doc for doc in results if doc is not None]
 
 
 _HARDCODED_EXAMPLES = """EXAMPLES

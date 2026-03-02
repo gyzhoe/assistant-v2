@@ -17,9 +17,9 @@ class RAGService:
     TICKET_COLLECTION = "whd_tickets"
     KB_COLLECTION = "kb_articles"
 
-    def __init__(self, chroma_client: ClientAPI) -> None:
+    def __init__(self, chroma_client: ClientAPI, embed_svc: EmbedService) -> None:
         self.client = chroma_client
-        self.embed_svc = EmbedService()
+        self.embed_svc = embed_svc
 
     async def retrieve(
         self, query: str, max_docs: int = 5, category: str = "",

@@ -7,7 +7,6 @@ and extracts content to provide as additional context for reply generation.
 import asyncio
 import hashlib
 import logging
-import threading
 import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -36,16 +35,17 @@ class WebContextDoc:
 
 
 # Simple in-memory cache: {cache_key: (timestamp, results)}
+# Uses asyncio.Lock since all access is from the async event loop.
 _cache: dict[str, tuple[float, list[WebContextDoc]]] = {}
-_cache_lock = threading.Lock()
+_cache_lock = asyncio.Lock()
 
 
 def _cache_key(keywords: str) -> str:
     return hashlib.sha256(keywords.lower().strip().encode()).hexdigest()
 
 
-def _get_cached(keywords: str) -> list[WebContextDoc] | None:
-    with _cache_lock:
+async def _get_cached(keywords: str) -> list[WebContextDoc] | None:
+    async with _cache_lock:
         key = _cache_key(keywords)
         entry = _cache.get(key)
         if entry is None:
@@ -57,8 +57,8 @@ def _get_cached(keywords: str) -> list[WebContextDoc] | None:
         return docs
 
 
-def _set_cached(keywords: str, docs: list[WebContextDoc]) -> None:
-    with _cache_lock:
+async def _set_cached(keywords: str, docs: list[WebContextDoc]) -> None:
+    async with _cache_lock:
         # Evict oldest entries when cache exceeds max size
         if len(_cache) >= MAX_CACHE_ENTRIES:
             oldest_key = min(_cache, key=lambda k: _cache[k][0])
@@ -67,14 +67,10 @@ def _set_cached(keywords: str, docs: list[WebContextDoc]) -> None:
 
 
 class MicrosoftDocsService:
-    """Searches Microsoft Learn for relevant documentation."""
+    """Searches Microsoft Learn for relevant documentation using a shared async httpx client."""
 
-    def __init__(self) -> None:
-        self._client = httpx.Client(
-            timeout=REQUEST_TIMEOUT,
-            follow_redirects=True,
-            max_redirects=3,
-        )
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self._client = client
 
     async def search(self, keywords: str) -> list[WebContextDoc]:
         """Search Microsoft Learn and extract article content.
@@ -87,14 +83,14 @@ class MicrosoftDocsService:
         if not keywords.strip():
             return []
 
-        cached = _get_cached(keywords)
+        cached = await _get_cached(keywords)
         if cached is not None:
             logger.debug("MS Docs cache hit for: %s", keywords[:60])
             return cached
 
         try:
             results = await self._do_search(keywords)
-            _set_cached(keywords, results)
+            await _set_cached(keywords, results)
             return results
         except Exception:
             logger.warning("Microsoft Learn search failed for: %s", keywords[:60], exc_info=True)
@@ -102,12 +98,12 @@ class MicrosoftDocsService:
 
     async def _do_search(self, keywords: str) -> list[WebContextDoc]:
         """Execute search API call and fetch top articles."""
-        search_results = await asyncio.to_thread(self._search_api, keywords)
+        search_results = await self._search_api(keywords)
         if not search_results:
             return []
 
         # Fetch articles in parallel (up to 3)
-        tasks = [asyncio.to_thread(self._fetch_article, url) for _, url in search_results[:3]]
+        tasks = [self._fetch_article(url) for _, url in search_results[:3]]
         fetched = await asyncio.gather(*tasks, return_exceptions=True)
 
         docs: list[WebContextDoc] = []
@@ -125,10 +121,10 @@ class MicrosoftDocsService:
             ))
         return docs
 
-    def _search_api(self, keywords: str) -> list[tuple[str, str]]:
+    async def _search_api(self, keywords: str) -> list[tuple[str, str]]:
         """Call Microsoft Learn search API. Returns [(title, url), ...]."""
         try:
-            resp = self._client.get(
+            resp = await self._client.get(
                 SEARCH_URL,
                 params={"search": keywords, "locale": "en-us", "$top": "3"},
                 headers={"Accept": "application/json"},
@@ -147,7 +143,7 @@ class MicrosoftDocsService:
             logger.debug("MS Learn search API error", exc_info=True)
             return []
 
-    def _fetch_article(self, url: str) -> str:
+    async def _fetch_article(self, url: str) -> str:
         """Fetch and extract text content from a Microsoft Learn article."""
         # Validate URL domain to prevent SSRF via malicious search results
         parsed = urlparse(url)
@@ -156,7 +152,7 @@ class MicrosoftDocsService:
             return ""
 
         try:
-            resp = self._client.get(
+            resp = await self._client.get(
                 url,
                 headers={"Accept": "text/html"},
             )
@@ -167,7 +163,7 @@ class MicrosoftDocsService:
                 logger.debug("Article too large: %s (%d bytes)", url, len(resp.content))
                 return ""
 
-            return self._extract_text(resp.text)
+            return await asyncio.to_thread(self._extract_text, resp.text)
         except (httpx.HTTPError, ValueError):
             logger.debug("Failed to fetch article: %s", url, exc_info=True)
             return ""

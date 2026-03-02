@@ -33,7 +33,6 @@ from app.models.request_models import (
     UpdateTagsRequest,
 )
 from app.routers.shared import upload_semaphore
-from app.services.embed_service import EmbedService
 from app.utils.chunker import chunk_by_markdown_headings
 from ingestion.pipeline import KB_COLLECTION, IngestionPipeline
 
@@ -55,8 +54,9 @@ _cache_lock = asyncio.Lock()
 
 def invalidate_article_cache() -> None:
     """Invalidate the article index cache (called after mutations)."""
-    global _cache_timestamp
+    global _cache_timestamp, _refresh_in_progress
     _cache_timestamp = 0.0
+    _refresh_in_progress = False
 
 
 def _is_cache_valid() -> bool:
@@ -105,44 +105,71 @@ def _build_article_index(
     return index, total
 
 
+_refresh_in_progress = False
+
+
+async def _rebuild_article_cache(chroma_client: ClientAPI) -> None:
+    """Rebuild the article index from ChromaDB (runs in background or inline)."""
+    global _article_cache, _cache_timestamp, _total_chunks_cached, _refresh_in_progress
+
+    try:
+        col = await asyncio.to_thread(
+            chroma_client.get_collection, KB_COLLECTION,
+        )
+    except (ValueError, Exception):
+        _article_cache = {}
+        _total_chunks_cached = 0
+        _cache_timestamp = time.monotonic()
+        return
+    finally:
+        _refresh_in_progress = False
+
+    result = await asyncio.to_thread(
+        col.get, include=["metadatas"],
+    )
+
+    ids: list[str] = result.get("ids", [])
+    metadatas = cast(
+        list[dict[str, Any]], result.get("metadatas", []),
+    )
+
+    new_cache, new_total = _build_article_index(ids, metadatas)
+
+    _article_cache = new_cache
+    _total_chunks_cached = new_total
+    _cache_timestamp = time.monotonic()
+    _refresh_in_progress = False
+
+
 async def _get_article_index(
     chroma_client: ClientAPI,
 ) -> tuple[dict[str, dict[str, Any]], int]:
     """Return the cached article index, rebuilding if stale.
 
+    If a stale cache exists, returns it immediately and schedules a
+    background refresh so that callers are never blocked by ChromaDB I/O.
+    On the very first call (cold cache), blocks until data is ready.
+
     Returns (index_dict, total_chunks).
     """
-    global _article_cache, _cache_timestamp, _total_chunks_cached
+    global _refresh_in_progress
 
+    if _is_cache_valid():
+        return _article_cache, _total_chunks_cached
+
+    # Stale but populated cache: serve stale, refresh in background
+    if _article_cache and not _refresh_in_progress:
+        _refresh_in_progress = True
+        asyncio.create_task(_rebuild_article_cache(chroma_client))
+        return _article_cache, _total_chunks_cached
+
+    # Cold cache (first call): must block until data is ready
     async with _cache_lock:
+        # Double-check after acquiring lock
         if _is_cache_valid():
             return _article_cache, _total_chunks_cached
 
-        try:
-            col = await asyncio.to_thread(
-                chroma_client.get_collection, KB_COLLECTION,
-            )
-        except (ValueError, Exception):
-            # Collection doesn't exist
-            _article_cache = {}
-            _total_chunks_cached = 0
-            _cache_timestamp = time.monotonic()
-            return _article_cache, _total_chunks_cached
-
-        result = await asyncio.to_thread(
-            col.get, include=["metadatas"],
-        )
-
-        ids: list[str] = result.get("ids", [])
-        metadatas = cast(
-            list[dict[str, Any]], result.get("metadatas", []),
-        )
-
-        _article_cache, _total_chunks_cached = _build_article_index(
-            ids, metadatas,
-        )
-        _cache_timestamp = time.monotonic()
-
+        await _rebuild_article_cache(chroma_client)
         return _article_cache, _total_chunks_cached
 
 
@@ -279,7 +306,7 @@ async def create_article(
                 metadata={"hnsw:space": "cosine"},
             )
 
-            embed_service = EmbedService()
+            embed_service = request.app.state.sync_embed_service
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
                 embed_fn=embed_service.embed_fn,
@@ -398,7 +425,7 @@ async def update_article(
                     yield chunk_id, chunk_text, metadata
 
             # 4. Upsert new chunks first (safe: old data survives on failure)
-            embed_service = EmbedService()
+            embed_service = request.app.state.sync_embed_service
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
                 embed_fn=embed_service.embed_fn,

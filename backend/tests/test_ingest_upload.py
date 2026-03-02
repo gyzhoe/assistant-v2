@@ -17,6 +17,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
+from app.services.embed_service import EmbedService
+from app.services.llm_service import LLMService
+from app.services.microsoft_docs import MicrosoftDocsService
+from app.services.rag_service import RAGService
 
 
 def _fresh_client(app: object | None = None) -> AsyncClient:
@@ -25,8 +29,18 @@ def _fresh_client(app: object | None = None) -> AsyncClient:
         fresh_app = create_app()
     else:
         fresh_app = app  # type: ignore[assignment]
+    mock_client = MagicMock()
+    mock_sync_client = MagicMock()
     fresh_app.state.chroma_client = MagicMock()  # type: ignore[union-attr]
     fresh_app.state.ollama_reachable = False  # type: ignore[union-attr]
+    fresh_app.state.llm_service = LLMService(client=mock_client)  # type: ignore[union-attr]
+    fresh_app.state.embed_service = EmbedService(client=mock_client)  # type: ignore[union-attr]
+    fresh_app.state.sync_embed_service = EmbedService(client=mock_sync_client)  # type: ignore[union-attr]
+    fresh_app.state.ms_docs_service = MicrosoftDocsService(client=mock_client)  # type: ignore[union-attr]
+    fresh_app.state.rag_service = RAGService(  # type: ignore[union-attr]
+        chroma_client=fresh_app.state.chroma_client,  # type: ignore[union-attr]
+        embed_svc=fresh_app.state.embed_service,  # type: ignore[union-attr]
+    )
     return AsyncClient(
         transport=ASGITransport(app=fresh_app),  # type: ignore[arg-type]
         base_url="http://testserver",
@@ -46,11 +60,7 @@ def _json_file_bytes(data: list[dict[str, str]]) -> bytes:
 @pytest.mark.asyncio
 async def test_upload_json_file_success() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch(
-            "app.routers.ingest.EmbedService"
-        ):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("whd_tickets", 5)
             mock_pipeline_cls.return_value = mock_pipeline
@@ -72,9 +82,7 @@ async def test_upload_json_file_success() -> None:
 @pytest.mark.asyncio
 async def test_upload_csv_file_success() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("whd_tickets", 3)
             mock_pipeline_cls.return_value = mock_pipeline
@@ -91,9 +99,7 @@ async def test_upload_csv_file_success() -> None:
 @pytest.mark.asyncio
 async def test_upload_html_file_success() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("kb_articles", 2)
             mock_pipeline_cls.return_value = mock_pipeline
@@ -110,9 +116,7 @@ async def test_upload_html_file_success() -> None:
 @pytest.mark.asyncio
 async def test_upload_pdf_file_success() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("kb_articles", 10)
             mock_pipeline_cls.return_value = mock_pipeline
@@ -182,9 +186,7 @@ async def test_upload_oversized_file_returns_413() -> None:
 async def test_upload_path_traversal_sanitized() -> None:
     """Filenames with directory components should be sanitized to just the name."""
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("whd_tickets", 1)
             mock_pipeline_cls.return_value = mock_pipeline
@@ -212,9 +214,7 @@ async def test_upload_path_traversal_sanitized() -> None:
 @pytest.mark.asyncio
 async def test_upload_ollama_down_returns_503() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.side_effect = ConnectionError("Ollama down")
             mock_pipeline_cls.return_value = mock_pipeline
@@ -231,9 +231,7 @@ async def test_upload_ollama_down_returns_503() -> None:
 @pytest.mark.asyncio
 async def test_upload_corrupt_file_returns_422() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.side_effect = ValueError("Bad JSON")
             mock_pipeline_cls.return_value = mock_pipeline
@@ -247,16 +245,14 @@ async def test_upload_corrupt_file_returns_422() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Zero chunks → warning
+# Zero chunks -> warning
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_upload_zero_chunks_returns_warning() -> None:
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("kb_articles", 0)
             mock_pipeline_cls.return_value = mock_pipeline
@@ -273,7 +269,7 @@ async def test_upload_zero_chunks_returns_warning() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Concurrent upload → 409
+# Concurrent upload -> 409
 # ---------------------------------------------------------------------------
 
 
@@ -281,8 +277,18 @@ async def test_upload_zero_chunks_returns_warning() -> None:
 async def test_concurrent_upload_returns_409() -> None:
     """Two simultaneous uploads: one succeeds, the other gets 409."""
     fresh_app = create_app()
+    mock_client = MagicMock()
+    mock_sync_client = MagicMock()
     fresh_app.state.chroma_client = MagicMock()
     fresh_app.state.ollama_reachable = False
+    fresh_app.state.llm_service = LLMService(client=mock_client)
+    fresh_app.state.embed_service = EmbedService(client=mock_client)
+    fresh_app.state.sync_embed_service = EmbedService(client=mock_sync_client)
+    fresh_app.state.ms_docs_service = MicrosoftDocsService(client=mock_client)
+    fresh_app.state.rag_service = RAGService(
+        chroma_client=fresh_app.state.chroma_client,
+        embed_svc=fresh_app.state.embed_service,
+    )
 
     # Reset the module-level semaphore for this test
     import app.routers.ingest as ingest_mod
@@ -301,9 +307,7 @@ async def test_concurrent_upload_returns_409() -> None:
             time.sleep(0.1)
         return ("whd_tickets", 1)
 
-    with patch(
-        "app.routers.ingest.IngestionPipeline"
-    ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+    with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
         mock_pipeline = MagicMock()
         mock_pipeline.ingest_file.side_effect = slow_ingest_file
         mock_pipeline_cls.return_value = mock_pipeline
@@ -353,9 +357,7 @@ async def test_temp_file_cleaned_up_after_upload() -> None:
     temp_files_before = set(Path(tempfile.gettempdir()).glob("ingest_*"))
 
     async with _fresh_client() as ac:
-        with patch(
-            "app.routers.ingest.IngestionPipeline"
-        ) as mock_pipeline_cls, patch("app.routers.ingest.EmbedService"):
+        with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
             mock_pipeline.ingest_file.return_value = ("whd_tickets", 1)
             mock_pipeline_cls.return_value = mock_pipeline

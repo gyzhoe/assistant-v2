@@ -42,6 +42,9 @@ class IngestionPipeline:
     ) -> None:
         self.client = chroma_client
         self._custom_embed_fn = embed_fn
+        # Shared sync client for the default _embed path — avoids opening a
+        # new TCP connection for every chunk when no custom embed_fn is given.
+        self._http_client = httpx.Client(timeout=60.0)
 
     # ── Ticket ingestion ─────────────────────────────────────────────────────
 
@@ -176,12 +179,14 @@ class IngestionPipeline:
         return self._embed(text)
 
     def _embed(self, text: str) -> list[float]:
-        """Embed text using nomic-embed-text via Ollama (synchronous)."""
-        with httpx.Client() as client:
-            resp = client.post(
-                f"{settings.ollama_base_url}/api/embeddings",
-                json={"model": "nomic-embed-text", "prompt": text},
-                timeout=60.0,
-            )
-            resp.raise_for_status()
-            return list(resp.json()["embedding"])
+        """Embed text using nomic-embed-text via Ollama (synchronous).
+
+        Reuses ``self._http_client`` across calls to avoid per-chunk
+        TCP connection overhead.
+        """
+        resp = self._http_client.post(
+            f"{settings.ollama_base_url}/api/embeddings",
+            json={"model": "nomic-embed-text", "prompt": text},
+        )
+        resp.raise_for_status()
+        return list(resp.json()["embedding"])

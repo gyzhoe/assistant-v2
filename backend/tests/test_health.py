@@ -12,12 +12,14 @@ from starlette.datastructures import Address
 
 from app.main import create_app
 from app.routers.health import _require_localhost
+from tests.helpers import setup_app_state
 
 
 def _make_client() -> AsyncClient:
     app = create_app()
     app.state.chroma_client = MagicMock()
     app.state.ollama_reachable = False
+    setup_app_state(app)
     return AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver",
@@ -154,15 +156,20 @@ async def test_shutdown_returns_200_from_localhost() -> None:
 @pytest.mark.asyncio
 async def test_ollama_start_returns_200_or_already_running() -> None:
     """POST /ollama/start succeeds from localhost."""
-    async with _make_client() as ac:
-        with patch("app.routers.health.httpx.AsyncClient") as mock_http:
-            mock_resp = MagicMock()
-            mock_resp.status_code = 200
-            mock_cm = AsyncMock()
-            mock_cm.__aenter__ = AsyncMock(return_value=MagicMock(get=AsyncMock(return_value=mock_resp)))
-            mock_cm.__aexit__ = AsyncMock(return_value=None)
-            mock_http.return_value = mock_cm
-            response = await ac.post("/ollama/start")
+    app = create_app()
+    app.state.chroma_client = MagicMock()
+    app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    app.state.llm_service._client.get = AsyncMock(return_value=mock_resp)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        response = await ac.post("/ollama/start")
     assert response.status_code == 200
 
 

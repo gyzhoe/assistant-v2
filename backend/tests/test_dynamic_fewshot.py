@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -13,6 +13,13 @@ from app.routers.generate import (
     _build_examples_section,
     _get_dynamic_examples,
 )
+
+
+def _mock_embed_svc() -> MagicMock:
+    """Build a mock EmbedService with a working embed coroutine."""
+    mock = MagicMock()
+    mock.embed = AsyncMock(return_value=[0.1] * 768)
+    return mock
 
 
 def _mock_chroma_with_rated(
@@ -36,96 +43,89 @@ def _mock_chroma_with_rated(
 
 
 @pytest.mark.asyncio
-@patch("app.routers.generate.EmbedService")
-async def test_returns_examples_above_threshold(mock_embed_cls: MagicMock) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+async def test_returns_examples_above_threshold() -> None:
+    embed_svc = _mock_embed_svc()
     # Distance 0.3 => score 0.7 (above 0.65 threshold)
     client = _mock_chroma_with_rated(
         metadatas=[{"rating": "good", "category": "NET", "reply": "Try restarting."}],
         distances=[0.3],
         documents=["VPN not connecting\nUser cannot connect"],
     )
-    examples = await _get_dynamic_examples(client, "test query", "NET")
+    examples = await _get_dynamic_examples(client, "test query", "NET", embed_svc)
     assert len(examples) == 1
     assert examples[0]["ticket_subject"] == "VPN not connecting"
     assert examples[0]["reply"] == "Try restarting."
 
 
 @pytest.mark.asyncio
-@patch("app.routers.generate.EmbedService")
-async def test_filters_below_threshold(mock_embed_cls: MagicMock) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+async def test_filters_below_threshold() -> None:
+    embed_svc = _mock_embed_svc()
     # Distance 0.5 => score 0.5 (below 0.65 threshold)
     client = _mock_chroma_with_rated(
         metadatas=[{"rating": "good", "category": "NET", "reply": "Try restarting."}],
         distances=[0.5],
         documents=["VPN issue\nDetails"],
     )
-    examples = await _get_dynamic_examples(client, "test query", "NET")
+    examples = await _get_dynamic_examples(client, "test query", "NET", embed_svc)
     assert len(examples) == 0
 
 
 @pytest.mark.asyncio
-@patch("app.routers.generate.EmbedService")
-async def test_returns_empty_for_empty_collection(mock_embed_cls: MagicMock) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+async def test_returns_empty_for_empty_collection() -> None:
+    embed_svc = _mock_embed_svc()
     mock_client = MagicMock()
     mock_col = MagicMock()
     mock_client.get_collection.return_value = mock_col
     mock_col.count.return_value = 0
 
-    examples = await _get_dynamic_examples(mock_client, "test query", "NET")
+    examples = await _get_dynamic_examples(mock_client, "test query", "NET", embed_svc)
     assert examples == []
 
 
 @pytest.mark.asyncio
 async def test_returns_empty_on_missing_collection() -> None:
+    embed_svc = _mock_embed_svc()
     mock_client = MagicMock()
     mock_client.get_collection.side_effect = ValueError("Collection not found")
 
-    examples = await _get_dynamic_examples(mock_client, "test query", "NET")
+    examples = await _get_dynamic_examples(mock_client, "test query", "NET", embed_svc)
     assert examples == []
 
 
 @pytest.mark.asyncio
-@patch("app.routers.generate.EmbedService")
-async def test_extracts_subject_from_document_first_line(
-    mock_embed_cls: MagicMock,
-) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+async def test_extracts_subject_from_document_first_line() -> None:
+    embed_svc = _mock_embed_svc()
     client = _mock_chroma_with_rated(
         metadatas=[{"rating": "good", "category": "EMAIL", "reply": "Check settings."}],
         distances=[0.2],
         documents=["Outlook keeps crashing\nIt crashes on startup every time."],
     )
-    examples = await _get_dynamic_examples(client, "test query", "EMAIL")
+    examples = await _get_dynamic_examples(client, "test query", "EMAIL", embed_svc)
     assert examples[0]["ticket_subject"] == "Outlook keeps crashing"
 
 
 @pytest.mark.asyncio
-@patch("app.routers.generate.EmbedService")
-async def test_skips_examples_with_empty_reply(mock_embed_cls: MagicMock) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+async def test_skips_examples_with_empty_reply() -> None:
+    embed_svc = _mock_embed_svc()
     client = _mock_chroma_with_rated(
         metadatas=[{"rating": "good", "category": "NET", "reply": ""}],
         distances=[0.2],
         documents=["Subject\nDescription"],
     )
-    examples = await _get_dynamic_examples(client, "test query", "NET")
+    examples = await _get_dynamic_examples(client, "test query", "NET", embed_svc)
     assert len(examples) == 0
 
 
 @pytest.mark.asyncio
-@patch("app.routers.generate.EmbedService")
-async def test_falls_back_without_category_filter(mock_embed_cls: MagicMock) -> None:
+async def test_falls_back_without_category_filter() -> None:
     """When category is empty, should query without category filter."""
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+    embed_svc = _mock_embed_svc()
     client = _mock_chroma_with_rated(
         metadatas=[{"rating": "good", "category": "", "reply": "Generic fix."}],
         distances=[0.2],
         documents=["Some issue\nDetails"],
     )
-    examples = await _get_dynamic_examples(client, "test query", "")
+    examples = await _get_dynamic_examples(client, "test query", "", embed_svc)
     assert len(examples) == 1
     # Verify query was called without $and category filter
     col = client.get_collection.return_value

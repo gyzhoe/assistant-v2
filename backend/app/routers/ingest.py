@@ -18,7 +18,6 @@ from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.routers.kb import invalidate_article_cache
 from app.routers.shared import upload_semaphore
-from app.services.embed_service import EmbedService
 from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
 from ingestion.url_loader import (
     ContentTypeError,
@@ -80,7 +79,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
 
             # Run ingestion in thread pool
             chroma_client = request.app.state.chroma_client
-            embed_service = EmbedService()
+            embed_service = request.app.state.sync_embed_service
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
                 embed_fn=embed_service.embed_fn,
@@ -193,7 +192,7 @@ async def ingest_url(
 
             # Run ingestion pipeline
             chroma_client = request.app.state.chroma_client
-            embed_service = EmbedService()
+            embed_service = request.app.state.sync_embed_service
             pipeline = IngestionPipeline(
                 chroma_client=chroma_client,
                 embed_fn=embed_service.embed_fn,

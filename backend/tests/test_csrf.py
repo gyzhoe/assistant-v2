@@ -19,6 +19,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.middleware.csrf import CSRF_COOKIE_NAME
+from tests.helpers import setup_app_state
 
 
 @asynccontextmanager
@@ -30,6 +31,7 @@ async def _csrf_client(
         fresh_app = create_app()
         fresh_app.state.chroma_client = MagicMock()
         fresh_app.state.ollama_reachable = False
+        setup_app_state(fresh_app)
         async with AsyncClient(
             transport=ASGITransport(app=fresh_app),
             base_url="http://testserver",
@@ -131,33 +133,30 @@ async def test_post_to_feedback_with_valid_csrf_passes() -> None:
     async with _csrf_client() as ac:
         csrf_token, _ = await _login_and_get_csrf(ac)
 
-        # Mock the embed service so we don't need Ollama
-        with (
-            patch("app.routers.feedback.EmbedService") as mock_embed_cls,
-        ):
-            mock_embed = MagicMock()
-            mock_embed.embed = AsyncMock(return_value=[0.1] * 384)
-            mock_embed_cls.return_value = mock_embed
+        # Mock the embed service on app.state (singleton pattern)
+        ac._transport.app.state.embed_service.embed = AsyncMock(  # type: ignore[union-attr]
+            return_value=[0.1] * 384,
+        )
 
-            # Mock ChromaDB collection
-            mock_col = MagicMock()
-            mock_col.add = MagicMock()
-            ac._transport.app.state.chroma_client.get_or_create_collection = (  # type: ignore[union-attr]
-                MagicMock(return_value=mock_col)
-            )
+        # Mock ChromaDB collection
+        mock_col = MagicMock()
+        mock_col.add = MagicMock()
+        ac._transport.app.state.chroma_client.get_or_create_collection = (  # type: ignore[union-attr]
+            MagicMock(return_value=mock_col)
+        )
 
-            resp = await ac.post(
-                "/feedback",
-                json={
-                    "ticket_subject": "VPN issue",
-                    "ticket_description": "Cannot connect",
-                    "reply": "Try reconnecting",
-                    "rating": "good",
-                },
-                headers={"X-CSRF-Token": csrf_token},
-            )
-            # Should reach the router (200) not be blocked by CSRF (403)
-            assert resp.status_code == 200
+        resp = await ac.post(
+            "/feedback",
+            json={
+                "ticket_subject": "VPN issue",
+                "ticket_description": "Cannot connect",
+                "reply": "Try reconnecting",
+                "rating": "good",
+            },
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        # Should reach the router (200) not be blocked by CSRF (403)
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -207,31 +206,28 @@ async def test_extension_token_bypasses_csrf() -> None:
     """Requests with X-Extension-Token should bypass CSRF check."""
     async with _csrf_client() as ac:
         # Don't login — use extension token directly
-        with (
-            patch("app.routers.feedback.EmbedService") as mock_embed_cls,
-        ):
-            mock_embed = MagicMock()
-            mock_embed.embed = AsyncMock(return_value=[0.1] * 384)
-            mock_embed_cls.return_value = mock_embed
+        ac._transport.app.state.embed_service.embed = AsyncMock(  # type: ignore[union-attr]
+            return_value=[0.1] * 384,
+        )
 
-            mock_col = MagicMock()
-            mock_col.add = MagicMock()
-            ac._transport.app.state.chroma_client.get_or_create_collection = (  # type: ignore[union-attr]
-                MagicMock(return_value=mock_col)
-            )
+        mock_col = MagicMock()
+        mock_col.add = MagicMock()
+        ac._transport.app.state.chroma_client.get_or_create_collection = (  # type: ignore[union-attr]
+            MagicMock(return_value=mock_col)
+        )
 
-            resp = await ac.post(
-                "/feedback",
-                json={
-                    "ticket_subject": "VPN issue",
-                    "ticket_description": "Cannot connect",
-                    "reply": "Try reconnecting",
-                    "rating": "good",
-                },
-                headers={"X-Extension-Token": "test-secret"},
-            )
-            # Should pass through — NOT 403
-            assert resp.status_code != 403
+        resp = await ac.post(
+            "/feedback",
+            json={
+                "ticket_subject": "VPN issue",
+                "ticket_description": "Cannot connect",
+                "reply": "Try reconnecting",
+                "rating": "good",
+            },
+            headers={"X-Extension-Token": "test-secret"},
+        )
+        # Should pass through — NOT 403
+        assert resp.status_code != 403
 
 
 # ---------------------------------------------------------------------------

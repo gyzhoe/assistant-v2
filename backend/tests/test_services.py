@@ -1,16 +1,18 @@
 """Unit tests for LLMService and EmbedService.
 
-Tests target the synchronous _generate_sync / _embed_sync methods directly,
-avoiding asyncio.to_thread so we can exercise error handling without a running
-event loop.  The shared httpx.Client on each service instance is replaced with
-a mock so no real network calls are made.
+LLMService tests target the async ``_generate_async`` method via
+``generate()`` (the public entry-point), using a mock ``httpx.AsyncClient``.
+
+EmbedService tests exercise both the async ``_embed_async`` path (via a mock
+``httpx.AsyncClient``) and the sync ``_embed_sync`` path (via a mock
+``httpx.Client``) since the service supports both client types.
 """
 
 from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -54,7 +56,15 @@ def _make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
     )
 
 
-def _mock_client() -> MagicMock:
+def _mock_async_client() -> MagicMock:
+    """Create a mock httpx.AsyncClient."""
+    mock = MagicMock(spec=httpx.AsyncClient)
+    mock.post = AsyncMock()
+    mock.get = AsyncMock()
+    return mock
+
+
+def _mock_sync_client() -> MagicMock:
     """Create a mock httpx.Client."""
     return MagicMock(spec=httpx.Client)
 
@@ -64,35 +74,37 @@ def _mock_client() -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-class TestLLMServiceGenerateSync:
-    """Unit tests for LLMService._generate_sync."""
+class TestLLMServiceGenerateAsync:
+    """Unit tests for LLMService._generate_async (via generate())."""
 
-    def _svc(self) -> LLMService:
-        svc = LLMService()
-        svc._client = _mock_client()
-        return svc
+    def _svc(self) -> tuple[LLMService, MagicMock]:
+        mock_client = _mock_async_client()
+        svc = LLMService(client=mock_client)
+        return svc, mock_client
 
     # --- happy path ---
 
-    def test_successful_generation_returns_text(self) -> None:
+    @pytest.mark.asyncio
+    async def test_successful_generation_returns_text(self) -> None:
         """A well-formed Ollama response returns the 'response' field as a string."""
-        svc = self._svc()
+        svc, mock_client = self._svc()
         mock_resp = _make_response(json_data={"response": "Here is the fix."})
-        svc._client.post.return_value = mock_resp
+        mock_client.post.return_value = mock_resp
 
-        result = svc._generate_sync("Describe the issue.", "llama3.2:3b")
+        result = await svc.generate("Describe the issue.", "llama3.2:3b")
 
         assert result == "Here is the fix."
 
-    def test_successful_generation_posts_correct_payload(self) -> None:
-        """_generate_sync sends the right JSON body to Ollama including options."""
-        svc = self._svc()
+    @pytest.mark.asyncio
+    async def test_successful_generation_posts_correct_payload(self) -> None:
+        """generate sends the right JSON body to Ollama including options."""
+        svc, mock_client = self._svc()
         mock_resp = _make_response(json_data={"response": "ok"})
-        svc._client.post.return_value = mock_resp
+        mock_client.post.return_value = mock_resp
 
-        svc._generate_sync("my prompt", "qwen2.5:14b")
+        await svc.generate("my prompt", "qwen2.5:14b")
 
-        call_kwargs = svc._client.post.call_args
+        call_kwargs = mock_client.post.call_args
         assert call_kwargs is not None
         sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
         assert sent_json["model"] == "qwen2.5:14b"
@@ -109,89 +121,95 @@ class TestLLMServiceGenerateSync:
 
     # --- connection errors ---
 
-    def test_connect_error_raises_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_connect_error_raises_connection_error(self) -> None:
         """httpx.ConnectError is converted to ConnectionError."""
-        svc = self._svc()
-        svc._client.post.side_effect = httpx.ConnectError("refused")
+        svc, mock_client = self._svc()
+        mock_client.post.side_effect = httpx.ConnectError("refused")
 
         with pytest.raises(ConnectionError, match="Ollama service unreachable"):
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
-    def test_connect_error_message_contains_base_url(self) -> None:
+    @pytest.mark.asyncio
+    async def test_connect_error_message_contains_base_url(self) -> None:
         """ConnectionError message references the configured base URL."""
-        svc = self._svc()
-        svc._client.post.side_effect = httpx.ConnectError("refused")
+        svc, mock_client = self._svc()
+        mock_client.post.side_effect = httpx.ConnectError("refused")
 
         with pytest.raises(ConnectionError) as exc_info:
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
         assert svc.base_url in str(exc_info.value)
 
     # --- timeout ---
 
-    def test_timeout_raises_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_timeout_raises_connection_error(self) -> None:
         """httpx.ReadTimeout is converted to ConnectionError."""
-        svc = self._svc()
-        svc._client.post.side_effect = httpx.ReadTimeout("timed out")
+        svc, mock_client = self._svc()
+        mock_client.post.side_effect = httpx.ReadTimeout("timed out")
 
         with pytest.raises(ConnectionError, match="timed out"):
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
-    def test_connect_timeout_raises_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_connect_timeout_raises_connection_error(self) -> None:
         """httpx.ConnectTimeout (a TimeoutException subclass) is also caught."""
-        svc = self._svc()
-        svc._client.post.side_effect = httpx.ConnectTimeout("connect timed out")
+        svc, mock_client = self._svc()
+        mock_client.post.side_effect = httpx.ConnectTimeout("connect timed out")
 
         with pytest.raises(ConnectionError):
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
     # --- HTTP error status ---
 
-    def test_http_status_error_raises_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_http_status_error_raises_connection_error(self) -> None:
         """An HTTP 500 from Ollama is converted to ConnectionError."""
-        svc = self._svc()
+        svc, mock_client = self._svc()
         http_err = _make_http_status_error(500)
         mock_resp = _make_response(status_code=500)
         mock_resp.raise_for_status.side_effect = http_err
-        svc._client.post.return_value = mock_resp
+        mock_client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError, match="500"):
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
     # --- JSON parse errors ---
 
-    def test_invalid_json_response_raises_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_invalid_json_response_raises_connection_error(self) -> None:
         """A non-JSON body causes ConnectionError (json.JSONDecodeError caught)."""
-        svc = self._svc()
+        svc, mock_client = self._svc()
         mock_resp = _make_response(body="not-json")
-        svc._client.post.return_value = mock_resp
+        mock_client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError, match="invalid or missing"):
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
     # --- missing key ---
 
-    def test_missing_response_key_raises_connection_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_missing_response_key_raises_connection_error(self) -> None:
         """Valid JSON without 'response' key raises ConnectionError (KeyError caught)."""
-        svc = self._svc()
+        svc, mock_client = self._svc()
         mock_resp = _make_response(json_data={"model": "llama3.2:3b", "done": True})
-        svc._client.post.return_value = mock_resp
+        mock_client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError, match="invalid or missing"):
-            svc._generate_sync("prompt", "llama3.2:3b")
+            await svc.generate("prompt", "llama3.2:3b")
 
 
 # ---------------------------------------------------------------------------
-# EmbedService tests
+# EmbedService tests — sync path (httpx.Client)
 # ---------------------------------------------------------------------------
 
 
 class TestEmbedServiceEmbedSync:
-    """Unit tests for EmbedService._embed_sync."""
+    """Unit tests for EmbedService._embed_sync (sync httpx.Client path)."""
 
     def _svc(self, model: str = "nomic-embed-text") -> EmbedService:
-        svc = EmbedService(model=model)
-        svc._client = _mock_client()
+        svc = EmbedService(client=_mock_sync_client(), model=model)
         return svc
 
     # --- happy path ---
@@ -201,6 +219,7 @@ class TestEmbedServiceEmbedSync:
         svc = self._svc()
         embedding = [0.1, 0.2, 0.3, 0.4]
         mock_resp = _make_response(json_data={"embedding": embedding})
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         result = svc._embed_sync("some text")
@@ -212,6 +231,7 @@ class TestEmbedServiceEmbedSync:
         """_embed_sync sends model and prompt fields to Ollama."""
         svc = self._svc(model="nomic-embed-text")
         mock_resp = _make_response(json_data={"embedding": [0.5]})
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         svc._embed_sync("hello world")
@@ -227,6 +247,7 @@ class TestEmbedServiceEmbedSync:
     def test_connect_error_raises_connection_error(self) -> None:
         """httpx.ConnectError is converted to ConnectionError."""
         svc = self._svc()
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.side_effect = httpx.ConnectError("refused")
 
         with pytest.raises(ConnectionError, match="unreachable"):
@@ -235,6 +256,7 @@ class TestEmbedServiceEmbedSync:
     def test_connect_error_message_contains_base_url(self) -> None:
         """ConnectionError message references the configured base URL."""
         svc = self._svc()
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.side_effect = httpx.ConnectError("refused")
 
         with pytest.raises(ConnectionError) as exc_info:
@@ -247,6 +269,7 @@ class TestEmbedServiceEmbedSync:
     def test_timeout_raises_connection_error(self) -> None:
         """httpx.ReadTimeout is converted to ConnectionError."""
         svc = self._svc()
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.side_effect = httpx.ReadTimeout("timed out")
 
         with pytest.raises(ConnectionError, match="timed out"):
@@ -260,6 +283,7 @@ class TestEmbedServiceEmbedSync:
         http_err = _make_http_status_error(404)
         mock_resp = _make_response(status_code=404)
         mock_resp.raise_for_status.side_effect = http_err
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError, match="404"):
@@ -271,6 +295,7 @@ class TestEmbedServiceEmbedSync:
         """A non-JSON body causes ConnectionError (json.JSONDecodeError caught)."""
         svc = self._svc()
         mock_resp = _make_response(body="not-json")
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError, match="invalid or missing"):
@@ -282,6 +307,7 @@ class TestEmbedServiceEmbedSync:
         """Valid JSON without 'embedding' key raises ConnectionError."""
         svc = self._svc()
         mock_resp = _make_response(json_data={"model": "nomic-embed-text"})
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError, match="missing 'embedding' key"):
@@ -291,6 +317,7 @@ class TestEmbedServiceEmbedSync:
         """The ConnectionError message lists the actual keys returned by Ollama."""
         svc = self._svc()
         mock_resp = _make_response(json_data={"status": "error", "message": "model not found"})
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         with pytest.raises(ConnectionError) as exc_info:
@@ -303,16 +330,67 @@ class TestEmbedServiceEmbedSync:
     # --- empty embedding ---
 
     def test_empty_embedding_list_is_returned_as_is(self) -> None:
-        """An empty embedding vector from Ollama is returned without error.
-
-        The service does not validate embedding dimensionality; callers that
-        depend on a minimum length should validate at the call site (e.g.
-        RAGService).  This test documents the current contract.
-        """
+        """An empty embedding vector from Ollama is returned without error."""
         svc = self._svc()
         mock_resp = _make_response(json_data={"embedding": []})
+        assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
         result = svc._embed_sync("text")
 
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# EmbedService tests — async path (httpx.AsyncClient)
+# ---------------------------------------------------------------------------
+
+
+class TestEmbedServiceEmbedAsync:
+    """Unit tests for EmbedService._embed_async (async httpx.AsyncClient path)."""
+
+    def _svc(self, model: str = "nomic-embed-text") -> tuple[EmbedService, MagicMock]:
+        mock_client = _mock_async_client()
+        svc = EmbedService(client=mock_client, model=model)
+        return svc, mock_client
+
+    @pytest.mark.asyncio
+    async def test_successful_embedding_returns_float_list(self) -> None:
+        svc, mock_client = self._svc()
+        embedding = [0.1, 0.2, 0.3, 0.4]
+        mock_resp = _make_response(json_data={"embedding": embedding})
+        mock_client.post.return_value = mock_resp
+
+        result = await svc.embed("some text")
+        assert result == embedding
+
+    @pytest.mark.asyncio
+    async def test_connect_error_raises_connection_error(self) -> None:
+        svc, mock_client = self._svc()
+        mock_client.post.side_effect = httpx.ConnectError("refused")
+
+        with pytest.raises(ConnectionError, match="unreachable"):
+            await svc.embed("text")
+
+    @pytest.mark.asyncio
+    async def test_timeout_raises_connection_error(self) -> None:
+        svc, mock_client = self._svc()
+        mock_client.post.side_effect = httpx.ReadTimeout("timed out")
+
+        with pytest.raises(ConnectionError, match="timed out"):
+            await svc.embed("text")
+
+    @pytest.mark.asyncio
+    async def test_missing_embedding_key_raises_connection_error(self) -> None:
+        svc, mock_client = self._svc()
+        mock_resp = _make_response(json_data={"model": "nomic-embed-text"})
+        mock_client.post.return_value = mock_resp
+
+        with pytest.raises(ConnectionError, match="missing 'embedding' key"):
+            await svc.embed("text")
+
+    def test_embed_fn_raises_on_async_client(self) -> None:
+        """embed_fn (sync) should raise TypeError when client is async."""
+        svc, _ = self._svc()
+        with pytest.raises(TypeError, match="embed_fn.*not available"):
+            _ = svc.embed_fn

@@ -19,6 +19,10 @@ from app.middleware.security import (
     SecurityHeadersMiddleware,
 )
 from app.routers import auth, feedback, generate, health, ingest, kb, models
+from app.services.embed_service import EmbedService
+from app.services.llm_service import LLMService
+from app.services.microsoft_docs import MicrosoftDocsService
+from app.services.rag_service import RAGService
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -26,17 +30,44 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    """Initialize ChromaDB client and verify Ollama on startup."""
+    """Initialize shared clients and services on startup, close on shutdown."""
     logger.info("Starting AI Helpdesk Assistant backend v%s", settings.version)
 
+    # --- Shared httpx clients (connection pooling) ---
+    ollama_client = httpx.AsyncClient(
+        base_url=settings.ollama_base_url,
+        timeout=120.0,
+    )
+    web_client = httpx.AsyncClient(
+        timeout=10.0,
+        follow_redirects=True,
+        max_redirects=3,
+    )
+    # Sync client for ingestion pipelines (run in to_thread)
+    sync_ollama_client = httpx.Client(
+        base_url=settings.ollama_base_url,
+        timeout=30.0,
+    )
+
+    # --- ChromaDB ---
     app.state.chroma_client = chromadb.PersistentClient(path=settings.chroma_path)
     logger.info("ChromaDB initialized at %s", settings.chroma_path)
 
+    # --- Singleton services ---
+    app.state.llm_service = LLMService(client=ollama_client)
+    app.state.embed_service = EmbedService(client=ollama_client)
+    app.state.sync_embed_service = EmbedService(client=sync_ollama_client)
+    app.state.ms_docs_service = MicrosoftDocsService(client=web_client)
+    app.state.rag_service = RAGService(
+        chroma_client=app.state.chroma_client,
+        embed_svc=app.state.embed_service,
+    )
+
+    # --- Ollama health probe ---
     app.state.ollama_reachable = False
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{settings.ollama_base_url}/api/tags", timeout=5.0)
-            app.state.ollama_reachable = resp.status_code == 200
+        resp = await ollama_client.get("/api/tags", timeout=5.0)
+        app.state.ollama_reachable = resp.status_code == 200
     except Exception:
         app.state.ollama_reachable = False
 
@@ -46,6 +77,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.warning("Ollama not reachable at %s", settings.ollama_base_url)
 
     yield
+
+    # --- Cleanup: close httpx clients ---
+    await ollama_client.aclose()
+    await web_client.aclose()
+    sync_ollama_client.close()
 
 
 def create_app() -> FastAPI:
