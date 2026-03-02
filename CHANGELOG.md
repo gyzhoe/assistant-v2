@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.12.0] — Sprint 5 Security Hardening & Performance (2026-03-02)
+## [1.12.0] — Sprint 5 Production Hardening (2026-03-02)
 
 ### Security
 
@@ -32,15 +32,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **KB article index background refresh**: Stale-while-revalidate pattern — serves cached data immediately, rebuilds in background via `asyncio.create_task`; only the first cold-cache call blocks
+- **Copy to clipboard**: Clipboard icon button in reply header with "Copied!" confirmation
+- **Generate & Insert shortcut**: Split-button that auto-inserts reply after generation; preference stored in settings
+- **Reply persistence**: Last reply per ticket URL persisted in `chrome.storage.session`; restored on navigation back
+- **Configurable insert target**: Insert selector override in Options page alongside existing reader overrides; helpful error when target not found
+- **Health poll backoff**: Exponential backoff when offline (5s → 15s → 30s → 60s); resets on reconnect
+- **Toast notification system**: Unified toast component ported from management SPA to sidebar; replaces scattered inline messages
 - `backend/app/middleware/csrf.py` — CSRF double-submit cookie middleware
 - `backend/app/services/session_store.py` — abstract `SessionStore` with `MemorySessionStore` and `SQLiteSessionStore` implementations
 - `backend/tests/test_csrf.py` — CSRF middleware tests
 - `backend/tests/test_session_store.py` — session store tests
 - `backend/tests/test_generate.py` — prompt injection delimiter tests
 
+### Fixed
+
+- **Accessibility**: `aria-label` on sidebar main, `aria-orientation` on tablist, improved contrast on muted text
+
 ### Test Coverage
 
-- Backend tests: 342 (+51 new from Sprint 5 security hardening, all passing after async rewrite)
+- Backend tests: 342 (+51 new from Sprint 5)
+- Extension tests: 174 (+31 new from Sprint 5)
+- **Total:** 516 tests
 
 ## [1.11.0] — Sprint 4 Production Hardening (2026-03-01)
 
