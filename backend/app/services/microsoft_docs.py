@@ -41,7 +41,7 @@ _cache_lock = threading.Lock()
 
 
 def _cache_key(keywords: str) -> str:
-    return hashlib.md5(keywords.lower().strip().encode()).hexdigest()  # noqa: S324
+    return hashlib.sha256(keywords.lower().strip().encode()).hexdigest()
 
 
 def _get_cached(keywords: str) -> list[WebContextDoc] | None:

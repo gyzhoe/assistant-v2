@@ -62,6 +62,7 @@ def _setup_app(
     return mock_chroma, mock_col, AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver",
+        headers={"X-Extension-Token": "test-bypass"},
     )
 
 

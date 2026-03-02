@@ -13,77 +13,24 @@ Endpoints:
 
 from __future__ import annotations
 
-import asyncio
 import secrets
-import time
-from dataclasses import dataclass, field
 from http.cookies import SimpleCookie
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.middleware.csrf import CSRF_COOKIE_NAME, generate_csrf_token
+from app.services.session_store import (
+    MemorySessionStore,
+    SQLiteSessionStore,
+    create_session_store,
+)
 
 COOKIE_NAME = "whd_session"
 
-# ---------------------------------------------------------------------------
-# Session store
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class SessionData:
-    created_at: float
-    expires_at: float
-
-
-@dataclass
-class SessionStore:
-    """Thread-safe in-memory session store with expiry sweep."""
-
-    _sessions: dict[str, SessionData] = field(default_factory=dict)
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-
-    async def create(self, max_age: int) -> str:
-        """Create a new session and return its ID.  Sweeps expired entries."""
-        session_id = secrets.token_urlsafe(32)
-        now = time.time()
-        async with self._lock:
-            self._sweep(now)
-            self._sessions[session_id] = SessionData(
-                created_at=now,
-                expires_at=now + max_age,
-            )
-        return session_id
-
-    async def validate(self, session_id: str) -> bool:
-        """Return True if the session exists and has not expired."""
-        now = time.time()
-        async with self._lock:
-            data = self._sessions.get(session_id)
-            if data is None:
-                return False
-            if now >= data.expires_at:
-                del self._sessions[session_id]
-                return False
-            return True
-
-    async def remove(self, session_id: str) -> None:
-        """Delete a session by ID (no-op if missing)."""
-        async with self._lock:
-            self._sessions.pop(session_id, None)
-
-    def _sweep(self, now: float) -> None:
-        """Remove all expired sessions.  Must be called under lock."""
-        expired = [
-            sid for sid, data in self._sessions.items() if now >= data.expires_at
-        ]
-        for sid in expired:
-            del self._sessions[sid]
-
-
 # Module-level singleton so the middleware can import it.
-session_store = SessionStore()
+session_store: MemorySessionStore | SQLiteSessionStore = create_session_store()
 
 
 def get_session_id_from_headers(headers: list[tuple[bytes, bytes]]) -> str | None:
@@ -122,7 +69,8 @@ async def login(request: Request) -> JSONResponse:
             )
 
     max_age = settings.session_max_age
-    session_id = await session_store.create(max_age)
+    client_ip = request.client.host if request.client else ""
+    session_id = await session_store.create(max_age, client_ip=client_ip)
 
     response = JSONResponse(content={"authenticated": True})
     response.set_cookie(
@@ -131,6 +79,16 @@ async def login(request: Request) -> JSONResponse:
         httponly=True,
         samesite="strict",
         secure=False,  # localhost — no TLS
+        path="/",
+        max_age=max_age,
+    )
+    # Set CSRF cookie — non-HttpOnly so the SPA JavaScript can read it
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=generate_csrf_token(),
+        httponly=False,
+        samesite="strict",
+        secure=False,
         path="/",
         max_age=max_age,
     )
@@ -148,6 +106,13 @@ async def logout(request: Request) -> JSONResponse:
     response.delete_cookie(
         key=COOKIE_NAME,
         httponly=True,
+        samesite="strict",
+        secure=False,
+        path="/",
+    )
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
+        httponly=False,
         samesite="strict",
         secure=False,
         path="/",

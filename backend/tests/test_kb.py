@@ -272,6 +272,10 @@ async def test_get_article_collection_missing() -> None:
 # ---------------------------------------------------------------------------
 
 
+# Extension token bypasses CSRF middleware for DELETE requests
+_EXT_HEADERS = {"X-Extension-Token": "test-bypass"}
+
+
 @pytest.mark.asyncio
 async def test_delete_article_success() -> None:
     delete_data: dict[str, Any] = {
@@ -280,7 +284,7 @@ async def test_delete_article_success() -> None:
         "metadatas": [],
     }
     async with _fresh_client(delete_data) as ac:
-        resp = await ac.delete("/kb/articles/art1")
+        resp = await ac.delete("/kb/articles/art1", headers=_EXT_HEADERS)
         assert resp.status_code == 200
         data = resp.json()
         assert data["article_id"] == "art1"
@@ -291,7 +295,7 @@ async def test_delete_article_success() -> None:
 async def test_delete_article_not_found() -> None:
     empty: dict[str, Any] = {"ids": [], "documents": [], "metadatas": []}
     async with _fresh_client(empty) as ac:
-        resp = await ac.delete("/kb/articles/nonexistent")
+        resp = await ac.delete("/kb/articles/nonexistent", headers=_EXT_HEADERS)
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
 
@@ -299,7 +303,7 @@ async def test_delete_article_not_found() -> None:
 @pytest.mark.asyncio
 async def test_delete_article_collection_missing() -> None:
     async with _fresh_client(collection_exists=False) as ac:
-        resp = await ac.delete("/kb/articles/any")
+        resp = await ac.delete("/kb/articles/any", headers=_EXT_HEADERS)
         assert resp.status_code == 404
 
 
@@ -316,7 +320,7 @@ async def test_delete_invalidates_cache() -> None:
         kb_mod._cache_timestamp = 1.0
         kb_mod._article_cache = {"art1": {"title": "test"}}
 
-        await ac.delete("/kb/articles/art1")
+        await ac.delete("/kb/articles/art1", headers=_EXT_HEADERS)
 
         # Cache should be invalidated
         assert kb_mod._cache_timestamp == 0.0
@@ -364,6 +368,55 @@ async def test_stats_nonexistent_collection() -> None:
 # ---------------------------------------------------------------------------
 # Cache behavior
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# article_id path param validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_article_invalid_id_returns_422() -> None:
+    """article_id with path traversal or special chars returns 422."""
+    async with _fresh_client() as ac:
+        resp = await ac.get("/kb/articles/../../etc/passwd")
+        assert resp.status_code in (404, 422)  # 404 from route not found or 422 from validation
+
+
+@pytest.mark.asyncio
+async def test_get_article_id_too_long_returns_422() -> None:
+    """article_id over 64 chars returns 422."""
+    async with _fresh_client() as ac:
+        long_id = "a" * 65
+        resp = await ac.get(f"/kb/articles/{long_id}")
+        assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_article_id_with_special_chars_returns_422() -> None:
+    """article_id with spaces or special chars returns 422."""
+    async with _fresh_client() as ac:
+        resp = await ac.get("/kb/articles/invalid id!")
+        assert resp.status_code in (404, 422)
+
+
+@pytest.mark.asyncio
+async def test_delete_article_invalid_id_returns_422() -> None:
+    """DELETE with invalid article_id returns 422."""
+    async with _fresh_client() as ac:
+        long_id = "a" * 65
+        resp = await ac.delete(f"/kb/articles/{long_id}", headers=_EXT_HEADERS)
+        assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_valid_article_id_passes_validation() -> None:
+    """Valid article_id (alphanumeric + _ -) passes validation."""
+    empty: dict[str, Any] = {"ids": [], "documents": [], "metadatas": []}
+    async with _fresh_client(empty) as ac:
+        resp = await ac.get("/kb/articles/valid-article_id-123")
+        # Passes validation, 404 because not in mock
+        assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

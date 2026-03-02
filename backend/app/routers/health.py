@@ -18,6 +18,8 @@ router = APIRouter(tags=["health"])
 
 _token_header = APIKeyHeader(name="X-Extension-Token", auto_error=False)
 
+_LOCALHOST_HOSTS = {"127.0.0.1", "::1"}
+
 
 async def _require_token(token: str | None = Depends(_token_header)) -> None:
     """Guard for destructive endpoints — requires token even when api_token is empty."""
@@ -28,9 +30,22 @@ async def _require_token(token: str | None = Depends(_token_header)) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized.")
 
 
+def _require_localhost(request: Request) -> None:
+    """Restrict process-control endpoints to loopback connections only."""
+    client = request.client
+    if client is None or client.host not in _LOCALHOST_HOSTS:
+        raise HTTPException(status_code=403, detail="Process control is only available from localhost.")
+
+
 @router.get("/health")
 async def health_check(request: Request) -> dict[str, object]:
-    """Return system health status including Ollama and ChromaDB state."""
+    """Return minimal health status. Detailed info available at /health/detail."""
+    return {"status": "ok"}
+
+
+@router.get("/health/detail", dependencies=[Depends(_require_token)])
+async def health_detail(request: Request) -> dict[str, object]:
+    """Return detailed system health status including Ollama and ChromaDB state."""
     ollama_reachable = False
     try:
         async with httpx.AsyncClient() as client:
@@ -60,8 +75,9 @@ async def health_check(request: Request) -> dict[str, object]:
 
 
 @router.post("/shutdown", dependencies=[Depends(_require_token)])
-async def shutdown_backend() -> dict[str, str]:
+async def shutdown_backend(request: Request) -> dict[str, str]:
     """Gracefully shut down the backend server after a short delay."""
+    _require_localhost(request)
 
     async def _delayed_kill() -> None:
         await asyncio.sleep(0.5)
@@ -72,8 +88,10 @@ async def shutdown_backend() -> dict[str, str]:
 
 
 @router.post("/ollama/start", dependencies=[Depends(_require_token)])
-async def start_ollama() -> dict[str, str]:
+async def start_ollama(request: Request) -> dict[str, str]:
     """Start the Ollama server as a detached background process."""
+    _require_localhost(request)
+
     # Check if already running
     try:
         async with httpx.AsyncClient() as client:
@@ -100,8 +118,10 @@ async def start_ollama() -> dict[str, str]:
 
 
 @router.post("/ollama/stop", dependencies=[Depends(_require_token)])
-async def stop_ollama() -> dict[str, str]:
+async def stop_ollama(request: Request) -> dict[str, str]:
     """Stop the Ollama server process."""
+    _require_localhost(request)
+
     if sys.platform == "win32":
         await asyncio.to_thread(
             subprocess.run,

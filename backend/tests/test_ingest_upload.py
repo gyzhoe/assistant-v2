@@ -30,6 +30,7 @@ def _fresh_client(app: object | None = None) -> AsyncClient:
     return AsyncClient(
         transport=ASGITransport(app=fresh_app),  # type: ignore[arg-type]
         base_url="http://testserver",
+        headers={"X-Extension-Token": "test-bypass"},
     )
 
 

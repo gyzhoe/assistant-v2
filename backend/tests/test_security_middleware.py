@@ -48,6 +48,7 @@ class _AppClientContext:
         self._client = AsyncClient(
             transport=ASGITransport(app=fresh_app),
             base_url="http://testserver",
+            headers={"X-Extension-Token": "test-bypass"},
         )
         return await self._client.__aenter__()
 

@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from chromadb.api import ClientAPI
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Path, Request
 
 from app.models.kb import (
     ArticleDeleteResponse,
@@ -315,9 +315,14 @@ async def create_article(
             ) from exc
 
 
+_ARTICLE_ID_PATTERN = r"^[a-zA-Z0-9_-]{1,64}$"
+
+
 @router.put("/articles/{article_id}", response_model=UpdateArticleResponse)
 async def update_article(
-    request: Request, article_id: str, body: UpdateArticleRequest,
+    request: Request,
+    body: UpdateArticleRequest,
+    article_id: str = Path(pattern=_ARTICLE_ID_PATTERN),
 ) -> UpdateArticleResponse:
     """Update title, content, and tags of a manual KB article."""
     chroma_client = request.app.state.chroma_client
@@ -435,7 +440,10 @@ async def update_article(
 
 
 @router.get("/articles/{article_id}", response_model=ArticleDetailResponse)
-async def get_article(request: Request, article_id: str) -> ArticleDetailResponse:
+async def get_article(
+    request: Request,
+    article_id: str = Path(pattern=_ARTICLE_ID_PATTERN),
+) -> ArticleDetailResponse:
     """Get article detail with all chunks."""
     chroma_client = request.app.state.chroma_client
 
@@ -500,7 +508,9 @@ async def get_article(request: Request, article_id: str) -> ArticleDetailRespons
 
 @router.patch("/articles/{article_id}/tags", response_model=UpdateTagsResponse)
 async def update_tags(
-    request: Request, article_id: str, body: UpdateTagsRequest,
+    request: Request,
+    body: UpdateTagsRequest,
+    article_id: str = Path(pattern=_ARTICLE_ID_PATTERN),
 ) -> UpdateTagsResponse:
     """Update tags on all chunks of an article."""
     chroma_client = request.app.state.chroma_client
@@ -546,7 +556,8 @@ async def get_tags(request: Request) -> TagListResponse:
 
 @router.delete("/articles/{article_id}", response_model=ArticleDeleteResponse)
 async def delete_article(
-    request: Request, article_id: str,
+    request: Request,
+    article_id: str = Path(pattern=_ARTICLE_ID_PATTERN),
 ) -> ArticleDeleteResponse:
     """Delete all chunks belonging to an article."""
     chroma_client = request.app.state.chroma_client
