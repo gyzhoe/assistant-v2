@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.routers import kb as kb_mod
+from tests.helpers import setup_app_state
+
+
+def _mock_embed(text: str) -> list[float]:
+    """Deterministic fake embedding for tests."""
+    return [0.1] * 384
 
 
 def _fresh_client(
@@ -33,6 +39,12 @@ def _fresh_client(
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    # Override sync_embed_service with deterministic embed
+    mock_sync_embed = MagicMock()
+    mock_sync_embed.embed_fn = _mock_embed
+    app.state.sync_embed_service = mock_sync_embed
 
     # Reset the module-level cache before each test
     kb_mod._article_cache = {}
@@ -44,11 +56,6 @@ def _fresh_client(
         base_url="http://testserver",
         headers={"X-Extension-Token": "test-bypass"},
     )
-
-
-def _mock_embed(text: str) -> list[float]:
-    """Deterministic fake embedding for tests."""
-    return [0.1] * 384
 
 
 # ---------------------------------------------------------------------------
@@ -67,24 +74,25 @@ async def test_create_article_success() -> None:
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    # Override sync_embed_service with deterministic embed
+    mock_sync_embed = MagicMock()
+    mock_sync_embed.embed_fn = _mock_embed
+    app.state.sync_embed_service = mock_sync_embed
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0
     kb_mod._total_chunks_cached = 0
 
-    with patch(
-        "app.routers.kb.EmbedService",
-    ) as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as ac:
-            resp = await ac.post("/kb/articles", json={
-                "title": "VPN Setup Guide",
-                "content": "## Introduction\n\nHow to set up VPN.",
-            })
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        resp = await ac.post("/kb/articles", json={
+            "title": "VPN Setup Guide",
+            "content": "## Introduction\n\nHow to set up VPN.",
+        })
 
     assert resp.status_code == 200
     data = resp.json()
@@ -139,6 +147,7 @@ async def test_create_article_duplicate() -> None:
     mock_chroma.get_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0
@@ -169,6 +178,11 @@ async def test_create_article_heading_sections() -> None:
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    mock_sync_embed = MagicMock()
+    mock_sync_embed.embed_fn = _mock_embed
+    app.state.sync_embed_service = mock_sync_embed
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0
@@ -181,17 +195,14 @@ async def test_create_article_heading_sections() -> None:
         "### Sub-step\n\nConfigure the network."
     )
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as ac:
-            resp = await ac.post("/kb/articles", json={
-                "title": "Multi-Section Article",
-                "content": content,
-            })
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        resp = await ac.post("/kb/articles", json={
+            "title": "Multi-Section Article",
+            "content": content,
+        })
 
     assert resp.status_code == 200
     data = resp.json()
@@ -223,25 +234,27 @@ async def test_create_article_ollama_down() -> None:
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    def embed_raises(text: str) -> list[float]:
+        raise ConnectionError("Ollama embed service unreachable")
+
+    mock_sync_embed = MagicMock()
+    mock_sync_embed.embed_fn = embed_raises
+    app.state.sync_embed_service = mock_sync_embed
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0
     kb_mod._total_chunks_cached = 0
 
-    def embed_raises(text: str) -> list[float]:
-        raise ConnectionError("Ollama embed service unreachable")
-
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = embed_raises
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as ac:
-            resp = await ac.post("/kb/articles", json={
-                "title": "Test Article",
-                "content": "## Section\n\nSome content for embedding.",
-            })
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        resp = await ac.post("/kb/articles", json={
+            "title": "Test Article",
+            "content": "## Section\n\nSome content for embedding.",
+        })
 
     assert resp.status_code == 503
     assert "ollama" in resp.json()["detail"].lower()

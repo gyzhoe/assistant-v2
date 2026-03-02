@@ -13,18 +13,18 @@ RETRY_DELAY = 1.0
 
 
 class LLMService:
-    """Generates text completions via Ollama."""
+    """Generates text completions via Ollama using a shared async httpx client."""
 
-    def __init__(self) -> None:
+    def __init__(self, client: httpx.AsyncClient) -> None:
         self.base_url = settings.ollama_base_url
-        self._client = httpx.Client(timeout=120.0)
+        self._client = client
 
     async def generate(self, prompt: str, model: str) -> str:
         """Generate a completion with retry logic. Raises ConnectionError if Ollama is unreachable."""
         last_error: ConnectionError | None = None
         for attempt in range(1 + MAX_RETRIES):
             try:
-                result = await asyncio.to_thread(self._generate_sync, prompt, model)
+                result = await self._generate_async(prompt, model)
                 if attempt > 0:
                     logger.info("Ollama generate succeeded on attempt %d", attempt + 1)
                 return result
@@ -39,9 +39,9 @@ class LLMService:
         logger.error("Ollama generate failed after %d attempts", 1 + MAX_RETRIES)
         raise last_error  # type: ignore[misc]
 
-    def _generate_sync(self, prompt: str, model: str) -> str:
+    async def _generate_async(self, prompt: str, model: str) -> str:
         try:
-            resp = self._client.post(
+            resp = await self._client.post(
                 f"{self.base_url}/api/generate",
                 json={
                     "model": model,

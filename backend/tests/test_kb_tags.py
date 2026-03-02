@@ -4,14 +4,16 @@ POST /kb/articles with tags, and RAG filtered retrieval."""
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.routers import kb as kb_mod
+from app.services.embed_service import EmbedService
 from app.services.rag_service import RAGService
+from tests.helpers import setup_app_state
 
 
 def _fresh_client(
@@ -35,6 +37,7 @@ def _fresh_client(
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
 
     # Reset the module-level cache before each test
     kb_mod._article_cache = {}
@@ -198,23 +201,26 @@ async def test_create_article_with_tags() -> None:
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    # Override sync_embed_service with deterministic embed
+    mock_sync_embed = MagicMock()
+    mock_sync_embed.embed_fn = _mock_embed
+    app.state.sync_embed_service = mock_sync_embed
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0
     kb_mod._total_chunks_cached = 0
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as ac:
-            resp = await ac.post("/kb/articles", json={
-                "title": "Tagged Article",
-                "content": "## Section\n\nSome content here.",
-                "tags": ["network", "vpn"],
-            })
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        resp = await ac.post("/kb/articles", json={
+            "title": "Tagged Article",
+            "content": "## Section\n\nSome content here.",
+            "tags": ["network", "vpn"],
+        })
 
     assert resp.status_code == 200
     data = resp.json()
@@ -281,11 +287,11 @@ async def test_rag_retrieve_with_category() -> None:
     }
     mock_chroma.get_collection.return_value = mock_col
 
-    rag = RAGService(chroma_client=mock_chroma)
+    mock_embed_svc = MagicMock(spec=EmbedService)
+    mock_embed_svc.embed = AsyncMock(return_value=[0.1] * 384)
+    rag = RAGService(chroma_client=mock_chroma, embed_svc=mock_embed_svc)
 
-    with patch.object(rag.embed_svc, "embed", new_callable=AsyncMock) as mock_embed:
-        mock_embed.return_value = [0.1] * 384
-        results = await rag.retrieve("test query", max_docs=5, category="network")
+    results = await rag.retrieve("test query", max_docs=5, category="network")
 
     assert len(results) > 0
 
@@ -311,11 +317,11 @@ async def test_rag_retrieve_without_category() -> None:
     }
     mock_chroma.get_collection.return_value = mock_col
 
-    rag = RAGService(chroma_client=mock_chroma)
+    mock_embed_svc = MagicMock(spec=EmbedService)
+    mock_embed_svc.embed = AsyncMock(return_value=[0.1] * 384)
+    rag = RAGService(chroma_client=mock_chroma, embed_svc=mock_embed_svc)
 
-    with patch.object(rag.embed_svc, "embed", new_callable=AsyncMock) as mock_embed:
-        mock_embed.return_value = [0.1] * 384
-        results = await rag.retrieve("test query", max_docs=5, category="")
+    results = await rag.retrieve("test query", max_docs=5, category="")
 
     assert len(results) > 0
 

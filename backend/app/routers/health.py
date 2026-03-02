@@ -6,7 +6,6 @@ import signal
 import subprocess
 import sys
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
@@ -48,9 +47,9 @@ async def health_detail(request: Request) -> dict[str, object]:
     """Return detailed system health status including Ollama and ChromaDB state."""
     ollama_reachable = False
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{settings.ollama_base_url}/api/tags", timeout=5.0)
-            ollama_reachable = resp.status_code == 200
+        llm_client = request.app.state.llm_service._client
+        resp = await llm_client.get("/api/tags", timeout=5.0)
+        ollama_reachable = resp.status_code == 200
     except Exception:
         ollama_reachable = False
 
@@ -94,10 +93,10 @@ async def start_ollama(request: Request) -> dict[str, str]:
 
     # Check if already running
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{settings.ollama_base_url}/api/tags", timeout=3.0)
-            if resp.status_code == 200:
-                return {"status": "already_running"}
+        llm_client = request.app.state.llm_service._client
+        resp = await llm_client.get("/api/tags", timeout=3.0)
+        if resp.status_code == 200:
+            return {"status": "already_running"}
     except Exception:
         pass
 

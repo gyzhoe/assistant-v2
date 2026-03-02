@@ -14,6 +14,26 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
+from app.services.embed_service import EmbedService
+from app.services.llm_service import LLMService
+from app.services.microsoft_docs import MicrosoftDocsService
+from app.services.rag_service import RAGService
+
+
+def _setup_app_state(app: object) -> None:
+    """Set up mock services on app.state for tests."""
+    mock_client = MagicMock()
+    mock_sync_client = MagicMock()
+    app.state.chroma_client = MagicMock()  # type: ignore[union-attr]
+    app.state.ollama_reachable = False  # type: ignore[union-attr]
+    app.state.llm_service = LLMService(client=mock_client)  # type: ignore[union-attr]
+    app.state.embed_service = EmbedService(client=mock_client)  # type: ignore[union-attr]
+    app.state.sync_embed_service = EmbedService(client=mock_sync_client)  # type: ignore[union-attr]
+    app.state.ms_docs_service = MicrosoftDocsService(client=mock_client)  # type: ignore[union-attr]
+    app.state.rag_service = RAGService(  # type: ignore[union-attr]
+        chroma_client=app.state.chroma_client,  # type: ignore[union-attr]
+        embed_svc=app.state.embed_service,  # type: ignore[union-attr]
+    )
 
 
 def _fresh_client(app: object | None = None) -> AsyncClient:
@@ -22,8 +42,7 @@ def _fresh_client(app: object | None = None) -> AsyncClient:
         fresh_app = create_app()
     else:
         fresh_app = app  # type: ignore[assignment]
-    fresh_app.state.chroma_client = MagicMock()  # type: ignore[union-attr]
-    fresh_app.state.ollama_reachable = False  # type: ignore[union-attr]
+    _setup_app_state(fresh_app)
     return AsyncClient(
         transport=ASGITransport(app=fresh_app),  # type: ignore[arg-type]
         base_url="http://testserver",
@@ -44,14 +63,15 @@ async def test_ingest_url_success() -> None:
     ]
 
     fresh_app = create_app()
-    fresh_app.state.chroma_client = MagicMock()
-    fresh_app.state.ollama_reachable = False
+    _setup_app_state(fresh_app)
     fresh_app.state.chroma_client.get_or_create_collection.return_value = MagicMock()
 
-    async with _fresh_client(fresh_app) as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=fresh_app),
+        base_url="http://testserver",
+    ) as ac:
         with (
             patch("app.routers.ingest.load_url", return_value=iter(mock_chunks)),
-            patch("app.routers.ingest.EmbedService"),
             patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
         ):
             mock_pipeline = MagicMock()
@@ -72,7 +92,7 @@ async def test_ingest_url_success() -> None:
 
 
 # ---------------------------------------------------------------------------
-# SSRF → 422
+# SSRF -> 422
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +112,7 @@ async def test_ingest_url_ssrf_returns_422() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Invalid content type → 422
+# Invalid content type -> 422
 # ---------------------------------------------------------------------------
 
 
@@ -112,7 +132,7 @@ async def test_ingest_url_invalid_content_type_returns_422() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Too large → 413
+# Too large -> 413
 # ---------------------------------------------------------------------------
 
 
@@ -133,7 +153,7 @@ async def test_ingest_url_too_large_returns_413() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ollama down → 503
+# Ollama down -> 503
 # ---------------------------------------------------------------------------
 
 
@@ -142,14 +162,15 @@ async def test_ingest_url_ollama_down_returns_503() -> None:
     mock_chunks = [("id1", "chunk1", {"title": "T", "source_url": "u", "article_id": "a", "source_type": "url"})]
 
     fresh_app = create_app()
-    fresh_app.state.chroma_client = MagicMock()
-    fresh_app.state.ollama_reachable = False
+    _setup_app_state(fresh_app)
     fresh_app.state.chroma_client.get_or_create_collection.return_value = MagicMock()
 
-    async with _fresh_client(fresh_app) as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=fresh_app),
+        base_url="http://testserver",
+    ) as ac:
         with (
             patch("app.routers.ingest.load_url", return_value=iter(mock_chunks)),
-            patch("app.routers.ingest.EmbedService"),
             patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
         ):
             mock_pipeline = MagicMock()
@@ -166,7 +187,7 @@ async def test_ingest_url_ollama_down_returns_503() -> None:
 
 
 # ---------------------------------------------------------------------------
-# No content → warning
+# No content -> warning
 # ---------------------------------------------------------------------------
 
 
@@ -187,15 +208,14 @@ async def test_ingest_url_no_content_returns_warning() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Concurrent → 409
+# Concurrent -> 409
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_ingest_url_concurrent_returns_409() -> None:
     fresh_app = create_app()
-    fresh_app.state.chroma_client = MagicMock()
-    fresh_app.state.ollama_reachable = False
+    _setup_app_state(fresh_app)
 
     import app.routers.ingest as ingest_mod
 
@@ -203,7 +223,7 @@ async def test_ingest_url_concurrent_returns_409() -> None:
 
     slow_event = asyncio.Event()
 
-    def slow_load_url(url: str):
+    def slow_load_url(url: str):  # noqa: ANN201
         for _ in range(50):
             if slow_event.is_set():
                 break
@@ -212,7 +232,6 @@ async def test_ingest_url_concurrent_returns_409() -> None:
 
     with (
         patch("app.routers.ingest.load_url", side_effect=slow_load_url),
-        patch("app.routers.ingest.EmbedService"),
         patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
     ):
         mock_pipeline = MagicMock()
@@ -243,7 +262,7 @@ async def test_ingest_url_concurrent_returns_409() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Invalid URL → 422
+# Invalid URL -> 422
 # ---------------------------------------------------------------------------
 
 

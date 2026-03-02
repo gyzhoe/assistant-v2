@@ -145,10 +145,9 @@ class RateLimitMiddleware:
     Simple in-process rate limiter.
     Limits /generate and /ingest/upload to configurable requests per client IP.
 
-    Memory management: a periodic sweep (at most once per window) evicts entries
-    for IPs whose most-recent request is older than the window.  This prevents
-    unbounded growth of ``_counts`` when the server receives traffic from many
-    distinct source IPs over time.
+    Uses per-key locks so that requests from different IPs/paths do not
+    serialize on a single global lock.  A lightweight background sweep
+    (triggered at most once per window) evicts stale entries to bound memory.
 
     NOTE: This rate limiter uses the client IP from the direct TCP connection.
     Behind a reverse proxy (nginx, Caddy, etc.), all requests appear to come from
@@ -175,6 +174,9 @@ class RateLimitMiddleware:
         self._window = 60.0  # seconds
         # Keyed by "{path}:{ip}" to track per-path, per-IP rate limits
         self._counts: dict[str, list[float]] = defaultdict(list)
+        # Per-key locks: only requests sharing the same rate_key contend
+        self._key_locks: dict[str, asyncio.Lock] = {}
+        # Light lock protecting _key_locks dict and sweep state only
         self._lock = asyncio.Lock()
         self._last_sweep: float = 0.0  # monotonic timestamp of the most-recent cleanup sweep
         self._path_limits: dict[str, int] = {
@@ -185,7 +187,7 @@ class RateLimitMiddleware:
         }
 
     def _evict_stale_entries(self, now: float) -> None:
-        """Remove IPs whose most-recent request falls outside the current window.
+        """Remove keys whose most-recent request falls outside the current window.
 
         Must be called while ``self._lock`` is held.  A full sweep is performed
         at most once per window period so that the amortised cost per request is
@@ -194,9 +196,13 @@ class RateLimitMiddleware:
         if now - self._last_sweep < self._window:
             return
 
-        stale_ips = [ip for ip, ts in self._counts.items() if not ts or now - ts[-1] >= self._window]
-        for ip in stale_ips:
-            del self._counts[ip]
+        stale_keys = [
+            k for k, ts in self._counts.items()
+            if not ts or now - ts[-1] >= self._window
+        ]
+        for k in stale_keys:
+            del self._counts[k]
+            self._key_locks.pop(k, None)
 
         self._last_sweep = now
 
@@ -216,10 +222,14 @@ class RateLimitMiddleware:
         limit = self._path_limits.get(path, self._max)
         now = time.monotonic()
 
+        # Acquire the per-key lock (create it under the light global lock)
         async with self._lock:
-            # Periodic cleanup: evict stale IP entries to bound memory usage.
             self._evict_stale_entries(now)
+            if rate_key not in self._key_locks:
+                self._key_locks[rate_key] = asyncio.Lock()
+            key_lock = self._key_locks[rate_key]
 
+        async with key_lock:
             timestamps = self._counts[rate_key]
             # Remove timestamps outside the window
             self._counts[rate_key] = [t for t in timestamps if now - t < self._window]

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.routers import kb as kb_mod
+from tests.helpers import setup_app_state
 
 
 def _mock_embed(text: str) -> list[float]:
@@ -54,6 +55,12 @@ def _setup_app(
 
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+
+    # Override sync_embed_service with deterministic embed
+    mock_sync_embed = MagicMock()
+    mock_sync_embed.embed_fn = _mock_embed
+    app.state.sync_embed_service = mock_sync_embed
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0
@@ -75,15 +82,12 @@ def _setup_app(
 async def test_update_article_success() -> None:
     _, mock_col, ac = _setup_app()
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with ac:
-            resp = await ac.put("/kb/articles/art1", json={
-                "title": "VPN Setup Guide v2",
-                "content": "## Introduction\n\nUpdated VPN guide.\n\n## New Steps\n\nStep A.",
-                "tags": ["NETWORK", "VPN"],
-            })
+    async with ac:
+        resp = await ac.put("/kb/articles/art1", json={
+            "title": "VPN Setup Guide v2",
+            "content": "## Introduction\n\nUpdated VPN guide.\n\n## New Steps\n\nStep A.",
+            "tags": ["NETWORK", "VPN"],
+        })
 
     assert resp.status_code == 200
     data = resp.json()
@@ -150,15 +154,12 @@ async def test_update_article_preserves_id() -> None:
     """article_id must remain the same after edit."""
     _, mock_col, ac = _setup_app()
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with ac:
-            resp = await ac.put("/kb/articles/art1", json={
-                "title": "Completely New Title",
-                "content": "## New\n\nNew content.",
-                "tags": [],
-            })
+    async with ac:
+        resp = await ac.put("/kb/articles/art1", json={
+            "title": "Completely New Title",
+            "content": "## New\n\nNew content.",
+            "tags": [],
+        })
 
     assert resp.status_code == 200
     assert resp.json()["article_id"] == "art1"
@@ -176,15 +177,12 @@ async def test_update_article_preserves_imported_at() -> None:
     """imported_at timestamp must be preserved from the original article."""
     _, mock_col, ac = _setup_app()
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with ac:
-            resp = await ac.put("/kb/articles/art1", json={
-                "title": "Updated Title",
-                "content": "## Updated\n\nContent.",
-                "tags": [],
-            })
+    async with ac:
+        resp = await ac.put("/kb/articles/art1", json={
+            "title": "Updated Title",
+            "content": "## Updated\n\nContent.",
+            "tags": [],
+        })
 
     assert resp.status_code == 200
 
@@ -228,20 +226,17 @@ async def test_update_article_rechunks() -> None:
     """Content with more headings should produce more chunks."""
     _, mock_col, ac = _setup_app()
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with ac:
-            resp = await ac.put("/kb/articles/art1", json={
-                "title": "Multi-Section",
-                "content": (
-                    "Intro paragraph.\n\n"
-                    "## Section A\n\nContent A.\n\n"
-                    "## Section B\n\nContent B.\n\n"
-                    "## Section C\n\nContent C."
-                ),
-                "tags": [],
-            })
+    async with ac:
+        resp = await ac.put("/kb/articles/art1", json={
+            "title": "Multi-Section",
+            "content": (
+                "Intro paragraph.\n\n"
+                "## Section A\n\nContent A.\n\n"
+                "## Section B\n\nContent B.\n\n"
+                "## Section C\n\nContent C."
+            ),
+            "tags": [],
+        })
 
     assert resp.status_code == 200
     assert resp.json()["chunks_ingested"] == 4  # Intro + A + B + C
@@ -252,15 +247,12 @@ async def test_update_article_updates_tags() -> None:
     """New tags should appear in chunk metadata after edit."""
     _, mock_col, ac = _setup_app()
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with ac:
-            resp = await ac.put("/kb/articles/art1", json={
-                "title": "Tagged Article",
-                "content": "## Content\n\nSome text.",
-                "tags": ["VPN", "REMOTE ACCESS"],
-            })
+    async with ac:
+        resp = await ac.put("/kb/articles/art1", json={
+            "title": "Tagged Article",
+            "content": "## Content\n\nSome text.",
+            "tags": ["VPN", "REMOTE ACCESS"],
+        })
 
     assert resp.status_code == 200
 
@@ -308,15 +300,12 @@ async def test_update_article_deletes_stale_chunks() -> None:
         },
     )
 
-    with patch("app.routers.kb.EmbedService") as mock_embed_cls:
-        mock_embed_cls.return_value.embed_fn = _mock_embed
-
-        async with ac:
-            resp = await ac.put("/kb/articles/art1", json={
-                "title": "Smaller",
-                "content": "Single paragraph, no headings.",
-                "tags": [],
-            })
+    async with ac:
+        resp = await ac.put("/kb/articles/art1", json={
+            "title": "Smaller",
+            "content": "Single paragraph, no headings.",
+            "tags": [],
+        })
 
     assert resp.status_code == 200
     assert resp.json()["chunks_ingested"] == 1
@@ -337,6 +326,7 @@ async def test_update_article_collection_not_found() -> None:
     mock_chroma.get_collection.side_effect = ValueError("Collection not found")
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0

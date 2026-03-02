@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
+from tests.helpers import setup_app_state
 
 # Extension token header bypasses CSRF middleware (simulates extension client)
 _EXT_HEADERS = {"X-Extension-Token": "test-bypass"}
@@ -17,6 +18,7 @@ def _make_client() -> AsyncClient:
     app = create_app()
     app.state.chroma_client = MagicMock()
     app.state.ollama_reachable = False
+    setup_app_state(app)
     return AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://testserver",
@@ -37,10 +39,17 @@ def _valid_payload(rating: str = "good") -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-@patch("app.routers.feedback.EmbedService")
-async def test_feedback_good_returns_200_with_id(mock_embed_cls: MagicMock) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
-    async with _make_client() as ac:
+async def test_feedback_good_returns_200_with_id() -> None:
+    app = create_app()
+    app.state.chroma_client = MagicMock()
+    app.state.ollama_reachable = False
+    setup_app_state(app)
+    app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
         resp = await ac.post("/feedback", json=_valid_payload("good"), headers=_EXT_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
@@ -49,10 +58,17 @@ async def test_feedback_good_returns_200_with_id(mock_embed_cls: MagicMock) -> N
 
 
 @pytest.mark.asyncio
-@patch("app.routers.feedback.EmbedService")
-async def test_feedback_bad_returns_200_with_id(mock_embed_cls: MagicMock) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
-    async with _make_client() as ac:
+async def test_feedback_bad_returns_200_with_id() -> None:
+    app = create_app()
+    app.state.chroma_client = MagicMock()
+    app.state.ollama_reachable = False
+    setup_app_state(app)
+    app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
         resp = await ac.post("/feedback", json=_valid_payload("bad"), headers=_EXT_HEADERS)
     assert resp.status_code == 200
     body = resp.json()
@@ -77,29 +93,32 @@ async def test_feedback_missing_required_fields_returns_422() -> None:
 
 
 @pytest.mark.asyncio
-@patch("app.routers.feedback.EmbedService")
-async def test_feedback_connection_failure_returns_503(
-    mock_embed_cls: MagicMock,
-) -> None:
+async def test_feedback_connection_failure_returns_503() -> None:
     """Connection errors (Ollama/ChromaDB down) return 503 Service Unavailable."""
-    mock_embed_cls.return_value.embed = AsyncMock(side_effect=ConnectionError("boom"))
-    async with _make_client() as ac:
+    app = create_app()
+    app.state.chroma_client = MagicMock()
+    app.state.ollama_reachable = False
+    setup_app_state(app)
+    app.state.embed_service.embed = AsyncMock(side_effect=ConnectionError("boom"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
         resp = await ac.post("/feedback", json=_valid_payload(), headers=_EXT_HEADERS)
     assert resp.status_code == 503
 
 
 @pytest.mark.asyncio
-@patch("app.routers.feedback.EmbedService")
-async def test_feedback_stores_in_rated_replies_collection(
-    mock_embed_cls: MagicMock,
-) -> None:
-    mock_embed_cls.return_value.embed = AsyncMock(return_value=[0.1] * 768)
+async def test_feedback_stores_in_rated_replies_collection() -> None:
     app = create_app()
     mock_chroma = MagicMock()
     mock_col = MagicMock()
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
+    app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -136,6 +155,7 @@ async def test_delete_feedback_returns_204() -> None:
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
 
     valid_id = "rated_" + "a" * 32
     async with AsyncClient(
@@ -158,6 +178,7 @@ async def test_delete_feedback_not_found_returns_404() -> None:
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
 
     valid_id = "rated_" + "b" * 32
     async with AsyncClient(
@@ -178,6 +199,7 @@ async def test_delete_feedback_connection_failure_returns_503() -> None:
     mock_chroma.get_or_create_collection.side_effect = ConnectionError("down")
     app.state.chroma_client = mock_chroma
     app.state.ollama_reachable = False
+    setup_app_state(app)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

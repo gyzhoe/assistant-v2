@@ -5,6 +5,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
+from tests.helpers import setup_app_state
 
 
 @pytest_asyncio.fixture
@@ -14,6 +15,7 @@ async def token_client() -> AsyncClient:
         token_app = create_app()
         token_app.state.chroma_client = MagicMock()
         token_app.state.ollama_reachable = False
+        setup_app_state(token_app)
         async with AsyncClient(
             transport=ASGITransport(app=token_app),
             base_url="http://testserver",
@@ -29,23 +31,30 @@ async def token_client() -> AsyncClient:
 @pytest.mark.asyncio
 async def test_api_token_valid(token_client: AsyncClient) -> None:
     """Request with correct token should pass through."""
-    with (
-        patch("app.routers.generate.RAGService") as mock_rag_cls,
-        patch("app.routers.generate.LLMService") as mock_llm_cls,
-    ):
-        mock_rag = MagicMock()
-        mock_rag.retrieve = AsyncMock(return_value=[])
-        mock_rag_cls.return_value = mock_rag
-        mock_llm = MagicMock()
-        mock_llm.generate = AsyncMock(return_value="Hello")
-        mock_llm_cls.return_value = mock_llm
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_llm.generate = AsyncMock(return_value="Hello")
+    mock_ms = MagicMock()
+    mock_ms.search = AsyncMock(return_value=[])
+    mock_embed = MagicMock()
+    mock_embed.embed = AsyncMock(return_value=[0.1] * 768)
 
-        resp = await token_client.post(
-            "/generate",
-            json={"ticket_subject": "Test", "ticket_description": "Test desc"},
-            headers={"X-Extension-Token": "test-secret"},
-        )
-        assert resp.status_code == 200
+    # We need to set state on the token_client's app — access via the transport
+    transport = token_client._transport
+    assert hasattr(transport, "app")
+    test_app = transport.app  # type: ignore[union-attr]
+    test_app.state.rag_service = mock_rag
+    test_app.state.llm_service = mock_llm
+    test_app.state.ms_docs_service = mock_ms
+    test_app.state.embed_service = mock_embed
+
+    resp = await token_client.post(
+        "/generate",
+        json={"ticket_subject": "Test", "ticket_description": "Test desc"},
+        headers={"X-Extension-Token": "test-secret"},
+    )
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio

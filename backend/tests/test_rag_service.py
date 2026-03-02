@@ -15,8 +15,8 @@ def make_mock_chroma() -> MagicMock:
 @pytest.mark.asyncio
 async def test_retrieve_returns_empty_when_no_collections() -> None:
     chroma = make_mock_chroma()
-    svc = RAGService(chroma_client=chroma)
-    svc.embed_svc = MagicMock()
+    mock_embed = MagicMock()
+    svc = RAGService(chroma_client=chroma, embed_svc=mock_embed)
     svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
     results = await svc.retrieve("test query", max_docs=5)
     assert results == []
@@ -49,8 +49,8 @@ async def test_retrieve_merges_and_ranks() -> None:
 
     chroma.get_collection.side_effect = get_collection
 
-    svc = RAGService(chroma_client=chroma)
-    svc.embed_svc = MagicMock()
+    mock_embed = MagicMock()
+    svc = RAGService(chroma_client=chroma, embed_svc=mock_embed)
     svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
 
     results = await svc.retrieve("network drive issue", max_docs=3)
@@ -83,8 +83,8 @@ async def test_retrieve_filters_low_similarity_docs() -> None:
 
     chroma.get_collection.side_effect = get_collection
 
-    svc = RAGService(chroma_client=chroma)
-    svc.embed_svc = MagicMock()
+    mock_embed = MagicMock()
+    svc = RAGService(chroma_client=chroma, embed_svc=mock_embed)
     svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
 
     with patch("app.services.rag_service.settings") as mock_settings:
@@ -125,8 +125,8 @@ async def test_retrieve_returns_empty_when_all_below_threshold() -> None:
 
     chroma.get_collection.side_effect = get_collection
 
-    svc = RAGService(chroma_client=chroma)
-    svc.embed_svc = MagicMock()
+    mock_embed = MagicMock()
+    svc = RAGService(chroma_client=chroma, embed_svc=mock_embed)
     svc.embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
 
     with patch("app.services.rag_service.settings") as mock_settings:
