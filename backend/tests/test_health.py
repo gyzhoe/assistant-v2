@@ -28,8 +28,6 @@ def _make_client() -> AsyncClient:
 
 # ── GET /health (public, minimal) ──────────────────────────────────
 
-from app.main import app
-
 
 @pytest.mark.asyncio
 async def test_health_returns_200(client: AsyncClient) -> None:
