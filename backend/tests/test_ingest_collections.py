@@ -17,6 +17,7 @@ def _make_client() -> AsyncClient:
     return AsyncClient(
         transport=ASGITransport(app=fresh_app),
         base_url="http://testserver",
+        headers={"X-Extension-Token": "test-bypass"},
     )
 
 
@@ -63,6 +64,7 @@ async def test_clear_idempotent() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=fresh_app),
         base_url="http://testserver",
+        headers={"X-Extension-Token": "test-bypass"},
     ) as ac:
         resp1 = await ac.post("/ingest/collections/kb_articles/clear")
         assert resp1.status_code == 200
@@ -88,11 +90,14 @@ async def test_clear_requires_api_token_when_configured() -> None:
             transport=ASGITransport(app=fresh_app),
             base_url="http://testserver",
         ) as ac:
-            # Without token → 401
-            resp = await ac.post("/ingest/collections/kb_articles/clear")
+            # Wrong token (not empty — bypasses CSRF, but fails auth) → 401
+            resp = await ac.post(
+                "/ingest/collections/kb_articles/clear",
+                headers={"X-Extension-Token": "wrong-token"},
+            )
             assert resp.status_code == 401
 
-            # With token → 200
+            # With correct token → 200
             resp = await ac.post(
                 "/ingest/collections/kb_articles/clear",
                 headers={"X-Extension-Token": "test-secret-token"},

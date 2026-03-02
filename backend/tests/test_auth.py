@@ -14,7 +14,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.routers.auth import SessionData, SessionStore
+from app.services.session_store import MemorySessionStore, SessionData
 
 
 @asynccontextmanager
@@ -178,16 +178,16 @@ async def test_check_no_cookie() -> None:
 
 @pytest.mark.asyncio
 async def test_session_sweep_evicts_expired() -> None:
-    """SessionStore._sweep removes sessions whose expires_at is in the past."""
-    store = SessionStore()
+    """MemorySessionStore._sweep removes sessions whose expires_at is in the past."""
+    store = MemorySessionStore()
     now = time.time()
 
     async with store._lock:
         store._sessions["valid-session"] = SessionData(
-            created_at=now - 100, expires_at=now + 3600
+            created_at=now - 100, expires_at=now + 3600,
         )
         store._sessions["expired-session"] = SessionData(
-            created_at=now - 200, expires_at=now - 10
+            created_at=now - 200, expires_at=now - 10,
         )
         store._sweep(now)
 

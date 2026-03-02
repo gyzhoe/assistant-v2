@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
     default_model: str = "qwen2.5:14b"
-    version: str = "1.8.0"
+    version: str = "1.11.0"
     prompt_template_path: str | None = None
 
     # Enterprise security
@@ -30,6 +30,9 @@ class Settings(BaseSettings):
 
     # Session max age in seconds (default 24 hours) — for management SPA cookies
     session_max_age: int = 86400
+
+    # Session backend: "memory" (default, lost on restart) or "sqlite" (persistent)
+    session_backend: str = "memory"
 
     # Request body size limit in bytes (default 64 KB)
     max_request_bytes: int = 65_536

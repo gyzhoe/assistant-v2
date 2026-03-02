@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
@@ -66,8 +66,14 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONRespon
     return JSONResponse(status_code=200, content={"id": doc_id})
 
 
+_DOC_ID_PATTERN = r"^rated_[a-f0-9]{32}$"
+
+
 @router.delete("/feedback/{doc_id}", status_code=204)
-async def delete_feedback(doc_id: str, request: Request) -> Response:
+async def delete_feedback(
+    request: Request,
+    doc_id: str = Path(pattern=_DOC_ID_PATTERN),
+) -> Response:
     """Delete a rated reply from ChromaDB by document ID."""
     try:
         chroma_client = request.app.state.chroma_client

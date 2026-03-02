@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.logging_config import setup_logging
+from app.middleware.csrf import CSRFMiddleware
 from app.middleware.security import (
     APITokenMiddleware,
     RateLimitMiddleware,
@@ -54,17 +55,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Middleware is applied in reverse order (last added = outermost wrapper)
-    # Execution order for a request: SecurityHeaders → CORS → SizeLimit → RateLimit → APIToken → router
+    # Middleware is applied in reverse order (last added = outermost wrapper).
+    # Execution order for a request:
+    #   SecurityHeaders → CORS → SizeLimit → RateLimit → APIToken → CSRF → router
+    # So we add them in reverse: CSRF first (innermost), SecurityHeaders last (outermost).
 
-    app.add_middleware(SecurityHeadersMiddleware)
+    # CSRF protection — innermost, runs after auth verifies the session
+    app.add_middleware(CSRFMiddleware)
+
+    app.add_middleware(APITokenMiddleware)
 
     app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[settings.cors_origin],
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "X-Extension-Token"],
+        RateLimitMiddleware,
+        max_per_minute=settings.rate_limit_per_minute,
     )
 
     app.add_middleware(
@@ -74,11 +77,14 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(
-        RateLimitMiddleware,
-        max_per_minute=settings.rate_limit_per_minute,
+        CORSMiddleware,
+        allow_origins=[settings.cors_origin],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "X-Extension-Token", "X-CSRF-Token"],
     )
 
-    app.add_middleware(APITokenMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(health.router)

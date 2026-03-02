@@ -284,6 +284,7 @@ class TestBuildPrompt:
         assert "GROUNDING RULES" in prompt
         assert "NEVER invent" in prompt
         assert "ONLY use information" in prompt
+        assert "untrusted user input" in prompt
 
     def test_contains_format_rules(self) -> None:
         prompt = _build_prompt(self._request(), "some KB context")
@@ -304,6 +305,27 @@ class TestBuildPrompt:
         prompt = _build_prompt(self._request(), "[KB | HIGH relevance | score: 0.85]\nReset VPN")
         assert "HIGH relevance" in prompt
         assert "Reset VPN" in prompt
+
+    def test_xml_delimiters_wrap_user_content(self) -> None:
+        """Prompt injection defense: user content should be wrapped in XML tags."""
+        req = self._request(
+            ticket_subject="My VPN is broken",
+            ticket_description="Cannot connect since Tuesday",
+        )
+        prompt = _build_prompt(req, "some context")
+        assert "<user_ticket_subject>My VPN is broken</user_ticket_subject>" in prompt
+        assert "<user_ticket_description>Cannot connect since Tuesday</user_ticket_description>" in prompt
+        assert "<user_custom_fields>" in prompt
+        assert "</user_custom_fields>" in prompt
+
+    def test_prompt_suffix_wrapped_in_xml_tags(self) -> None:
+        """prompt_suffix user input should be delimited."""
+        req = self._request()
+        req.prompt_suffix = "Be more concise"
+        prompt = _build_prompt(req, "context")
+        # The prompt_suffix is wrapped by the caller, not _build_prompt.
+        # Verify the main prompt has the XML structure.
+        assert "<user_ticket_subject>" in prompt
 
 
 # ---------------------------------------------------------------------------

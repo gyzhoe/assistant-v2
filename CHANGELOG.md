@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] — Sprint 5 Security Hardening (2026-03-02)
+
+### Security
+
+- **B-SEC-1**: SQLite-backed session store (`services/session_store.py`) — sessions survive backend restarts, configurable via `SESSION_BACKEND=sqlite`; `MemorySessionStore` retained as default for dev
+- **B-SEC-2**: CSRF double-submit cookie protection for Management SPA (`middleware/csrf.py`) — `whd_csrf` non-HttpOnly cookie + `X-CSRF-Token` header validation on POST/PUT/PATCH/DELETE to `/kb/`, `/ingest/`, `/feedback`; extension requests (`X-Extension-Token`) are exempt
+- **B-SEC-3**: Prompt injection delimiters in LLM prompt — ticket subject, description, and custom fields wrapped in `<user_ticket_subject>`, `<user_ticket_description>`, `<user_custom_fields>` tags; additional instructions wrapped in `<user_additional_instructions>`; grounding rule added to prevent executing instructions embedded in ticket content
+- **B-SEC-4**: Health endpoint scoping — `GET /health` returns minimal `{"status":"ok"}` for unauthenticated callers; detailed system info (Ollama reachability, ChromaDB counts, version) moved to `GET /health/detail` (token-gated)
+- **B-SEC-5**: Localhost-only process control — `/shutdown`, `/ollama/start`, `/ollama/stop` restricted to `127.0.0.1` / `::1` connections; remote callers receive 403
+- **B-SEC-6**: Path parameter validation — `article_id` constrained to `^[a-zA-Z0-9_-]{1,64}$`; feedback `doc_id` constrained to `^rated_[a-f0-9]{32}$`; invalid values return 422
+- **B-SEC-7**: Replace MD5 with SHA256 for Microsoft Docs cache keys (`services/microsoft_docs.py`)
+
+### Changed
+
+- Middleware stack reordered: CSRF runs innermost (after auth); `X-CSRF-Token` added to `allow_headers` in CORS config
+- `extension/package.json` version synced to `1.11.0`
+- `app/config.py` version synced to `1.11.0`
+
+### Added
+
+- `backend/app/middleware/csrf.py` — CSRF double-submit cookie middleware
+- `backend/app/services/session_store.py` — abstract `SessionStore` with `MemorySessionStore` and `SQLiteSessionStore` implementations
+- `backend/tests/test_csrf.py` — CSRF middleware tests
+- `backend/tests/test_session_store.py` — session store tests
+- `backend/tests/test_generate.py` — prompt injection delimiter tests
+
+### Test Coverage
+
+- Backend tests: 342 (+51 new from Sprint 5 security hardening)
+
 ## [1.11.0] — Sprint 4 Production Hardening (2026-03-01)
 
 ### Changed
