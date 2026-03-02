@@ -158,7 +158,7 @@ pydantic-settings==2.13.1
     # via ai-helpdesk-backend (pyproject.toml)
 pygments==2.19.2
     # via rich
-pypdf==6.7.2
+pypdf==6.7.4
     # via ai-helpdesk-backend (pyproject.toml)
 pypika==0.51.1
     # via chromadb
