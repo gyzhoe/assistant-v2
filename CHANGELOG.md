@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.12.0] — Sprint 5 Security Hardening (2026-03-02)
+## [1.12.0] — Sprint 5 Security Hardening & Performance (2026-03-02)
 
 ### Security
 
@@ -21,12 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Singleton services with async httpx**: LLMService, EmbedService, MicrosoftDocsService, RAGService refactored to singletons with shared `httpx.AsyncClient` connection pooling, stored on `app.state`; replaced sync `httpx.Client` + `to_thread` with native async
+- **Per-key rate limiter locks**: Replaced single global `asyncio.Lock` with per-path-IP keyed locks; requests from different IPs/paths no longer serialize on a single lock
+- **Parallel pinned article fetching**: Sequential pinned article loop replaced with `asyncio.gather`
+- **Batch embedding in ingestion**: Parallelized chunk embedding with concurrency limit in ingestion pipeline
 - Middleware stack reordered: CSRF runs innermost (after auth); `X-CSRF-Token` added to `allow_headers` in CORS config
 - `extension/package.json` version synced to `1.11.0`
 - `app/config.py` version synced to `1.11.0`
 
 ### Added
 
+- **KB article index background refresh**: Stale-while-revalidate pattern — serves cached data immediately, rebuilds in background via `asyncio.create_task`; only the first cold-cache call blocks
 - `backend/app/middleware/csrf.py` — CSRF double-submit cookie middleware
 - `backend/app/services/session_store.py` — abstract `SessionStore` with `MemorySessionStore` and `SQLiteSessionStore` implementations
 - `backend/tests/test_csrf.py` — CSRF middleware tests
@@ -35,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Test Coverage
 
-- Backend tests: 342 (+51 new from Sprint 5 security hardening)
+- Backend tests: 342 (+51 new from Sprint 5 security hardening, all passing after async rewrite)
 
 ## [1.11.0] — Sprint 4 Production Hardening (2026-03-01)
 
