@@ -150,7 +150,7 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
         </div>
       ) : (
         <>
-          <div className="article-rows" aria-busy={isFetching && !!data ? 'true' : undefined}>
+          <div className="article-rows" aria-busy={isFetching && !!data ? "true" : "false"}>
             {articles.map(article => (
               <div
                 key={article.article_id}

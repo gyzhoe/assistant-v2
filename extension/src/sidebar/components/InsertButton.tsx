@@ -67,7 +67,7 @@ export function InsertButton(): React.ReactElement {
         disabled={disabled}
         className={buttonClass}
         aria-label="Insert generated reply into WHD reply textarea"
-        aria-busy={insertState === 'loading' ? 'true' : undefined}
+        aria-busy={insertState === 'loading' ? "true" : "false"}
       >
         {label}
       </button>
