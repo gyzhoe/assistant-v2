@@ -35,6 +35,26 @@ export class SidebarHost {
     }
   }
 
+  /**
+   * Find the most specific observer target available in the WHD DOM.
+   * Falls back through progressively broader ancestors before resorting
+   * to document.body.
+   */
+  private findObserverTarget(): Element {
+    const candidates = [
+      '#ticketDetailForm',
+      '#ticketDetail',
+      '#mainContent',
+      '.pageContent',
+      'main',
+    ]
+    for (const selector of candidates) {
+      const el = document.querySelector(selector)
+      if (el) return el
+    }
+    return document.body
+  }
+
   private startObserver(): void {
     this.observer = new MutationObserver(() => {
       // Debounce to avoid flooding on WHD's rapid partial DOM updates
@@ -44,11 +64,12 @@ export class SidebarHost {
       }, OBSERVER_DEBOUNCE_MS)
     })
 
-    const targetNode = document.querySelector('#ticketDetailForm') || document.body
+    const targetNode = this.findObserverTarget()
     this.observer.observe(targetNode, {
       childList: true,
       subtree: true,
-      attributes: false,
+      attributes: true,
+      attributeFilter: ['value', 'selected', 'class'],
       characterData: false,
     })
 

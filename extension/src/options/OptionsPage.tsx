@@ -22,6 +22,7 @@ export default function OptionsPage(): React.ReactElement {
   const [selectorsExpanded, setSelectorsExpanded] = useState(false)
   const [autoDetectMsg, setAutoDetectMsg] = useState('')
   const [isDetecting, setIsDetecting] = useState(false)
+  const [onboardingResetMsg, setOnboardingResetMsg] = useState('')
   const initialSettingsRef = useRef('')
   const initialTokenRef = useRef('')
 
@@ -113,6 +114,13 @@ export default function OptionsPage(): React.ReactElement {
       setIsDetecting(false)
       setTimeout(() => setAutoDetectMsg(''), 5000)
     }
+  }
+
+  const handleOnboardingReset = () => {
+    chrome.storage.local.remove('onboardingDismissed', () => {
+      setOnboardingResetMsg('Getting Started guide will appear in the sidebar.')
+      setTimeout(() => setOnboardingResetMsg(''), 4000)
+    })
   }
 
   return (
@@ -363,6 +371,21 @@ export default function OptionsPage(): React.ReactElement {
           >
             Knowledge Base Management &rarr;
           </a>
+        </div>
+        <div className="options-field">
+          <button
+            type="button"
+            onClick={handleOnboardingReset}
+            className="options-btn-secondary"
+            aria-label="Show Getting Started guide in the sidebar"
+          >
+            Show Getting Started guide
+          </button>
+          {onboardingResetMsg && (
+            <p className="options-hint font-medium" role="status" aria-live="polite">
+              {onboardingResetMsg}
+            </p>
+          )}
         </div>
       </div>
     </div>

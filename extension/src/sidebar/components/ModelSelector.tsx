@@ -3,6 +3,15 @@ import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient } from '../../lib/api-client'
 import { DEFAULT_MODEL } from '../../shared/constants'
 
+const MODEL_DESCRIPTIONS: Record<string, string> = {
+  'qwen2.5:14b': '14B parameters — slower, higher quality',
+  'llama3.2:3b': '3B parameters — fast, lighter quality',
+}
+
+function modelTitle(name: string): string {
+  return MODEL_DESCRIPTIONS[name] ?? name
+}
+
 export function ModelSelector(): React.ReactElement {
   const selectedModel = useSidebarStore((s) => s.selectedModel)
   const setSelectedModel = useSidebarStore((s) => s.setSelectedModel)
@@ -54,7 +63,7 @@ export function ModelSelector(): React.ReactElement {
         aria-label="Select LLM model"
       >
         {models.map((m) => (
-          <option key={m} value={m}>{m}</option>
+          <option key={m} value={m} title={modelTitle(m)}>{m}</option>
         ))}
       </select>
       {fetchError && (

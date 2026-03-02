@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
+import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import { apiClient } from '../../lib/api-client'
 
 interface ManageTabProps {
@@ -23,16 +24,8 @@ export function ManageTab({ docCounts, onRefresh, onSwitchToImport }: ManageTabP
   const [clearingCollection, setClearingCollection] = useState<string | null>(null)
   const [clearSuccess, setClearSuccess] = useState<string | null>(null)
   const [clearError, setClearError] = useState<string | null>(null)
-  const noButtonRef = useRef<HTMLButtonElement>(null)
 
   const collections = Object.entries(docCounts).filter(([, count]) => count > 0)
-
-  // Auto-focus "No" button when confirm appears
-  useEffect(() => {
-    if (confirmingClear) {
-      noButtonRef.current?.focus()
-    }
-  }, [confirmingClear])
 
   // Auto-dismiss success message
   useEffect(() => {
@@ -87,23 +80,6 @@ export function ManageTab({ docCounts, onRefresh, onSwitchToImport }: ManageTabP
 
           {clearingCollection === name ? (
             <span className="svc-action">Clearing\u2026</span>
-          ) : confirmingClear === name ? (
-            <>
-              <span className="kb-file-size">Sure?</span>
-              <button
-                className="manage-confirm-btn danger"
-                onClick={() => handleClear(name)}
-              >
-                Yes
-              </button>
-              <button
-                ref={noButtonRef}
-                className="manage-confirm-btn success"
-                onClick={() => setConfirmingClear(null)}
-              >
-                No
-              </button>
-            </>
           ) : (
             <button
               className="manage-confirm-btn danger"
@@ -114,6 +90,41 @@ export function ManageTab({ docCounts, onRefresh, onSwitchToImport }: ManageTabP
           )}
         </div>
       ))}
+
+      <AlertDialog.Root
+        open={confirmingClear !== null}
+        onOpenChange={(open) => { if (!open) setConfirmingClear(null) }}
+      >
+        <AlertDialog.Portal>
+          <AlertDialog.Overlay className="sidebar-confirm-overlay" />
+          <AlertDialog.Content className="sidebar-confirm-content">
+            <AlertDialog.Title className="sidebar-confirm-title">
+              Clear {confirmingClear ? formatCollectionName(confirmingClear) : ''}?
+            </AlertDialog.Title>
+            <AlertDialog.Description className="sidebar-confirm-desc">
+              This will permanently delete all documents in the{' '}
+              {confirmingClear ? formatCollectionName(confirmingClear) : ''} collection.
+              This action cannot be undone.
+            </AlertDialog.Description>
+            <div className="sidebar-confirm-actions">
+              <AlertDialog.Cancel asChild>
+                <button type="button" className="manage-confirm-btn success">
+                  Cancel
+                </button>
+              </AlertDialog.Cancel>
+              <AlertDialog.Action asChild>
+                <button
+                  type="button"
+                  className="manage-confirm-btn danger"
+                  onClick={() => { if (confirmingClear) handleClear(confirmingClear) }}
+                >
+                  Yes, clear all
+                </button>
+              </AlertDialog.Action>
+            </div>
+          </AlertDialog.Content>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
     </div>
   )
 }

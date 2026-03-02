@@ -38,8 +38,9 @@ describe('OptionsPage selector overrides', () => {
   })
 
   it('storage round-trips selectorOverrides inside appSettings', async () => {
-    const { storage } = await import('../../src/lib/storage')
+    const { storage, DEFAULT_SETTINGS } = await import('../../src/lib/storage')
     await storage.saveSettings({
+      ...DEFAULT_SETTINGS,
       selectorOverrides: { subject: '#custom-subject', techNotes: '.my-notes textarea' },
     })
 

@@ -22,11 +22,10 @@ export const storage = {
     })
   },
 
-  async saveSettings(settings: Partial<AppSettings>): Promise<void> {
-    const current = await this.getSettings()
+  async saveSettings(settings: AppSettings): Promise<void> {
     return new Promise((resolve, reject) => {
       chrome.storage.sync.set(
-        { [STORAGE_KEY_SETTINGS]: { ...current, ...settings } },
+        { [STORAGE_KEY_SETTINGS]: settings },
         () => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message))

@@ -179,6 +179,25 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     }
   }, [checkHealth, schedulePoll])
 
+  // Pause polling while the sidebar is hidden (tab not visible)
+  useEffect(() => {
+    const handler = () => {
+      if (!mountedRef.current) return
+      if (document.visibilityState === 'hidden') {
+        clearTimer()
+      } else {
+        // Resume with an immediate health check and reset backoff
+        checkHealth().then((online) => {
+          if (!mountedRef.current) return
+          pollIntervalRef.current = online ? POLL_BASE_MS : nextOfflinePollMs(POLL_BASE_MS)
+          schedulePoll()
+        }).catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [checkHealth, schedulePoll])
+
   // Auto-dismiss onboarding when all service checks pass
   const backendOk = status === 'online'
   const modelOk = selectedModel.length > 0

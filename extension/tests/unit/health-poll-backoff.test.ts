@@ -155,4 +155,31 @@ describe('BackendControl — health poll backoff', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
     expect(mockHealth.mock.calls.length).toBe(callsAfterReconnect + 2)
   })
+
+  it('pauses polling when document becomes hidden', async () => {
+    healthOnline = true
+    await renderBackendControl()
+
+    const callsBefore = mockHealth.mock.calls.length
+
+    // Simulate tab going hidden
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true, configurable: true })
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    // Advance well past a normal poll cycle — no new calls should happen
+    await act(async () => { await vi.advanceTimersByTimeAsync(15000) })
+    expect(mockHealth.mock.calls.length).toBe(callsBefore)
+
+    // Restore visibility
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true })
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(100)
+    })
+
+    // Should have polled immediately on becoming visible
+    expect(mockHealth.mock.calls.length).toBeGreaterThan(callsBefore)
+  })
 })
