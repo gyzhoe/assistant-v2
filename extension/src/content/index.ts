@@ -1,6 +1,7 @@
 import { DOMReader } from './dom-reader'
-import { debugError } from '../shared/constants'
+import { debugError, STORAGE_KEY_SETTINGS } from '../shared/constants'
 import type { SidebarToContentMessage } from '../shared/messages'
+import type { AppSettings } from '../shared/types'
 import type { DOMInserter } from './dom-inserter'
 
 let inserter: DOMInserter | null = null
@@ -14,6 +15,23 @@ async function init(): Promise<void> {
   cachedReader = new DOMReader()
   await cachedReader.ready()
   inserter = new DOMInserterClass()
+
+  // Load custom insert target selector from settings
+  chrome.storage.sync.get(STORAGE_KEY_SETTINGS, (result) => {
+    const settings = result[STORAGE_KEY_SETTINGS] as Partial<AppSettings> | undefined
+    if (settings?.insertTargetSelector && inserter) {
+      inserter.setCustomSelector(settings.insertTargetSelector)
+    }
+  })
+
+  // Listen for settings changes to update the insert target selector dynamically
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'sync' && changes[STORAGE_KEY_SETTINGS]?.newValue && inserter) {
+      const settings = changes[STORAGE_KEY_SETTINGS].newValue as Partial<AppSettings>
+      inserter.setCustomSelector(settings.insertTargetSelector ?? '')
+    }
+  })
+
   const host = new SidebarHostClass(cachedReader)
   host.start()
 }

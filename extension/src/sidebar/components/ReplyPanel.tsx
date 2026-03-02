@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useTicketData } from '../hooks/useTicketData'
 import { useGenerateReply } from '../hooks/useGenerateReply'
@@ -15,6 +15,8 @@ export function ReplyPanel(): React.ReactElement {
   const { generate } = useGenerateReply()
   const { submitRating, feedbackError, ratingConfirmed, ratingRemoved } = useSubmitFeedback()
   const [contextCollapsed, setContextCollapsed] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const pinnedCount = useSidebarStore((s) => s.pinnedArticles.length)
   const ticketData = useSidebarStore((s) => s.ticketData)
@@ -28,6 +30,20 @@ export function ReplyPanel(): React.ReactElement {
   const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
   const setReply = useSidebarStore((s) => s.setReply)
   const replyRating = useSidebarStore((s) => s.replyRating)
+  const autoInsert = useSidebarStore((s) => s.settings.autoInsert)
+  const updateSettings = useSidebarStore((s) => s.updateSettings)
+
+  const handleCopy = useCallback(async () => {
+    if (!reply) return
+    try {
+      await navigator.clipboard.writeText(reply)
+      setCopyState('copied')
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopyState('idle'), 2500)
+    } catch {
+      // Clipboard API unavailable — silently ignore
+    }
+  }, [reply])
 
   return (
     <>
@@ -66,11 +82,20 @@ export function ReplyPanel(): React.ReactElement {
           onClick={generate}
           disabled={isGenerating || !ticketData}
           className="primary-btn"
-          aria-label="Generate AI reply for this ticket"
+          aria-label={autoInsert ? 'Generate and auto-insert AI reply' : 'Generate AI reply for this ticket'}
           aria-busy={isGenerating ? 'true' : undefined}
         >
-          {isGenerating ? 'Generating\u2026' : 'Generate Reply'}
+          {isGenerating ? 'Generating\u2026' : autoInsert ? 'Generate & Insert' : 'Generate Reply'}
         </button>
+        <label className="auto-insert-toggle">
+          <input
+            type="checkbox"
+            checked={autoInsert}
+            onChange={(e) => updateSettings({ autoInsert: e.target.checked })}
+            disabled={isGenerating}
+          />
+          <span className="auto-insert-label">Auto-insert after generation</span>
+        </label>
         {isGenerating && (
           <button
             type="button"
@@ -136,6 +161,22 @@ export function ReplyPanel(): React.ReactElement {
                     <span className="support-text error-text" role="alert">{feedbackError}</span>
                   )}
                 </div>
+                <button
+                  type="button"
+                  className="secondary-btn draft-toggle"
+                  onClick={handleCopy}
+                  aria-label="Copy reply to clipboard"
+                  title="Copy reply to clipboard"
+                >
+                  {copyState === 'copied' ? (
+                    '\u2713 Copied!'
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="5" y="5" width="9" height="9" rx="1" />
+                      <path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2" />
+                    </svg>
+                  )}
+                </button>
                 <button
                   type="button"
                   className="secondary-btn draft-toggle"

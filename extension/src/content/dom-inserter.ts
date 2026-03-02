@@ -5,6 +5,13 @@ export class DOMInserter {
     '#techNotesDiv textarea',
   ]
 
+  private customSelector = ''
+
+  /** Set a user-configured override selector that takes priority over defaults. */
+  setCustomSelector(selector: string): void {
+    this.customSelector = selector.trim()
+  }
+
   /**
    * Inserts text into the WHD reply textarea.
    * Uses the native setter trick to bypass React/framework value caching.
@@ -37,6 +44,13 @@ export class DOMInserter {
   }
 
   private findTextarea(): HTMLTextAreaElement | null {
+    // Try user-configured selector first
+    if (this.customSelector) {
+      const el = document.querySelector(this.customSelector)
+      if (el instanceof HTMLTextAreaElement) return el
+    }
+
+    // Fall back to built-in selectors
     for (const sel of this.techNotesSelectors) {
       const el = document.querySelector(sel)
       if (el instanceof HTMLTextAreaElement) return el

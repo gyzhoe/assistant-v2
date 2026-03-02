@@ -1,7 +1,17 @@
 import { create } from 'zustand'
-import { DEFAULT_MODEL, MAX_PINNED_ARTICLES, STORAGE_KEY_SETTINGS } from '../../shared/constants'
+import { DEFAULT_MODEL, MAX_PINNED_ARTICLES, STORAGE_KEY_SETTINGS, STORAGE_KEY_REPLY_CACHE } from '../../shared/constants'
 import { DEFAULT_SETTINGS, storage } from '../../lib/storage'
+import { debugError } from '../../shared/constants'
 import type { TicketData, GenerateResponse, KBArticlePin, AppSettings } from '../../shared/types'
+
+/** Cached reply entry stored in chrome.storage.session */
+interface ReplyCacheEntry {
+  reply: string
+  timestamp: number
+}
+
+/** Map of ticket URL → cached reply */
+type ReplyCache = Record<string, ReplyCacheEntry>
 
 interface SidebarState {
   ticketData: TicketData | null
@@ -36,6 +46,8 @@ interface SidebarState {
   cancelGeneration: () => void
   setOllamaReachable: (val: boolean) => void
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>
+  saveReplyForTicket: (ticketUrl: string) => void
+  restoreReplyForTicket: (ticketUrl: string) => Promise<void>
   reset: () => void
 }
 
@@ -86,6 +98,34 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   updateSettings: async (updates) => {
     await storage.saveSettings(updates)
     set((state) => ({ settings: { ...state.settings, ...updates } }))
+  },
+  saveReplyForTicket: (ticketUrl) => {
+    const { reply } = get()
+    if (!reply || !ticketUrl) return
+    if (typeof chrome === 'undefined' || !chrome.storage?.session) return
+    chrome.storage.session.get(STORAGE_KEY_REPLY_CACHE, (result) => {
+      const cache = (result[STORAGE_KEY_REPLY_CACHE] as ReplyCache | undefined) ?? {}
+      cache[ticketUrl] = { reply, timestamp: Date.now() }
+      chrome.storage.session.set({ [STORAGE_KEY_REPLY_CACHE]: cache }, () => {
+        if (chrome.runtime.lastError) {
+          debugError('Failed to save reply cache:', chrome.runtime.lastError.message)
+        }
+      })
+    })
+  },
+  restoreReplyForTicket: async (ticketUrl) => {
+    if (!ticketUrl) return
+    if (typeof chrome === 'undefined' || !chrome.storage?.session) return
+    return new Promise<void>((resolve) => {
+      chrome.storage.session.get(STORAGE_KEY_REPLY_CACHE, (result) => {
+        const cache = (result[STORAGE_KEY_REPLY_CACHE] as ReplyCache | undefined) ?? {}
+        const entry = cache[ticketUrl]
+        if (entry?.reply) {
+          set({ reply: entry.reply, isInserted: false, isEditingReply: false, replyRating: null })
+        }
+        resolve()
+      })
+    })
   },
   reset: () => {
     const { abortController } = get()

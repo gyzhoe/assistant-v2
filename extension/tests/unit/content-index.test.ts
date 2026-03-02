@@ -27,6 +27,7 @@ vi.stubGlobal('chrome', {
   },
   storage: {
     sync: { get: vi.fn((_k: string, cb: (r: Record<string, unknown>) => void) => cb({})) },
+    onChanged: { addListener: vi.fn() },
   },
 })
 
@@ -41,6 +42,7 @@ vi.mock('../../src/content/dom-reader', () => ({
 vi.mock('../../src/content/dom-inserter', () => ({
   DOMInserter: class MockDOMInserter {
     insertReply = mockInsertReply
+    setCustomSelector = vi.fn()
   },
 }))
 
@@ -53,6 +55,8 @@ vi.mock('../../src/content/sidebar-host', () => ({
 describe('content/index.ts message handler', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    // Restore mockReady implementation — vi.clearAllMocks() wipes implementations
+    mockReady.mockResolvedValue(undefined)
     onMessageListeners.length = 0
     // Reset and re-import the module to trigger init()
     vi.resetModules()
@@ -70,6 +74,7 @@ describe('content/index.ts message handler', () => {
       },
       storage: {
         sync: { get: vi.fn((_k: string, cb: (r: Record<string, unknown>) => void) => cb({})) },
+        onChanged: { addListener: vi.fn() },
       },
     })
 

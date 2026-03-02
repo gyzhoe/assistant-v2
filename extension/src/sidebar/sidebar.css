@@ -26,7 +26,7 @@ body {
   --surface-soft: #f6f8fa;
   --text: #1f2328;
   --text-heading: #1f2328;
-  --muted: #636c76;
+  --muted: #586069;
   --border: #d1d9e0;
   --soft-border: #e8ecf0;
   --chip-bg: #f6f8fa;
@@ -65,12 +65,12 @@ body {
   --surface-soft: #0d1117;
   --text: #e6edf3;
   --text-heading: #e6edf3;
-  --muted: #8b949e;
+  --muted: #9da5ae;
   --border: #30363d;
   --soft-border: #21262d;
   --chip-bg: #1c2128;
   --chip-border: #30363d;
-  --chip-text: #8b949e;
+  --chip-text: #9da5ae;
   --reply-border: #30363d;
   --reply-bg: #0d1117;
   --ok: #0f291a;
@@ -82,7 +82,7 @@ body {
   --error-text: #f85149;
   --error-btn: #f85149;
   --secondary-btn-bg: transparent;
-  --secondary-btn-text: #8b949e;
+  --secondary-btn-text: #9da5ae;
   --skeleton-from: #21262d;
   --skeleton-mid: #30363d;
 }
@@ -930,6 +930,36 @@ body {
   }
 }
 
+/* ── Auto-insert toggle ───────────────────────────────────────────── */
+
+.auto-insert-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-insert-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.auto-insert-toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.auto-insert-label {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  line-height: 1;
+}
+
 /* ── Cancel button ─────────────────────────────────────────────────── */
 
 .cancel-btn {
@@ -1499,6 +1529,109 @@ body {
 }
 
 .onboarding-dismiss:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* ─── Sidebar toast notifications ──────────────────── */
+.sidebar-toast-container {
+  position: fixed;
+  bottom: 12px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.sidebar-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  pointer-events: auto;
+  border: 1px solid transparent;
+  animation: toast-slide-in 150ms ease;
+}
+
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-toast { animation: none; }
+}
+
+.sidebar-toast-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-toast-close {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.7;
+  color: inherit;
+  transition: opacity 120ms ease;
+}
+
+.sidebar-toast-close:hover {
+  opacity: 1;
+}
+
+.sidebar-toast-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 2px;
+}
+
+.sidebar-toast-success {
+  background: var(--ok);
+  color: var(--ok-text);
+  border-color: var(--ok-text);
+}
+
+.sidebar-toast-error {
+  background: var(--error);
+  color: var(--error-text);
+  border-color: var(--error-text);
+}
+
+.sidebar-toast-info {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* ─── Settings button — distinct from theme toggle ── */
+.settings-btn {
+  background: transparent;
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 4px;
+  line-height: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  border: none;
+  transition: color 120ms ease;
+}
+
+.settings-btn:hover {
+  color: var(--text);
+}
+
+.settings-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent);
 }

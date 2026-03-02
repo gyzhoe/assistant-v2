@@ -306,6 +306,25 @@ export default function OptionsPage(): React.ReactElement {
             </div>
           )}
         </div>
+
+        {/* Insert Target Selector */}
+        <div className="options-field">
+          <label htmlFor="insertTargetSelector" className="options-label">
+            Insert Target Selector
+          </label>
+          <input
+            id="insertTargetSelector"
+            type="text"
+            value={settings.insertTargetSelector}
+            onChange={(e) => handleChange('insertTargetSelector', e.target.value)}
+            className="options-input font-mono text-xs"
+            placeholder="textarea#techNotes"
+          />
+          <p className="options-hint">
+            CSS selector for the textarea where generated replies are inserted.
+            Leave blank to use the default WHD tech notes field.
+          </p>
+        </div>
       </div>
 
       {/* ── Save ── */}

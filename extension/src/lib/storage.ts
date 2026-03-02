@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   selectorOverrides: {},
   promptSuffix: '',
   theme: 'system',
+  autoInsert: false,
+  insertTargetSelector: '',
 }
 
 export const storage = {

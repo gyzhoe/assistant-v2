@@ -96,4 +96,43 @@ describe('DOMInserter', () => {
     const textarea = document.querySelector('textarea[name="techNote"]') as HTMLTextAreaElement
     expect(textarea.value).toBe('Fallback test')
   })
+
+  it('uses custom selector when set', async () => {
+    document.body.innerHTML = '<textarea id="techNotes"></textarea><textarea class="custom-target"></textarea>'
+    const { DOMInserter } = await import('../../src/content/dom-inserter')
+    const inserter = new DOMInserter()
+    inserter.setCustomSelector('textarea.custom-target')
+
+    const result = inserter.insertReply('Custom target text')
+    expect(result).toBe(true)
+
+    const customTextarea = document.querySelector('textarea.custom-target') as HTMLTextAreaElement
+    expect(customTextarea.value).toBe('Custom target text')
+    // Default textarea should not be affected
+    const defaultTextarea = document.querySelector('#techNotes') as HTMLTextAreaElement
+    expect(defaultTextarea.value).toBe('')
+  })
+
+  it('falls back to default selectors when custom selector finds nothing', async () => {
+    document.body.innerHTML = '<textarea id="techNotes"></textarea>'
+    const { DOMInserter } = await import('../../src/content/dom-inserter')
+    const inserter = new DOMInserter()
+    inserter.setCustomSelector('textarea.nonexistent')
+
+    const result = inserter.insertReply('Fallback to default')
+    expect(result).toBe(true)
+
+    const textarea = document.querySelector('#techNotes') as HTMLTextAreaElement
+    expect(textarea.value).toBe('Fallback to default')
+  })
+
+  it('returns false when custom selector matches non-textarea element', async () => {
+    document.body.innerHTML = '<div class="not-textarea">Not a textarea</div>'
+    const { DOMInserter } = await import('../../src/content/dom-inserter')
+    const inserter = new DOMInserter()
+    inserter.setCustomSelector('div.not-textarea')
+
+    const result = inserter.insertReply('Should fail')
+    expect(result).toBe(false)
+  })
 })

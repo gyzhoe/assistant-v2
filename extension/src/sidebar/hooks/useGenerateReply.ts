@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useSettings } from './useSettings'
 import { apiClient, ApiError } from '../../lib/api-client'
+import { debugLog, debugError } from '../../shared/constants'
 
 export function useGenerateReply() {
   const ticketData = useSidebarStore((s) => s.ticketData)
@@ -15,6 +16,7 @@ export function useGenerateReply() {
   const setAbortController = useSidebarStore((s) => s.setAbortController)
   const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
   const setReplyRating = useSidebarStore((s) => s.setReplyRating)
+  const saveReplyForTicket = useSidebarStore((s) => s.saveReplyForTicket)
   const { settings } = useSettings()
 
   const generate = useCallback(async () => {
@@ -46,6 +48,19 @@ export function useGenerateReply() {
       }, ctrl.signal)
       setReply(response.reply)
       setLastResponse(response)
+
+      // Persist reply for this ticket so it survives navigation
+      if (ticketData.ticketUrl) {
+        saveReplyForTicket(ticketData.ticketUrl)
+      }
+
+      // Auto-insert: send INSERT_REPLY message to content script after successful generation
+      if (settings.autoInsert && response.reply) {
+        debugLog('Auto-insert enabled, sending INSERT_REPLY')
+        chrome.runtime.sendMessage({ type: 'INSERT_REPLY', payload: { text: response.reply } }).catch((err: unknown) => {
+          debugError('Auto-insert failed:', err)
+        })
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return
@@ -70,7 +85,7 @@ export function useGenerateReply() {
     }
   // Zustand setters (setReply, setIsGenerating, etc.) are stable references — safe to omit.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix])
+  }, [ticketData, selectedModel, pinnedArticles, settings.promptSuffix, settings.autoInsert])
 
   return { generate }
 }

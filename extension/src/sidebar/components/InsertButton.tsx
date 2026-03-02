@@ -19,7 +19,7 @@ export function InsertButton(): React.ReactElement {
         setInsertState('success')
         setIsInserted(true)
         if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => setInsertState('idle'), 2000)
+        timerRef.current = setTimeout(() => setInsertState('idle'), 4000)
       } else if (message.type === 'INSERT_FAILED') {
         setInsertState('error')
         setErrorMsg(message.payload.reason)
