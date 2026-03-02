@@ -24,7 +24,7 @@ export function KnowledgePanel(): React.ReactElement {
   const fetchCounts = useCallback(async () => {
     try {
       const h = await apiClient.health()
-      if (mountedRef.current) setDocCounts(h.chroma_doc_counts)
+      if (mountedRef.current) setDocCounts(h.chroma_doc_counts ?? {})
     } catch {
       // Ignore — backend may be offline
     }

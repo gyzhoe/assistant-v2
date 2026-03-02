@@ -46,9 +46,9 @@ export const apiClient = {
   },
 
   async health(): Promise<HealthResponse> {
-    const base = await getBackendUrl()
-    // /health is exempt from token auth — no token sent
-    const resp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) })
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    // /health/detail returns full info (ollama, chroma counts) behind auth
+    const resp = await fetch(`${base}/health/detail`, { headers, signal: AbortSignal.timeout(4000) })
     if (!resp.ok) throw new ApiError(resp.status, { detail: 'Health check failed' })
     return resp.json() as Promise<HealthResponse>
   },
