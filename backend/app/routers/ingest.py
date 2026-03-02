@@ -18,6 +18,7 @@ from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.routers.kb import invalidate_article_cache
 from app.routers.shared import upload_semaphore
+from app.services.audit import audit_log
 from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
 from ingestion.url_loader import (
     ContentTypeError,
@@ -154,6 +155,10 @@ async def clear_collection(request: Request, name: str) -> dict[str, str]:
         pass
 
     invalidate_article_cache()
+
+    client_ip = request.client.host if request.client else ""
+    audit_log("collection_clear", client_ip=client_ip, detail=f"collection={name}")
+
     return {"status": "ok", "collection": name}
 
 

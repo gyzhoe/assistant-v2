@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # Session max age in seconds (default 24 hours) — for management SPA cookies
     session_max_age: int = 86400
 
+    # Set to True when serving behind TLS (HTTPS). Controls the Secure flag
+    # on session and CSRF cookies. Default False for localhost HTTP.
+    session_cookie_secure: bool = False
+
     # Session backend: "memory" (default, lost on restart) or "sqlite" (persistent)
     session_backend: str = "memory"
 

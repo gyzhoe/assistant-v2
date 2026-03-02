@@ -45,3 +45,15 @@ def test_specific_cors_origin_without_api_token_ok() -> None:
     assert s.cors_origin == origin
     wildcard_warnings = [w for w in caught if "CORS_ORIGIN" in str(w.message)]
     assert wildcard_warnings == [], "No CORS warning expected for a specific origin"
+
+
+def test_session_cookie_secure_defaults_false() -> None:
+    """session_cookie_secure should default to False (localhost HTTP)."""
+    s = Settings()
+    assert s.session_cookie_secure is False
+
+
+def test_session_cookie_secure_can_be_enabled() -> None:
+    """session_cookie_secure=True should be accepted."""
+    s = Settings(session_cookie_secure=True)
+    assert s.session_cookie_secure is True

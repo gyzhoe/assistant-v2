@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -207,6 +208,36 @@ async def test_generate_ms_docs_config_disabled(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 # Unit tests for _build_prompt and _relevance_label
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_does_not_log_ticket_subject(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The generate endpoint should NOT log raw ticket subjects (PII)."""
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_llm.generate = AsyncMock(return_value="Reply.")
+    mock_ms = _mock_ms_docs()
+
+    app.state.rag_service = mock_rag
+    app.state.llm_service = mock_llm
+    app.state.ms_docs_service = mock_ms
+
+    subject = "John Doe cannot access VPN"
+    with caplog.at_level(logging.INFO, logger="app.routers.generate"):
+        await client.post("/generate", json={
+            "ticket_subject": subject,
+            "ticket_description": "Details here",
+        })
+
+    # The raw subject should NOT appear in logs
+    for record in caplog.records:
+        assert subject not in record.getMessage()
+    # But subject_len should appear
+    log_messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "subject_len=" in log_messages
 
 
 class TestRelevanceLabel:

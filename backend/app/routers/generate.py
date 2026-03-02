@@ -29,7 +29,10 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     llm: LLMService = request.app.state.llm_service
     ms_docs: MicrosoftDocsService = request.app.state.ms_docs_service
 
-    logger.info("Generate request: model=%s subject=%s", body.model, body.ticket_subject[:80])
+    logger.info(
+        "Generate request: model=%s subject_len=%d",
+        body.model, len(body.ticket_subject),
+    )
     start = time.perf_counter()
 
     # Retrieve context — RAG + optional Microsoft Learn search in parallel

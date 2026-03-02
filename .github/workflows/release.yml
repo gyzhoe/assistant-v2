@@ -128,14 +128,16 @@ jobs:
           Remove-Item "installer/deps/python-embed.zip"
           Write-Host "Python embeddable extracted to installer/deps/python/"
 
-      - name: Download Python wheels
+      - name: Download Python wheels (hash-pinned)
         shell: pwsh
         run: |
-          # Pre-download all backend dependencies as wheels for offline install
+          # Pre-download all backend dependencies as wheels for offline install.
+          # requirements-lock.txt is generated with hashes via:
+          #   uv pip compile --generate-hashes pyproject.toml -o requirements-lock.txt
           New-Item -ItemType Directory -Force -Path installer/deps/wheels | Out-Null
-          pip download -r backend/requirements.txt -d installer/deps/wheels --platform win_amd64 --python-version 3.13 --only-binary=:all: 2>&1 | Select-Object -Last 5
+          pip download --require-hashes -r backend/requirements-lock.txt -d installer/deps/wheels --platform win_amd64 --python-version 3.13 --only-binary=:all: 2>&1 | Select-Object -Last 5
           $count = (Get-ChildItem installer/deps/wheels/*.whl).Count
-          Write-Host "Downloaded $count wheels to installer/deps/wheels/"
+          Write-Host "Downloaded $count wheels (hash-verified) to installer/deps/wheels/"
 
       - name: Set version from tag
         shell: pwsh
