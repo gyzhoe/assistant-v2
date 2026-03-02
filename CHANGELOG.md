@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] — Sprint 6 Polish (2026-03-03)
+
+### Security
+
+- Configurable `secure` flag on session cookie via `SESSION_COOKIE_SECURE` config setting — enables secure cookies for TLS deployments
+- Sanitized ticket subject in generate logs — replaced raw PII with length-only logging
+- Hash-pinned Python dependencies in release workflow via `--require-hashes` for supply chain protection
+- Structured audit logger (`app/services/audit.py`) for security-sensitive actions: login, logout, article delete, collection clear, shutdown — writes to rotating `audit.log` with JSON entries
+- Explicit Content Security Policy in extension manifest (`script-src 'self'; object-src 'self'`)
+
+### Changed
+
+- Speculative third RAG query — unfiltered KB fallback now runs in parallel with filtered query via `asyncio.gather`, saving one round-trip when fallback triggers
+- Narrowed MutationObserver target — tries specific ancestor elements before falling back to `document.body`
+- Health polling pauses when sidebar is hidden (Visibility API) and resumes on focus
+- KnowledgePanel lazy polling — doc count fetch skips when panel is collapsed
+- Fixed `saveSettings` race condition — writes full state directly instead of read-merge-write
+- Removed misleading settings gear icon from management SPA header
+
+### Added
+
+- Radix ConfirmDialog for collection Clear action (replaces inline confirmation)
+- Model name tooltips in sidebar — friendly size/speed descriptions for known models
+- URL import spinner indicator
+- Onboarding reset button in Options page — re-shows the Getting Started guide
+
+### Fixed
+
+- ARIA attribute string values (PR #36) — 13 attributes across 9 components now use `"true"`/`"false"` strings
+
 ## [1.12.0] — Sprint 5 Production Hardening (2026-03-02)
 
 ### Security

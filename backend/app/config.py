@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
     default_model: str = "qwen2.5:14b"
-    version: str = "1.11.0"
+    version: str = "1.13.0"
     prompt_template_path: str | None = None
 
     # Enterprise security
