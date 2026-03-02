@@ -12,7 +12,7 @@ const COLLECTION_LABELS: Record<string, string> = {
   kb_articles: 'KB Articles',
 }
 
-const SUCCESS_DISMISS_MS = 3000
+const SUCCESS_DISMISS_MS = 5000
 
 function formatCollectionName(name: string): string {
   return COLLECTION_LABELS[name] ?? name

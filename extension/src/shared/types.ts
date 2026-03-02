@@ -17,6 +17,8 @@ export interface AppSettings {
   selectorOverrides: Partial<SelectorConfig>
   promptSuffix: string
   theme: 'light' | 'dark' | 'system'
+  autoInsert: boolean
+  insertTargetSelector: string
 }
 
 /**

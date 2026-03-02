@@ -3,6 +3,7 @@ import { BackendControl } from './components/BackendControl'
 import { KnowledgePanel } from './components/KnowledgePanel'
 import { ReplyPanel } from './components/ReplyPanel'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { SidebarToastContainer } from './components/Toast'
 import { useTheme } from './hooks/useTheme'
 
 export default function App(): React.ReactElement {
@@ -16,7 +17,7 @@ export default function App(): React.ReactElement {
   return (
     <div className="app-shell" data-theme={resolvedTheme}>
       <ErrorBoundary>
-        <main ref={mainRef} className="app-main" role="main" tabIndex={-1}>
+        <main ref={mainRef} className="app-main" role="main" aria-label="AI Helpdesk sidebar" tabIndex={-1}>
           <BackendControl
             themeSetting={themeSetting}
             resolvedTheme={resolvedTheme}
@@ -26,6 +27,7 @@ export default function App(): React.ReactElement {
           <ReplyPanel />
         </main>
       </ErrorBoundary>
+      <SidebarToastContainer />
     </div>
   )
 }

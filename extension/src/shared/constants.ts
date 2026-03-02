@@ -57,6 +57,9 @@ export const STORAGE_KEY_SELECTOR_OVERRIDES = 'selectorOverrides'
 /** chrome.storage.sync key for app settings */
 export const STORAGE_KEY_SETTINGS = 'appSettings'
 
+/** chrome.storage.session key for per-ticket reply cache */
+export const STORAGE_KEY_REPLY_CACHE = 'replyCache'
+
 /**
  * chrome.storage.LOCAL key for security secrets (API token).
  * Uses local (not sync) so credentials are never synced to other devices.

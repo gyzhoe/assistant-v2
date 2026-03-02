@@ -5,10 +5,15 @@ vi.stubGlobal('chrome', {
   storage: {
     sync: { get: vi.fn((_k: string, cb: (r: Record<string, unknown>) => void) => cb({})) },
     local: { get: vi.fn((_k: string, cb: (r: Record<string, unknown>) => void) => cb({})) },
+    session: {
+      get: vi.fn((_k: string, cb: (r: Record<string, unknown>) => void) => cb({})),
+      set: vi.fn((_data: Record<string, unknown>, cb: () => void) => cb()),
+    },
   },
   runtime: {
     sendMessage: vi.fn().mockResolvedValue(undefined),
     onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+    lastError: null,
   },
 })
 
@@ -76,6 +81,8 @@ describe('useGenerateReply', () => {
         selectorOverrides: {},
         promptSuffix: '',
         theme: 'system',
+        autoInsert: false,
+        insertTargetSelector: '',
       },
       settingsLoading: false,
     })
@@ -201,5 +208,63 @@ describe('useGenerateReply', () => {
 
     expect(useSidebarStore.getState().isGenerating).toBe(false)
     expect(useSidebarStore.getState().generateError).toBe('Something broke')
+  })
+
+  it('sends INSERT_REPLY when autoInsert is enabled', async () => {
+    useSidebarStore.setState({
+      settings: {
+        ...useSidebarStore.getState().settings,
+        autoInsert: true,
+      },
+    })
+    mockGenerate.mockResolvedValueOnce({ reply: 'Auto-inserted reply', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
+    const { result } = renderHook(() => useGenerateReply())
+
+    await act(async () => {
+      await result.current.generate()
+    })
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'INSERT_REPLY',
+        payload: { text: 'Auto-inserted reply' },
+      })
+    )
+  })
+
+  it('does not send INSERT_REPLY when autoInsert is disabled', async () => {
+    mockGenerate.mockResolvedValueOnce({ reply: 'Normal reply', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
+    const { result } = renderHook(() => useGenerateReply())
+
+    await act(async () => {
+      await result.current.generate()
+    })
+
+    // Should not have sent INSERT_REPLY (only REQUEST_TICKET_DATA etc.)
+    const insertCalls = vi.mocked(chrome.runtime.sendMessage).mock.calls.filter(
+      (call) => (call[0] as { type?: string })?.type === 'INSERT_REPLY'
+    )
+    expect(insertCalls).toHaveLength(0)
+  })
+
+  it('saves reply to session storage after successful generation', async () => {
+    mockGenerate.mockResolvedValueOnce({ reply: 'Cached reply', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
+    const { result } = renderHook(() => useGenerateReply())
+
+    await act(async () => {
+      await result.current.generate()
+    })
+
+    // Verify session storage was called to save the reply
+    expect(chrome.storage.session.set).toHaveBeenCalled()
   })
 })

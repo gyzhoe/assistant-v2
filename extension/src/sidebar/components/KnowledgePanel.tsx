@@ -78,7 +78,7 @@ export function KnowledgePanel(): React.ReactElement {
 
       {!collapsed && (
         <div id="kb-panel-body" className="collapsible-body">
-          <div className="kb-tab-strip" role="tablist" aria-label="Knowledge base tabs">
+          <div className="kb-tab-strip" role="tablist" aria-label="Knowledge base tabs" aria-orientation="horizontal">
             <button
               id="kb-tab-import"
               role="tab"

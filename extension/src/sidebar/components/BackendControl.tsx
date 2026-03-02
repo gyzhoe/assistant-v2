@@ -13,9 +13,17 @@ interface BackendControlProps {
   onCycleTheme: () => void
 }
 
-const POLL_INTERVAL_MS = 5000
-const FAST_POLL_MS = 1500
+const POLL_BASE_MS = 5000
+const POLL_FAST_MS = 1500
+const POLL_MAX_MS = 60000
 const ONBOARDING_DISMISSED_KEY = 'onboardingDismissed'
+
+/** Exponential backoff for offline polling: 5s → 15s → 30s → 60s max */
+function nextOfflinePollMs(currentMs: number): number {
+  if (currentMs < 15000) return 15000
+  if (currentMs < 30000) return 30000
+  return POLL_MAX_MS
+}
 
 function OnboardingCard({
   backendOk,
@@ -95,6 +103,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
   const actionInFlightRef = useRef(false)
+  const pollIntervalRef = useRef<number>(POLL_BASE_MS)
 
   const ticketData = useSidebarStore((s) => s.ticketData)
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
@@ -117,33 +126,46 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     }
   }
 
-  const checkHealth = useCallback(async () => {
+  // Returns true if backend was reachable
+  const checkHealth = useCallback(async (): Promise<boolean> => {
     try {
       const h = await apiClient.health()
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return false
       setStatus('online')
       setOllamaOk(h.ollama_reachable)
       setOllamaReachable(h.ollama_reachable)
       setVersion(h.version)
       if (h.ollama_reachable) setOllamaAction('idle')
+      return true
     } catch {
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return false
       setStatus('offline')
       setOllamaOk(false)
       setOllamaReachable(false)
       setVersion('')
+      return false
     }
   }, [setOllamaReachable])
 
-  const schedulePoll = useCallback((delayMs: number = POLL_INTERVAL_MS) => {
+  const schedulePoll = useCallback((delayMs?: number) => {
     clearTimer()
+    // Use provided delay or current interval, then advance backoff if offline
+    const interval = delayMs ?? pollIntervalRef.current
     timerRef.current = setTimeout(() => {
       if (mountedRef.current) {
-        checkHealth().finally(() => {
-          if (mountedRef.current) schedulePoll()
-        })
+        checkHealth().then((online) => {
+          if (!mountedRef.current) return
+          if (online) {
+            // Reconnected — reset backoff
+            pollIntervalRef.current = POLL_BASE_MS
+          } else {
+            // Still offline — advance backoff for next cycle
+            pollIntervalRef.current = nextOfflinePollMs(pollIntervalRef.current)
+          }
+          schedulePoll()
+        }).catch(() => {})
       }
-    }, delayMs)
+    }, interval)
   }, [checkHealth])
 
   useEffect(() => {
@@ -197,6 +219,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       setStatus('offline')
       setOllamaOk(false)
       setVersion('')
+      pollIntervalRef.current = POLL_BASE_MS
       actionInFlightRef.current = false
       schedulePoll()
     }, 800)
@@ -257,7 +280,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
         setOllamaAction('idle')
         checkHealth().finally(() => schedulePoll())
       }
-    }, FAST_POLL_MS)
+    }, POLL_FAST_MS)
   }
 
   // --- Readiness badges ---
@@ -304,7 +327,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
         />
         <button
           type="button"
-          className="theme-toggle"
+          className="settings-btn"
           onClick={() => chrome.runtime.openOptionsPage()}
           aria-label="Open settings"
           title="Settings"
