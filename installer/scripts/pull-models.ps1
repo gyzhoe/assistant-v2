@@ -6,6 +6,7 @@ Write-Host "=== Setting Up Ollama Models ===" -ForegroundColor Cyan
 
 # Check for bundled offline models first
 $AppDir = Split-Path -Parent $PSScriptRoot
+$ollamaExe = Join-Path $AppDir "tools\ollama.exe"
 $bundledModels = Join-Path $AppDir "deps\ollama-models"
 
 if (Test-Path (Join-Path $bundledModels "blobs")) {
@@ -16,6 +17,16 @@ if (Test-Path (Join-Path $bundledModels "blobs")) {
 
 # Online fallback: pull models from Ollama registry
 Write-Host "No bundled models found — pulling from internet..." -ForegroundColor Yellow
+
+# Start Ollama if not already running
+try {
+    $null = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 2 -ErrorAction Stop
+} catch {
+    if (Test-Path $ollamaExe) {
+        Write-Host "Starting Ollama..." -ForegroundColor Yellow
+        Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
+    }
+}
 
 # Wait for Ollama to be available
 $maxRetries = 30
@@ -38,10 +49,10 @@ if ($retryCount -eq $maxRetries) {
 }
 
 Write-Host "Pulling qwen2.5:14b (~9 GB)..." -ForegroundColor Yellow
-& ollama pull qwen2.5:14b
+& $ollamaExe pull qwen2.5:14b
 
 Write-Host "Pulling nomic-embed-text (~275 MB)..." -ForegroundColor Yellow
-& ollama pull nomic-embed-text
+& $ollamaExe pull nomic-embed-text
 
 Write-Host "Model download complete!" -ForegroundColor Green
 if (-not $NonInteractive) { Read-Host "Press Enter to close" }
