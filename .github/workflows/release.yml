@@ -46,28 +46,32 @@ jobs:
           name: extension-dist
           path: extension/dist/
 
-      - name: Download Ollama installer
+      - name: Download Ollama standalone
         shell: pwsh
         run: |
-          # Ollama v0.17.0 — pinned 2026-02-26
+          # Ollama v0.17.0 standalone binary — pinned 2026-03-03
           # SHA256 sourced from: https://github.com/ollama/ollama/releases/download/v0.17.0/sha256sum.txt
           $ollamaVersion = "v0.17.0"
-          $ollamaUrl = "https://github.com/ollama/ollama/releases/download/${ollamaVersion}/OllamaSetup.exe"
-          $ollamaSha256 = "beea6a1e5eb7658ef0ad7789295f310ef59dc4c7e7d3651d03993bf3a4687e3e"
+          $ollamaUrl = "https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip"
+          $ollamaSha256 = "cd17faeda399324db3aee1be49b5143b00681e74c3023aeb7306223f7203be0d"
 
           New-Item -ItemType Directory -Force -Path installer/deps | Out-Null
-          Write-Host "Downloading Ollama ${ollamaVersion}..."
-          Invoke-WebRequest -Uri $ollamaUrl -OutFile "installer/deps/OllamaSetup.exe"
+          Write-Host "Downloading Ollama ${ollamaVersion} standalone..."
+          Invoke-WebRequest -Uri $ollamaUrl -OutFile "installer/deps/ollama.zip"
 
-          $actual = (Get-FileHash -Path "installer/deps/OllamaSetup.exe" -Algorithm SHA256).Hash.ToLower()
+          $actual = (Get-FileHash -Path "installer/deps/ollama.zip" -Algorithm SHA256).Hash.ToLower()
           if ($actual -ne $ollamaSha256) {
             Write-Error "Ollama SHA256 mismatch! Expected: $ollamaSha256 | Got: $actual"
             exit 1
           }
           Write-Host "Ollama SHA256 verified OK"
-          $size = [math]::Round((Get-Item installer/deps/OllamaSetup.exe).Length / 1MB, 1)
-          Write-Host "Ollama installer: $size MB"
 
+          Expand-Archive -Path "installer/deps/ollama.zip" -DestinationPath "installer/deps/ollama-extract" -Force
+          $ollamaExe = Get-ChildItem -Path "installer/deps/ollama-extract" -Recurse -Filter "ollama.exe" | Select-Object -First 1
+          Copy-Item $ollamaExe.FullName "installer/deps/ollama.exe"
+          Remove-Item "installer/deps/ollama.zip", "installer/deps/ollama-extract" -Recurse -Force
+          $size = [math]::Round((Get-Item installer/deps/ollama.exe).Length / 1MB, 1)
+          Write-Host "Ollama standalone: $size MB"
       - name: Download uv standalone
         shell: pwsh
         run: |
@@ -92,26 +96,6 @@ jobs:
           $uvExe = Get-ChildItem -Path "installer/deps/uv-extract" -Recurse -Filter "uv.exe" | Select-Object -First 1
           Copy-Item $uvExe.FullName "installer/deps/uv.exe"
           Remove-Item "installer/deps/uv.zip", "installer/deps/uv-extract" -Recurse -Force
-
-      - name: Download NSSM
-        shell: pwsh
-        run: |
-          # NSSM 2.24 (win64) — self-hosted on our "tools" GitHub release
-          # to avoid nssm.cc downtime (site returns 503 intermittently).
-          # SHA256 of the win64 nssm.exe binary:
-          $nssmUrl = "https://github.com/${{ github.repository }}/releases/download/tools/nssm.exe"
-          $nssmSha256 = "f689ee9af94b00e9e3f0bb072b34caaf207f32dcb4f5782fc9ca351df9a06c97"
-
-          New-Item -ItemType Directory -Force -Path installer/nssm | Out-Null
-          Write-Host "Downloading NSSM from GitHub release..."
-          Invoke-WebRequest -Uri $nssmUrl -OutFile "installer/nssm/nssm.exe"
-
-          $actual = (Get-FileHash -Path "installer/nssm/nssm.exe" -Algorithm SHA256).Hash.ToLower()
-          if ($actual -ne $nssmSha256) {
-            Write-Error "NSSM SHA256 mismatch! Expected: $nssmSha256 | Got: $actual"
-            exit 1
-          }
-          Write-Host "NSSM SHA256 verified OK"
 
       - name: Download Python 3.13 embeddable
         shell: pwsh
@@ -172,14 +156,14 @@ jobs:
             - **`AIHelpdeskAssistant-Setup-*.exe`** — Full Windows installer (Ollama + backend + extension)
             - **`assistant-extension-*.zip`** — Standalone Edge extension only
 
-            ### Installation (Recommended)
+            ### Installation
             1. Download and run the `.exe` installer
             2. Follow the wizard — all defaults are fine
-            3. Model download (~2.3 GB) will start automatically after install
-            4. When prompted, load the extension in Edge: `edge://extensions` → Load unpacked → select the extension folder
+            3. Load the extension in Edge: `edge://extensions` → Load unpacked → select the extension folder
+            4. Pull models via Start Menu → Setup LLM Models
 
             ### Manual Setup
-            1. Install [Ollama](https://ollama.com) and pull models: `ollama pull llama3.2:3b && ollama pull nomic-embed-text`
+            1. Install [Ollama](https://ollama.com) and pull models: `ollama pull qwen2.5:14b && ollama pull nomic-embed-text`
             2. Install [uv](https://docs.astral.sh/uv/): `pip install uv`
             3. Clone the repo and run: `cd backend && uv sync && uv run uvicorn app.main:app --port 8765`
             4. Extract the extension zip and load unpacked in Edge

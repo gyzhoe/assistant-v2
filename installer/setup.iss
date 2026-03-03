@@ -1,9 +1,9 @@
 ; setup.iss — AI Helpdesk Assistant Inno Setup Script
 ; Builds a per-user installer for Windows 10/11 x64.
-; Compile with: iscc /DMyAppVersion=1.3.0 setup.iss
+; Compile with: iscc /DMyAppVersion=1.13.0 setup.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.8.0"
+  #define MyAppVersion "1.13.0"
 #endif
 
 #define MyAppName     "AI Helpdesk Assistant"
@@ -28,7 +28,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
-UsePreviousDir=no
+DisableDirPage=no
 LicenseFile=assets\license.txt
 UninstallDisplayName={#MyAppName}
 VersionInfoVersion={#MyAppVersion}
@@ -42,10 +42,23 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 [Components]
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
-Name: "ollama";    Description: "Ollama LLM Runtime (~100 MB)";                 Types: full custom
+Name: "ollama";    Description: "Ollama LLM Runtime";                           Types: full custom
 Name: "models";    Description: "LLM models — qwen2.5:14b + nomic-embed-text (~9.5 GB)"; Types: full custom
-Name: "service";   Description: "Register backend as Windows Service (auto-start)"; Types: full custom
-Name: "ollamasvc"; Description: "Run Ollama as hidden service (no tray icon)";     Types: full custom
+
+[InstallDelete]
+; Clean up stale files from previous installs before copying new ones.
+; Preserves: chroma_data (user KB), logs, .env (user config).
+Type: filesandordirs; Name: "{app}\backend\app"
+Type: filesandordirs; Name: "{app}\backend\ingestion"
+Type: filesandordirs; Name: "{app}\backend\static"
+Type: filesandordirs; Name: "{app}\backend\.venv"
+Type: files;          Name: "{app}\backend\pyproject.toml"
+Type: files;          Name: "{app}\backend\requirements.txt"
+Type: filesandordirs; Name: "{app}\extension"
+Type: filesandordirs; Name: "{app}\deps\python"
+Type: filesandordirs; Name: "{app}\deps\wheels"
+Type: filesandordirs; Name: "{app}\scripts"
+Type: filesandordirs; Name: "{app}\tools"
 
 [Dirs]
 Name: "{app}\logs"
@@ -57,6 +70,10 @@ Source: "..\backend\app\*";           DestDir: "{app}\backend\app";       Flags:
 Source: "..\backend\ingestion\*";     DestDir: "{app}\backend\ingestion"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
 Source: "..\backend\pyproject.toml";  DestDir: "{app}\backend";           Flags: ignoreversion; Components: backend
 
+; Native messaging host scripts (backend manages its own lifecycle via extension messages)
+Source: "..\backend\native_host.py";  DestDir: "{app}\backend";           Flags: ignoreversion; Components: backend
+Source: "..\backend\native_host.cmd"; DestDir: "{app}\backend";           Flags: ignoreversion; Components: backend
+
 ; Extension dist (pre-built by CI)
 Source: "..\extension\dist\*";        DestDir: "{app}\extension";         Flags: ignoreversion recursesubdirs createallsubdirs; Components: extension
 
@@ -66,11 +83,8 @@ Source: "..\backend\static\manage\*"; DestDir: "{app}\backend\static\manage"; Fl
 ; uv standalone binary (downloaded by CI)
 Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
-; NSSM for service registration (downloaded by CI)
-Source: "nssm\nssm.exe";             DestDir: "{app}\tools";             Flags: ignoreversion; Components: service ollamasvc
-
-; Ollama installer (downloaded by CI)
-Source: "deps\OllamaSetup.exe";      DestDir: "{tmp}";                   Flags: ignoreversion deleteafterinstall; Components: ollama
+; Ollama standalone binary (downloaded by CI)
+Source: "deps\ollama.exe";            DestDir: "{app}\tools";             Flags: ignoreversion; Components: ollama
 
 ; Bundled Python 3.13 standalone (offline install)
 Source: "deps\python\*";             DestDir: "{app}\deps\python";       Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
@@ -88,131 +102,45 @@ Source: "deps\ollama-models\*";      DestDir: "{app}\deps\ollama-models"; Flags:
 #endif
 
 ; PowerShell helper scripts
-Source: "scripts\post-install.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\start-backend.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\stop-backend.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\pull-models.ps1";    DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\import-models.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\check-health.ps1";   DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\tray-monitor.ps1";       DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\dashboard.ps1";          DestDir: "{app}\scripts";          Flags: ignoreversion
-Source: "scripts\uninstall-cleanup.ps1";  DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\post-install.ps1";      DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\start-backend.ps1";     DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\pull-models.ps1";       DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\import-models.ps1";     DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\check-health.ps1";      DestDir: "{app}\scripts";          Flags: ignoreversion
+Source: "scripts\uninstall-cleanup.ps1"; DestDir: "{app}\scripts";          Flags: ignoreversion
 
 [Icons]
-; Dashboard — main Start Menu entry
-Name: "{group}\AI Helpdesk Assistant"; Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\dashboard.ps1"""; WorkingDir: "{app}"; Comment: "Open the service dashboard"
-; Start/Stop use NSSM directly — instant, no terminal window
-Name: "{group}\Start Backend";       Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; Components: service
-Name: "{group}\Stop Backend";        Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend";  Components: service
-; Fallback shortcuts when service component not selected
-Name: "{group}\Start Backend";       Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\start-backend.ps1"""; WorkingDir: "{app}\backend"; Components: not service
-Name: "{group}\Stop Backend";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\stop-backend.ps1"""; Components: not service
 ; Interactive diagnostic tools — keep visible PowerShell
 Name: "{group}\Setup LLM Models";    Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""
 Name: "{group}\Health Check";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\check-health.ps1"""
 Name: "{group}\Extension Folder";    Filename: "{app}\extension"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-; Auto-start tray monitor at Windows login
-Name: "{userstartup}\AI Helpdesk Monitor"; Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\tray-monitor.ps1"""; WorkingDir: "{app}"
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Edge\NativeMessagingHosts\com.assistant.backend_manager"; \
+  ValueType: string; ValueData: "{app}\backend\com.assistant.backend_manager.json"; \
+  Flags: uninsdeletekey
 
 [Run]
-; Install Ollama silently
-Filename: "{tmp}\OllamaSetup.exe"; Parameters: "/VERYSILENT /NORESTART"; StatusMsg: "Installing Ollama..."; Components: ollama; Flags: waituntilterminated
-
-; Kill Ollama desktop app (installer starts it automatically with tray icon)
-Filename: "taskkill.exe"; Parameters: "/F /IM ""Ollama.exe"""; Components: ollamasvc; Flags: waituntilterminated runhidden; StatusMsg: "Stopping Ollama desktop app..."
-
-; Remove Ollama auto-start entries (Startup folder shortcut + registry key)
-Filename: "cmd.exe"; Parameters: "/c del /q ""{userstartup}\Ollama.lnk"" 2>nul"; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "reg.exe"; Parameters: "delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v Ollama /f"; Components: ollamasvc; Flags: waituntilterminated runhidden
-
-; Register Ollama as hidden NSSM service (ollama serve on port 11434)
-Filename: "{app}\tools\nssm.exe"; Parameters: "install AIHelpdeskOllama ""{code:GetOllamaExePath}"" serve"; StatusMsg: "Registering Ollama service..."; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama DisplayName ""AI Helpdesk Ollama"""; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama Description ""Ollama LLM inference server for AI Helpdesk"""; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama Start SERVICE_DELAYED_AUTO_START"; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppStdout ""{app}\logs\ollama-stdout.log"""; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppStderr ""{app}\logs\ollama-stderr.log"""; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppRotateFiles 1"; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskOllama AppRotateBytes 5242880"; Components: ollamasvc; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskOllama"; StatusMsg: "Starting Ollama service..."; Components: ollamasvc; Flags: waituntilterminated runhidden
-
 ; Run post-install script (installs Python 3.13 via uv, creates venv, installs deps)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\post-install.ps1"" -AppDir ""{app}"""; StatusMsg: "Setting up Python environment..."; Flags: waituntilterminated runhidden; Components: backend
 
-; Register backend as Windows Service via NSSM
-Filename: "{app}\tools\nssm.exe"; Parameters: "install AIHelpdeskBackend powershell.exe ""-ExecutionPolicy Bypass -File '{app}\scripts\start-backend.ps1'"""; StatusMsg: "Registering backend service..."; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppDirectory ""{app}\backend"""; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend DisplayName ""AI Helpdesk Backend"""; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend Description ""FastAPI backend for AI Helpdesk Assistant"""; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend Start SERVICE_DELAYED_AUTO_START"; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppStdout ""{app}\logs\backend-stdout.log"""; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppStderr ""{app}\logs\backend-stderr.log"""; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppRotateFiles 1"; Components: service; Flags: waituntilterminated runhidden
-Filename: "{app}\tools\nssm.exe"; Parameters: "set AIHelpdeskBackend AppRotateBytes 5242880"; Components: service; Flags: waituntilterminated runhidden
-
-; Start the service
-Filename: "{app}\tools\nssm.exe"; Parameters: "start AIHelpdeskBackend"; StatusMsg: "Starting backend service..."; Components: service; Flags: waituntilterminated runhidden
-
 ; Import bundled LLM models (copies pre-downloaded model files)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
-
-; Launch tray monitor after install
-Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\scripts\tray-monitor.ps1"""; Description: "Launch system tray monitor"; Flags: postinstall nowait skipifsilent
 
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
-[UninstallDelete]
-; Remove startup shortcut
-Type: files; Name: "{userstartup}\AI Helpdesk Monitor.lnk"
-
 [UninstallRun]
 ; Cleanup dialog — offer Ollama/model removal before anything is torn down
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated
-; Kill tray monitor and dashboard processes before uninstall
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ ($_.CommandLine -like '*tray-monitor*' -or $_.CommandLine -like '*dashboard*') -and $_.ProcessId -ne $PID }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"""; Flags: runhidden waituntilterminated
-; Stop and remove backend service
-Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskBackend"; Flags: runhidden waituntilterminated
-Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskBackend confirm"; Flags: runhidden waituntilterminated
-; Stop and remove Ollama service
-Filename: "{app}\tools\nssm.exe"; Parameters: "stop AIHelpdeskOllama"; Flags: runhidden waituntilterminated
-Filename: "{app}\tools\nssm.exe"; Parameters: "remove AIHelpdeskOllama confirm"; Flags: runhidden waituntilterminated
+; Kill backend on port 8765
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""try {{ $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; if ($c) {{ Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue }} }} catch {{}}"""; Flags: runhidden waituntilterminated
+; Kill Python processes from install directory
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith('{app}', [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated
 
 [Code]
-function GetOllamaExePath(Param: String): String;
-begin
-  // Check common Ollama install locations
-  if FileExists(ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe')) then
-    Result := ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe')
-  else if FileExists(ExpandConstant('{pf}\Ollama\ollama.exe')) then
-    Result := ExpandConstant('{pf}\Ollama\ollama.exe')
-  else if FileExists(ExpandConstant('{pf32}\Ollama\ollama.exe')) then
-    Result := ExpandConstant('{pf32}\Ollama\ollama.exe')
-  else
-    // Fallback — assume it's on PATH
-    Result := 'ollama.exe';
-end;
-
-function IsOllamaInstalled: Boolean;
-var
-  ResultCode: Integer;
-begin
-  // Check common install locations
-  Result :=
-    FileExists(ExpandConstant('{localappdata}\Programs\Ollama\ollama.exe')) or
-    FileExists(ExpandConstant('{pf}\Ollama\ollama.exe')) or
-    FileExists(ExpandConstant('{pf32}\Ollama\ollama.exe'));
-
-  // Also check if ollama is on PATH (covers custom installs)
-  if not Result then
-  begin
-    Result := Exec('cmd.exe', '/c where ollama >nul 2>nul', '', SW_HIDE,
-                   ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
-  end;
-end;
-
 function GetEdgePath(Param: String): String;
 var
   EdgePath: String;
@@ -239,27 +167,66 @@ begin
   Result := GetEdgePath('') <> 'msedge.exe';
 end;
 
-procedure CurPageChanged(CurPageID: Integer);
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  I: Integer;
+  ResultCode: Integer;
+  NssmPath: String;
+  AppDir: String;
 begin
-  if CurPageID = wpSelectComponents then
+  Result := '';
+  NeedsRestart := False;
+  AppDir := ExpandConstant('{app}');
+  NssmPath := AppDir + '\tools\nssm.exe';
+
+  // Migration: stop and remove NSSM-managed services from previous installs
+  if FileExists(NssmPath) then
   begin
-    // Auto-deselect the "ollama" component if Ollama is already installed.
-    // Use component name matching instead of a hardcoded index so that
-    // reordering components in [Components] does not break this logic.
-    if IsOllamaInstalled then
-    begin
-      for I := 0 to WizardForm.ComponentsList.Items.Count - 1 do
-      begin
-        if WizardForm.ComponentsList.ItemCaption[I] = 'Ollama LLM Runtime (~100 MB)' then
-        begin
-          WizardForm.ComponentsList.Checked[I] := False;
-          Break;
-        end;
-      end;
-    end;
+    Exec(NssmPath, 'stop AIHelpdeskBackend', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'remove AIHelpdeskBackend confirm', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'stop AIHelpdeskOllama', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+    Exec(NssmPath, 'remove AIHelpdeskOllama confirm', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
   end;
+
+  // Kill backend process listening on port 8765 (covers manual starts)
+  Exec('powershell.exe',
+    '-ExecutionPolicy Bypass -Command "' +
+    'try { $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; ' +
+    'if ($c) { Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue } } catch {}"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Kill any Python processes running from the install directory
+  Exec('powershell.exe',
+    '-ExecutionPolicy Bypass -Command "' +
+    'Get-CimInstance Win32_Process | ' +
+    'Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith(''' + AppDir + ''', [System.StringComparison]::OrdinalIgnoreCase) } | ' +
+    'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }; ' +
+    'Start-Sleep -Seconds 1"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure GenerateNativeMessagingManifest;
+var
+  ManifestPath: String;
+  HostPath: String;
+  JsonContent: String;
+begin
+  ManifestPath := ExpandConstant('{app}\backend\com.assistant.backend_manager.json');
+  HostPath := ExpandConstant('{app}\backend\native_host.cmd');
+  // Double backslashes for JSON path encoding
+  StringChangeEx(HostPath, '\', '\\', True);
+  JsonContent :=
+    '{' + #13#10 +
+    '  "name": "com.assistant.backend_manager",' + #13#10 +
+    '  "description": "AI Helpdesk Assistant - Service Manager",' + #13#10 +
+    '  "path": "' + HostPath + '",' + #13#10 +
+    '  "type": "stdio",' + #13#10 +
+    '  "allowed_origins": ["chrome-extension://inapklomefcicbehlgihcidbmboiimgc/"]' + #13#10 +
+    '}';
+  SaveStringToFile(ManifestPath, JsonContent, False);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -267,5 +234,6 @@ begin
   if CurStep = ssPostInstall then
   begin
     ForceDirectories(ExpandConstant('{app}\logs'));
+    GenerateNativeMessagingManifest;
   end;
 end;
