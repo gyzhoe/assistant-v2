@@ -42,7 +42,7 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
 Name: "ollama";    Description: "Ollama LLM Runtime (~100 MB)";                 Types: full custom
-Name: "models";    Description: "LLM models — llama3.2:3b + nomic-embed-text (~2.2 GB)"; Types: full custom
+Name: "models";    Description: "LLM models — qwen2.5:14b + nomic-embed-text (~9.5 GB)"; Types: full custom
 Name: "service";   Description: "Register backend as Windows Service (auto-start)"; Types: full custom
 Name: "ollamasvc"; Description: "Run Ollama as hidden service (no tray icon)";     Types: full custom
 
