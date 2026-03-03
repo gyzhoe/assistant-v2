@@ -37,8 +37,8 @@ if ($retryCount -eq $maxRetries) {
     exit 1
 }
 
-Write-Host "Pulling llama3.2:3b (~2 GB)..." -ForegroundColor Yellow
-& ollama pull llama3.2:3b
+Write-Host "Pulling qwen2.5:14b (~9 GB)..." -ForegroundColor Yellow
+& ollama pull qwen2.5:14b
 
 Write-Host "Pulling nomic-embed-text (~275 MB)..." -ForegroundColor Yellow
 & ollama pull nomic-embed-text

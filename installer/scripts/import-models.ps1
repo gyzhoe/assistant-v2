@@ -13,7 +13,7 @@ $ollamaDir = Join-Path $env:USERPROFILE ".ollama\models"
 
 if (-not (Test-Path $bundledModels)) {
     Write-Host "No bundled models found at $bundledModels" -ForegroundColor Red
-    Write-Host "Run 'ollama pull llama3.2:3b' and 'ollama pull nomic-embed-text' manually." -ForegroundColor Yellow
+    Write-Host "Run 'ollama pull qwen2.5:14b' and 'ollama pull nomic-embed-text' manually." -ForegroundColor Yellow
     if (-not $NonInteractive) { Read-Host "Press Enter to exit" }
     exit 1
 }
@@ -27,7 +27,7 @@ if (-not (Test-Path $ollamaDir)) {
 $blobsSrc = Join-Path $bundledModels "blobs"
 $blobsDst = Join-Path $ollamaDir "blobs"
 if (Test-Path $blobsSrc) {
-    Write-Host "Copying model blobs (~2.2 GB)... this may take a minute." -ForegroundColor Yellow
+    Write-Host "Copying model blobs (~9.5 GB)... this may take a few minutes." -ForegroundColor Yellow
     if (-not (Test-Path $blobsDst)) {
         New-Item -ItemType Directory -Path $blobsDst -Force | Out-Null
     }
@@ -45,5 +45,5 @@ if (Test-Path $manifestsSrc) {
 }
 
 Write-Host "Model import complete!" -ForegroundColor Green
-Write-Host "Imported models: llama3.2:3b, nomic-embed-text" -ForegroundColor Cyan
+Write-Host "Imported models: qwen2.5:14b, nomic-embed-text" -ForegroundColor Cyan
 if (-not $NonInteractive) { Read-Host "Press Enter to close" }
