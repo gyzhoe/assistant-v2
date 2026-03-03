@@ -28,6 +28,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
+UsePreviousDir=no
 LicenseFile=assets\license.txt
 UninstallDisplayName={#MyAppName}
 VersionInfoVersion={#MyAppVersion}

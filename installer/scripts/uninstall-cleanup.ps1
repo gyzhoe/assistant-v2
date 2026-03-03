@@ -1,5 +1,5 @@
 # uninstall-cleanup.ps1 - AI Helpdesk Assistant Cleanup Options
-# WinForms dialog shown during uninstall, offering removal of Ollama runtime and LLM models.
+# WinForms dialog shown during uninstall, offering removal of all related data.
 # Exit codes: 0 = cleanup completed (or skipped by user choice), 1 = user cancelled.
 
 param(
@@ -34,18 +34,35 @@ $ollamaInstalled = Test-Path $ollamaUninstaller
 $modelsDir = Join-Path $env:USERPROFILE ".ollama\models"
 $modelsExist = Test-Path $modelsDir
 
-# Estimate model size
-$modelSizeMB = 0
-if ($modelsExist) {
+$chromaDir = Join-Path $AppDir "backend\chroma_data"
+$chromaExist = Test-Path $chromaDir
+$venvDir = Join-Path $AppDir "backend\.venv"
+$venvExist = Test-Path $venvDir
+$logsDir = Join-Path $AppDir "logs"
+$logsExist = Test-Path $logsDir
+$envFile = Join-Path $AppDir "backend\.env"
+$envExist = Test-Path $envFile
+$auditFile = Join-Path $AppDir "backend\audit.log"
+$auditExist = Test-Path $auditFile
+
+# Estimate sizes
+function Get-DirSizeMB($path) {
+    if (-not (Test-Path $path)) { return 0 }
     try {
-        $modelSizeMB = [math]::Round(
-            ((Get-ChildItem -Path $modelsDir -Recurse -File -ErrorAction SilentlyContinue |
+        [math]::Round(
+            ((Get-ChildItem -Path $path -Recurse -File -ErrorAction SilentlyContinue |
               Measure-Object -Property Length -Sum).Sum / 1MB), 0)
-    } catch { $modelSizeMB = 0 }
+    } catch { 0 }
 }
 
+$modelSizeMB = Get-DirSizeMB $modelsDir
+$chromaSizeMB = Get-DirSizeMB $chromaDir
+$venvSizeMB = Get-DirSizeMB $venvDir
+
+$appDataExist = $chromaExist -or $logsExist -or $envExist -or $auditExist
+
 # If nothing to clean up, exit silently
-if (-not $ollamaInstalled -and -not $modelsExist) {
+if (-not $ollamaInstalled -and -not $modelsExist -and -not $appDataExist -and -not $venvExist) {
     exit 0
 }
 
@@ -59,7 +76,7 @@ $MUTED  = [System.Drawing.Color]::FromArgb(255, 107, 114, 128)
 # --- Build the dialog ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AI Helpdesk Assistant - Cleanup Options"
-$form.Size = New-Object System.Drawing.Size(460, 300)
+$form.Size = New-Object System.Drawing.Size(480, 420)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
@@ -85,67 +102,79 @@ $form.Controls.Add($headerPanel)
 
 # --- Info label ---
 $infoLabel = New-Object System.Windows.Forms.Label
-$infoLabel.Text = "Uncheck items you want to keep for other projects."
+$infoLabel.Text = "Select what to remove. Uncheck items you want to keep."
 $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $infoLabel.ForeColor = $MUTED
 $infoLabel.Location = New-Object System.Drawing.Point(20, 56)
-$infoLabel.Size = New-Object System.Drawing.Size(400, 20)
+$infoLabel.Size = New-Object System.Drawing.Size(440, 20)
 $form.Controls.Add($infoLabel)
 
-# --- Ollama checkbox ---
-$chkOllama = New-Object System.Windows.Forms.CheckBox
-$chkOllama.Text = "Remove Ollama LLM Runtime (~100 MB)"
-$chkOllama.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
-$chkOllama.ForeColor = $TEXT
-$chkOllama.Location = New-Object System.Drawing.Point(20, 90)
-$chkOllama.Size = New-Object System.Drawing.Size(400, 24)
-$chkOllama.Checked = $ollamaInstalled
-$chkOllama.Enabled = $ollamaInstalled
-$form.Controls.Add($chkOllama)
+# --- Helper to add checkbox + note ---
+$yPos = 86
 
-if (-not $ollamaInstalled) {
-    $ollamaNote = New-Object System.Windows.Forms.Label
-    $ollamaNote.Text = "Ollama not found - nothing to remove"
-    $ollamaNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
-    $ollamaNote.ForeColor = $MUTED
-    $ollamaNote.Location = New-Object System.Drawing.Point(40, 114)
-    $ollamaNote.Size = New-Object System.Drawing.Size(380, 16)
-    $form.Controls.Add($ollamaNote)
+function Add-CleanupOption($text, $checked, $enabled, $noteText) {
+    $chk = New-Object System.Windows.Forms.CheckBox
+    $chk.Text = $text
+    $chk.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
+    $chk.ForeColor = $TEXT
+    $chk.Location = New-Object System.Drawing.Point(20, $script:yPos)
+    $chk.Size = New-Object System.Drawing.Size(440, 24)
+    $chk.Checked = $checked
+    $chk.Enabled = $enabled
+    $form.Controls.Add($chk)
+    $script:yPos += 26
+
+    if ($noteText) {
+        $note = New-Object System.Windows.Forms.Label
+        $note.Text = $noteText
+        $note.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+        $note.ForeColor = $MUTED
+        $note.Location = New-Object System.Drawing.Point(40, $script:yPos)
+        $note.Size = New-Object System.Drawing.Size(420, 16)
+        $form.Controls.Add($note)
+        $script:yPos += 18
+    }
+
+    $script:yPos += 6
+    return $chk
 }
 
-# --- Models checkbox ---
-$modelLabel = if ($modelSizeMB -gt 0) {
-    "Remove downloaded LLM models (~$modelSizeMB MB)"
+# --- Application data ---
+$appDataNote = if ($chromaExist) {
+    "Knowledge base, ticket data, logs, config (~$chromaSizeMB MB)"
 } else {
-    "Remove downloaded LLM models"
+    "Logs, config files"
 }
-$chkModels = New-Object System.Windows.Forms.CheckBox
-$chkModels.Text = $modelLabel
-$chkModels.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
-$chkModels.ForeColor = $TEXT
-$chkModels.Location = New-Object System.Drawing.Point(20, 140)
-$chkModels.Size = New-Object System.Drawing.Size(400, 24)
-$chkModels.Checked = $modelsExist
-$chkModels.Enabled = $modelsExist
-$form.Controls.Add($chkModels)
+$chkAppData = Add-CleanupOption "Remove application data (KB, logs, config)" $appDataExist $appDataExist $(
+    if (-not $appDataExist) { "No application data found" } else { $appDataNote }
+)
 
-if (-not $modelsExist) {
-    $modelsNote = New-Object System.Windows.Forms.Label
-    $modelsNote.Text = "No model data found - nothing to remove"
-    $modelsNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
-    $modelsNote.ForeColor = $MUTED
-    $modelsNote.Location = New-Object System.Drawing.Point(40, 164)
-    $modelsNote.Size = New-Object System.Drawing.Size(380, 16)
-    $form.Controls.Add($modelsNote)
-}
+# --- Python venv ---
+$venvNote = if ($venvSizeMB -gt 0) { "Python virtual environment (~$venvSizeMB MB)" } else { $null }
+$chkVenv = Add-CleanupOption "Remove Python environment (.venv)" $venvExist $venvExist $(
+    if (-not $venvExist) { "No Python environment found" } else { $venvNote }
+)
+
+# --- Ollama ---
+$chkOllama = Add-CleanupOption "Remove Ollama LLM Runtime (~100 MB)" $ollamaInstalled $ollamaInstalled $(
+    if (-not $ollamaInstalled) { "Ollama not found - nothing to remove" } else { $null }
+)
+
+# --- Models ---
+$modelLabel = if ($modelSizeMB -gt 0) { "Remove downloaded LLM models (~$modelSizeMB MB)" } else { "Remove downloaded LLM models" }
+$chkModels = Add-CleanupOption $modelLabel $modelsExist $modelsExist $(
+    if (-not $modelsExist) { "No model data found" } else { "Warning: other programs using Ollama will lose these models" }
+)
 
 # --- Buttons ---
 $script:userCancelled = $true
 
+$btnY = $script:yPos + 16
+
 $btnContinue = New-Object System.Windows.Forms.Button
 $btnContinue.Text = "Continue Uninstall"
 $btnContinue.Size = New-Object System.Drawing.Size(140, 34)
-$btnContinue.Location = New-Object System.Drawing.Point(160, 210)
+$btnContinue.Location = New-Object System.Drawing.Point(180, $btnY)
 $btnContinue.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $btnContinue.BackColor = $ACCENT
 $btnContinue.ForeColor = [System.Drawing.Color]::White
@@ -161,7 +190,7 @@ $form.Controls.Add($btnContinue)
 $btnCancel = New-Object System.Windows.Forms.Button
 $btnCancel.Text = "Cancel"
 $btnCancel.Size = New-Object System.Drawing.Size(90, 34)
-$btnCancel.Location = New-Object System.Drawing.Point(310, 210)
+$btnCancel.Location = New-Object System.Drawing.Point(330, $btnY)
 $btnCancel.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $btnCancel.FlatAppearance.BorderColor = $BORDER
 $btnCancel.BackColor = [System.Drawing.Color]::White
@@ -174,6 +203,9 @@ $form.Controls.Add($btnCancel)
 $form.AcceptButton = $btnContinue
 $form.CancelButton = $btnCancel
 
+# Adjust form height to fit content
+$form.ClientSize = New-Object System.Drawing.Size(460, ($btnY + 50))
+
 # --- Show dialog ---
 [System.Windows.Forms.Application]::Run($form)
 
@@ -183,24 +215,42 @@ if ($script:userCancelled) {
 
 # --- Perform cleanup ---
 
+# Remove application data
+if ($chkAppData.Checked -and $appDataExist) {
+    # ChromaDB data
+    if ($chromaExist) {
+        try { Remove-Item -Path $chromaDir -Recurse -Force -ErrorAction Stop } catch {}
+    }
+    # Logs
+    if ($logsExist) {
+        try { Remove-Item -Path $logsDir -Recurse -Force -ErrorAction Stop } catch {}
+    }
+    # .env config
+    if ($envExist) {
+        try { Remove-Item -Path $envFile -Force -ErrorAction Stop } catch {}
+    }
+    # Audit log
+    if ($auditExist) {
+        try { Remove-Item -Path $auditFile -Force -ErrorAction Stop } catch {}
+    }
+}
+
+# Remove Python venv
+if ($chkVenv.Checked -and $venvExist) {
+    try { Remove-Item -Path $venvDir -Recurse -Force -ErrorAction Stop } catch {}
+}
+
 # Remove Ollama runtime
 if ($chkOllama.Checked -and $ollamaInstalled) {
     try {
         $proc = Start-Process -FilePath $ollamaUninstaller -ArgumentList "/VERYSILENT /NORESTART" -Wait -PassThru
-        # Also kill any lingering Ollama processes
         Get-Process -Name "ollama" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    } catch {
-        # Best-effort - don't block uninstall if Ollama removal fails
-    }
+    } catch {}
 }
 
 # Remove LLM model data
 if ($chkModels.Checked -and $modelsExist) {
-    try {
-        Remove-Item -Path $modelsDir -Recurse -Force -ErrorAction Stop
-    } catch {
-        # Best-effort - files might be locked
-    }
+    try { Remove-Item -Path $modelsDir -Recurse -Force -ErrorAction Stop } catch {}
 }
 
 exit 0
