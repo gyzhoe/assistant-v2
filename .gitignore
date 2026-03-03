@@ -69,6 +69,9 @@ installer/output/
 installer/extension.pem
 installer/extension-id.txt
 
+# Local dev tools (Ollama binary for development)
+tools/
+
 # Temporary
 *.tmp
 *.bak
