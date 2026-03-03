@@ -98,6 +98,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const [ollamaAction, setOllamaAction] = useState<'idle' | 'starting' | 'stopping'>('idle')
   const [version, setVersion] = useState('')
   const [nativeError, setNativeError] = useState('')
+  const [startingDetail, setStartingDetail] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [onboardingDismissed, setOnboardingDismissed] = useState(true) // default true to avoid flash
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -249,21 +250,47 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     actionInFlightRef.current = true
     setStatus('starting')
     setNativeError('')
+    setStartingDetail('Connecting to native host\u2026')
     const resp = await sendNativeCommand('start_backend')
     if (!mountedRef.current) return
     if (!resp.ok) {
       setNativeError(resp.error ?? 'Native messaging unavailable')
       setStatus('offline')
+      setStartingDetail('')
       actionInFlightRef.current = false
       return
     }
+    // Show phase-specific status based on native host response
+    if (resp.ollama_started) {
+      setStartingDetail('Starting Ollama\u2026')
+      await new Promise((r) => setTimeout(r, 1500))
+      if (!mountedRef.current) return
+    }
+    setStartingDetail('Starting backend server\u2026')
+    // Poll aggressively until backend responds (up to 15s)
     clearTimer()
-    setTimeout(() => {
-      if (mountedRef.current) {
+    let attempts = 0
+    const maxAttempts = 10
+    const pollStartup = async () => {
+      if (!mountedRef.current) return
+      attempts++
+      const online = await checkHealth()
+      if (online) {
+        setStartingDetail('')
         actionInFlightRef.current = false
-        checkHealth().finally(() => schedulePoll())
+        schedulePoll()
+        return
       }
-    }, 3000)
+      if (attempts >= maxAttempts) {
+        setStartingDetail('')
+        actionInFlightRef.current = false
+        schedulePoll()
+        return
+      }
+      setStartingDetail(attempts >= 3 ? 'Waiting for backend to respond\u2026' : 'Starting backend server\u2026')
+      setTimeout(pollStartup, POLL_FAST_MS)
+    }
+    setTimeout(pollStartup, 2000)
   }
 
   // --- Ollama controls ---
@@ -422,7 +449,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
           {/* --- Transitional --- */}
           {status === 'stopping' && <p className="support-text">Shutting down…</p>}
-          {status === 'starting' && <p className="support-text">Starting backend server…</p>}
+          {status === 'starting' && <p className="support-text">{startingDetail || 'Starting\u2026'}</p>}
         </div>
       )}
     </section>

@@ -172,6 +172,7 @@ interface NativeResponse {
   status?: string
   error?: string
   token?: string
+  ollama_started?: boolean
 }
 
 /** Send a command to the native messaging host to start a service. */
