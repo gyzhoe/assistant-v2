@@ -5,7 +5,7 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.14.0] — Installer Overhaul & Ollama Fixes (2026-03-03)
 
 ### Fixed
 
@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `UsePreviousAppDir=yes` explicit directive in installer for clarity
 - CUDA runner verification log at post-install — logs whether `ggml-cuda.dll` was installed correctly for GPU acceleration diagnostics
+- Startup phase status indicator — shows "Starting Ollama…", "Starting backend server…", "Waiting for backend to respond…" during launch instead of a static message
+- Aggressive health polling during startup (1.5s interval) for faster online transition
 
 ### Changed
 
