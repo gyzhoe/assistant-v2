@@ -74,7 +74,10 @@ if ($offlineMode) {
     try {
         & $uvPath venv --python $pythonExe .venv
         if ($LASTEXITCODE -ne 0) { throw "Failed to create venv" }
-        & $uvPath pip install --python .venv\Scripts\python.exe --offline --no-index --find-links $wheelsDir -r $requirementsFile
+        # Install all bundled wheels directly (avoids version-pin mismatches between
+        # requirements.txt and the actual wheel filenames downloaded by CI).
+        $wheels = Get-ChildItem -Path $wheelsDir -Filter "*.whl" | ForEach-Object { $_.FullName }
+        & $uvPath pip install --python .venv\Scripts\python.exe --offline --no-index $wheels
         if ($LASTEXITCODE -ne 0) { throw "Failed to install dependencies from wheels" }
     } finally {
         Pop-Location
