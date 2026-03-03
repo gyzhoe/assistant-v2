@@ -1,6 +1,7 @@
 {
   "name": "ai-helpdesk-extension",
   "version": "1.13.0",
+  "license": "MIT",
   "private": true,
   "description": "AI Helpdesk Assistant — Edge browser extension",
   "type": "module",

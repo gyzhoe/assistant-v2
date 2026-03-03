@@ -159,3 +159,17 @@ MAX_UPLOAD_BYTES=52428800
 ## License
 
 MIT
+
+## Acknowledgments
+
+This project is built on excellent open-source software. Key dependencies include:
+
+- **[Ollama](https://ollama.com)** — local LLM inference engine
+- **[ChromaDB](https://github.com/chroma-core/chroma)** — vector store for RAG
+- **[FastAPI](https://fastapi.tiangolo.com)** — Python web framework
+- **[React](https://react.dev)** — UI library
+- **[Radix UI](https://www.radix-ui.com)** — accessible component primitives
+- **[Tailwind CSS](https://tailwindcss.com)** — utility-first CSS framework
+- **[Vite](https://vitejs.dev)** — build tool and dev server
+
+See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the full list of dependencies and their licenses.
