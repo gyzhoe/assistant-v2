@@ -11,12 +11,6 @@ A local AI assistant for SolarWinds Web Help Desk (on-premises), delivered as a 
 irm https://raw.githubusercontent.com/gyzhoe/assistant-v2/main/scripts/install.ps1 | iex
 ```
 
-**Via Scoop:**
-```powershell
-scoop bucket add assistant https://github.com/gyzhoe/assistant-v2 -p scoop
-scoop install ai-helpdesk-assistant
-```
-
 **Manual:** Download the latest `.exe` from [GitHub Releases](https://github.com/gyzhoe/assistant-v2/releases/latest) and run it.
 
 ## What It Does
