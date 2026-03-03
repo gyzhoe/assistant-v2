@@ -66,12 +66,13 @@ jobs:
           }
           Write-Host "Ollama SHA256 verified OK"
 
-          Expand-Archive -Path "installer/deps/ollama.zip" -DestinationPath "installer/deps/ollama-extract" -Force
-          $ollamaExe = Get-ChildItem -Path "installer/deps/ollama-extract" -Recurse -Filter "ollama.exe" | Select-Object -First 1
-          Copy-Item $ollamaExe.FullName "installer/deps/ollama.exe"
-          Remove-Item "installer/deps/ollama.zip", "installer/deps/ollama-extract" -Recurse -Force
-          $size = [math]::Round((Get-Item installer/deps/ollama.exe).Length / 1MB, 1)
-          Write-Host "Ollama standalone: $size MB"
+          # Extract full distribution (ollama.exe + lib/ollama/ with CUDA/CPU runners)
+          # Everything must live inside {app}\tools\ for AppLocker compatibility
+          Expand-Archive -Path "installer/deps/ollama.zip" -DestinationPath "installer/deps/ollama" -Force
+          Remove-Item "installer/deps/ollama.zip" -Force
+          $fileCount = (Get-ChildItem -Path "installer/deps/ollama" -Recurse -File).Count
+          $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/ollama" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+          Write-Host "Ollama distribution: $fileCount files, $totalSize MB total"
       - name: Download uv standalone
         shell: pwsh
         run: |

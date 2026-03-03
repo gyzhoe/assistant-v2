@@ -65,6 +65,10 @@ test-results/
 installer/deps/
 installer/output/
 
+# Installer signing key (never commit private key material)
+installer/extension.pem
+installer/extension-id.txt
+
 # Temporary
 *.tmp
 *.bak
