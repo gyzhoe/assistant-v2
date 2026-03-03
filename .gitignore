@@ -65,6 +65,13 @@ test-results/
 installer/deps/
 installer/output/
 
+# Installer signing key (never commit private key material)
+installer/extension.pem
+installer/extension-id.txt
+
+# Local dev tools (Ollama binary for development)
+tools/
+
 # Temporary
 *.tmp
 *.bak

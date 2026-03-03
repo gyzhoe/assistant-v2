@@ -83,8 +83,9 @@ Source: "..\backend\static\manage\*"; DestDir: "{app}\backend\static\manage"; Fl
 ; uv standalone binary (downloaded by CI)
 Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
-; Ollama standalone binary (downloaded by CI)
-Source: "deps\ollama.exe";            DestDir: "{app}\tools";             Flags: ignoreversion; Components: ollama
+; Ollama full distribution — exe + lib/ollama/ (CUDA/CPU runners, DLLs)
+; Everything under {app}\tools\ for AppLocker compatibility
+Source: "deps\ollama\*";              DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: ollama
 
 ; Bundled Python 3.13 standalone (offline install)
 Source: "deps\python\*";             DestDir: "{app}\deps\python";       Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend

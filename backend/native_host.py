@@ -18,6 +18,7 @@ import sys
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_DIR = os.path.dirname(BACKEND_DIR)
 OLLAMA_EXE = os.path.join(APP_DIR, "tools", "ollama.exe")
+OLLAMA_RUNNERS_DIR = os.path.join(APP_DIR, "tools", "lib", "ollama")
 LOG_FILE = os.path.join(BACKEND_DIR, "native_host.log")
 
 # subprocess.CREATE_NO_WINDOW only exists on Windows; use 0 on other platforms
@@ -73,6 +74,14 @@ def _is_port_listening(port: int) -> bool:
     return len(_find_pids_on_port(port)) > 0
 
 
+def _ollama_env() -> dict[str, str]:
+    """Build environment for Ollama with runners dir set for AppLocker compat."""
+    env = os.environ.copy()
+    if os.path.isdir(OLLAMA_RUNNERS_DIR):
+        env["OLLAMA_RUNNERS_DIR"] = OLLAMA_RUNNERS_DIR
+    return env
+
+
 def start_backend() -> dict:
     venv_python = os.path.join(BACKEND_DIR, ".venv", "Scripts", "python.exe")
     if not os.path.exists(venv_python):
@@ -90,6 +99,7 @@ def start_backend() -> dict:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=_CREATION_FLAGS,
+                env=_ollama_env(),
             )
             ollama_started = True
         except Exception as e:
@@ -151,6 +161,7 @@ def start_ollama() -> dict:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=_CREATION_FLAGS,
+            env=_ollama_env(),
         )
         return {"ok": True, "status": "starting"}
     except Exception as e:
