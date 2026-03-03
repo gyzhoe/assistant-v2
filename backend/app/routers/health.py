@@ -5,6 +5,7 @@ import secrets
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
@@ -15,6 +16,12 @@ from app.services.audit import audit_log
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
+
+# Derive app install directory (backend/ -> app root) for bundled Ollama path.
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_APP_DIR = _BACKEND_DIR.parent
+_BUNDLED_OLLAMA = _APP_DIR / "tools" / "ollama.exe"
+_OLLAMA_RUNNERS_DIR = _APP_DIR / "tools" / "lib" / "ollama"
 
 _token_header = APIKeyHeader(name="X-Extension-Token", auto_error=False)
 
@@ -104,19 +111,23 @@ async def start_ollama(request: Request) -> dict[str, str]:
     except Exception:
         pass
 
-    if sys.platform == "win32":
-        subprocess.Popen(
-            ["ollama", "serve"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-    else:
-        subprocess.Popen(
-            ["ollama", "serve"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    cmd: list[str] = (
+        [str(_BUNDLED_OLLAMA), "serve"]
+        if _BUNDLED_OLLAMA.exists()
+        else ["ollama", "serve"]
+    )
+    env = os.environ.copy()
+    if _OLLAMA_RUNNERS_DIR.is_dir():
+        env["OLLAMA_RUNNERS_DIR"] = str(_OLLAMA_RUNNERS_DIR)
+
+    creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creation_flags,
+        env=env,
+    )
     return {"status": "starting"}
 
 

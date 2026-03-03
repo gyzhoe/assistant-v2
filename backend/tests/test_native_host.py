@@ -118,24 +118,44 @@ class TestFindPidsOnPort:
         assert pids == []
 
 
+class TestKillOllama:
+    def test_kills_both_executables(self):
+        with patch("native_host.subprocess.run") as mock_run:
+            native_host._kill_ollama()
+        assert mock_run.call_count == 2
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        assert ["taskkill", "/IM", "ollama.exe", "/F"] in calls
+        assert ["taskkill", "/IM", "ollama_llama_server.exe", "/F"] in calls
+
+
 class TestStopBackend:
-    def test_kills_found_pids(self):
+    def test_kills_found_pids_and_ollama(self):
         with (
             patch("native_host._find_pids_on_port", return_value=[5432]),
             patch("native_host.subprocess.run") as mock_run,
         ):
             result = native_host.stop_backend()
-        assert result == {"ok": True, "status": "stopped", "pids": [5432]}
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert args == ["taskkill", "/PID", "5432", "/T", "/F"]
+        assert result["ok"] is True
+        assert result["status"] == "stopped"
+        assert result["pids"] == [5432]
+        assert result["ollama_stopped"] is True
+        # 1 taskkill for backend PID + 2 for ollama executables
+        assert mock_run.call_count == 3
 
-    def test_returns_not_running_when_no_pids(self):
-        with patch("native_host._find_pids_on_port", return_value=[]):
+    def test_still_kills_ollama_when_no_backend_pids(self):
+        with (
+            patch("native_host._find_pids_on_port", return_value=[]),
+            patch("native_host.subprocess.run") as mock_run,
+        ):
             result = native_host.stop_backend()
-        assert result == {"ok": True, "status": "not_running"}
+        assert result["ok"] is True
+        assert result["status"] == "stopped"
+        assert result["pids"] == []
+        assert result["ollama_stopped"] is True
+        # 2 taskkill calls for ollama executables only
+        assert mock_run.call_count == 2
 
-    def test_kills_multiple_pids(self):
+    def test_kills_multiple_pids_and_ollama(self):
         with (
             patch("native_host._find_pids_on_port", return_value=[100, 200]),
             patch("native_host.subprocess.run") as mock_run,
@@ -143,7 +163,9 @@ class TestStopBackend:
             result = native_host.stop_backend()
         assert result["ok"] is True
         assert result["pids"] == [100, 200]
-        assert mock_run.call_count == 2
+        assert result["ollama_stopped"] is True
+        # 2 backend PIDs + 2 ollama executables
+        assert mock_run.call_count == 4
 
 
 class TestStopOllama:

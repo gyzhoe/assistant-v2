@@ -169,30 +169,8 @@ def start_ollama() -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def stop_backend() -> dict:
-    """Stop the backend by killing processes listening on port 8765."""
-    pids = _find_pids_on_port(8765)
-    if not pids:
-        log("stop_backend: no process found on port 8765")
-        return {"ok": True, "status": "not_running"}
-
-    log(f"stop_backend: killing PIDs {pids}")
-    for pid in pids:
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=_CREATION_FLAGS,
-            )
-        except Exception as e:
-            log(f"stop_backend: failed to kill PID {pid}: {e}")
-    return {"ok": True, "status": "stopped", "pids": pids}
-
-
-def stop_ollama() -> dict:
-    """Stop Ollama by killing its process tree."""
-    log("stop_ollama: killing ollama.exe and ollama_llama_server.exe")
+def _kill_ollama() -> None:
+    """Kill Ollama processes by image name (shared by stop_backend and stop_ollama)."""
     for exe in ("ollama.exe", "ollama_llama_server.exe"):
         try:
             subprocess.run(
@@ -202,7 +180,37 @@ def stop_ollama() -> dict:
                 creationflags=_CREATION_FLAGS,
             )
         except Exception as e:
-            log(f"stop_ollama: failed to kill {exe}: {e}")
+            log(f"_kill_ollama: failed to kill {exe}: {e}")
+
+
+def stop_backend() -> dict:
+    """Stop the backend and Ollama (symmetric with start_backend which starts both)."""
+    pids = _find_pids_on_port(8765)
+    if not pids:
+        log("stop_backend: no process found on port 8765")
+    else:
+        log(f"stop_backend: killing PIDs {pids}")
+        for pid in pids:
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=_CREATION_FLAGS,
+                )
+            except Exception as e:
+                log(f"stop_backend: failed to kill PID {pid}: {e}")
+
+    log("stop_backend: also killing Ollama (symmetric with start_backend)")
+    _kill_ollama()
+
+    return {"ok": True, "status": "stopped", "pids": pids if pids else [], "ollama_stopped": True}
+
+
+def stop_ollama() -> dict:
+    """Stop Ollama by killing its process tree."""
+    log("stop_ollama: killing ollama.exe and ollama_llama_server.exe")
+    _kill_ollama()
     return {"ok": True, "status": "stopped"}
 
 
