@@ -110,6 +110,9 @@ Source: "scripts\import-models.ps1";     DestDir: "{app}\scripts";          Flag
 Source: "scripts\check-health.ps1";      DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\uninstall-cleanup.ps1"; DestDir: "{app}\scripts";          Flags: ignoreversion
 
+; GUI model-pull script (launched via pythonw.exe — no console window)
+Source: "scripts\pull-models-gui.py";    DestDir: "{app}\scripts";          Flags: ignoreversion
+
 [Icons]
 ; Interactive diagnostic tools — keep visible PowerShell
 Name: "{group}\Setup LLM Models";    Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""
@@ -129,8 +132,8 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\s
 ; Import bundled LLM models (copies pre-downloaded model files)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
 
-; Pull LLM models from Ollama registry (hidden — progress shown in installer status bar)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\pull-models.ps1"" -NonInteractive"; StatusMsg: "Downloading LLM models (~9.5 GB — this may take a while)..."; Flags: waituntilterminated runhidden; Components: ollama
+; Pull LLM models with native progress window (no console, no browser dependency)
+Filename: "{app}\backend\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\pull-models-gui.py"" --app-dir ""{app}"""; StatusMsg: "Downloading LLM models..."; Flags: waituntilterminated; Components: ollama
 
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
