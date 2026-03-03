@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced NSSM Windows services with native messaging — sidebar "Start Backend" button now starts backend and Ollama directly via OS process management
+- Bundled Ollama as standalone binary in `{app}\tools\` instead of running OllamaSetup.exe — AppLocker-friendly, no external install
+- Simplified installer flow — removed service registration, tray monitor, and dashboard components
+- "Start Backend" now also starts Ollama automatically if not already running
+- Native messaging host registered automatically at install time (no manual script required)
+- Uninstaller no longer shows NSSM popup windows — clean, silent removal
+- `native_host.cmd` uses venv Python instead of system PATH
+- Installer scripts (`pull-models.ps1`) use bundled Ollama path instead of bare `ollama` command
+
+### Added
+
+- Deterministic extension ID via fixed RSA public key in manifest.json — consistent ID `inapklomefcicbehlgihcidbmboiimgc` across all machines
+- Auto-generated native messaging manifest at install time with correct paths and extension ID
+- Registry-based native messaging host registration (HKCU, auto-cleaned on uninstall)
+
+### Removed
+
+- NSSM service manager — no longer bundled or used
+- System tray monitor (`tray-monitor.ps1`) — sidebar handles status display
+- Dashboard GUI (`dashboard.ps1`) — sidebar replaces all dashboard functionality
+- `stop-backend.ps1` — sidebar handles stop via native messaging
+- `register-native-host.ps1` — installer handles registration automatically
+- `launch-hidden.vbs` — was only needed for tray monitor
+- `service` and `ollamasvc` installer components
+
 ## [1.13.0] — Sprint 6 Polish (2026-03-03)
 
 ### Security
