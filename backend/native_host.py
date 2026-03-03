@@ -16,6 +16,8 @@ import subprocess
 import sys
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_DIR = os.path.dirname(BACKEND_DIR)
+OLLAMA_EXE = os.path.join(APP_DIR, "tools", "ollama.exe")
 LOG_FILE = os.path.join(BACKEND_DIR, "native_host.log")
 
 # subprocess.CREATE_NO_WINDOW only exists on Windows; use 0 on other platforms
@@ -44,11 +46,54 @@ def send_message(msg: dict) -> None:
     sys.stdout.buffer.flush()
 
 
+def _find_pids_on_port(port: int) -> list[int]:
+    """Parse ``netstat -ano -p TCP`` to find PIDs listening on *port*."""
+    try:
+        output = subprocess.check_output(
+            ["netstat", "-ano", "-p", "TCP"],
+            text=True,
+            creationflags=_CREATION_FLAGS,
+        )
+    except Exception:
+        return []
+
+    pids: set[int] = set()
+    pattern = re.compile(rf":\s*{port}\s+.*LISTENING\s+(\d+)", re.IGNORECASE)
+    for line in output.splitlines():
+        m = pattern.search(line)
+        if m:
+            pid = int(m.group(1))
+            if pid != 0:
+                pids.add(pid)
+    return sorted(pids)
+
+
+def _is_port_listening(port: int) -> bool:
+    """Check if any process is listening on the given port."""
+    return len(_find_pids_on_port(port)) > 0
+
+
 def start_backend() -> dict:
     venv_python = os.path.join(BACKEND_DIR, ".venv", "Scripts", "python.exe")
     if not os.path.exists(venv_python):
         log(f"venv not found at {venv_python}")
         return {"ok": False, "error": "Backend venv not found. Run setup first."}
+
+    # Start Ollama first if not already running
+    ollama_started = False
+    if not _is_port_listening(11434):
+        cmd = [OLLAMA_EXE, "serve"] if os.path.exists(OLLAMA_EXE) else ["ollama", "serve"]
+        log(f"Ollama not running — starting: {cmd[0]}")
+        try:
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=_CREATION_FLAGS,
+            )
+            ollama_started = True
+        except Exception as e:
+            log(f"Warning: could not start Ollama: {e}")
 
     log_out = os.path.join(BACKEND_DIR, "backend_stdout.log")
     log_err = os.path.join(BACKEND_DIR, "backend_stderr.log")
@@ -64,7 +109,7 @@ def start_backend() -> dict:
                 creationflags=_CREATION_FLAGS,
             )
         log(f"Started PID={proc.pid}")
-        return {"ok": True, "status": "starting", "pid": proc.pid}
+        return {"ok": True, "status": "starting", "pid": proc.pid, "ollama_started": ollama_started}
     except Exception as e:
         log(f"Error starting backend: {e}")
         return {"ok": False, "error": str(e)}
@@ -98,10 +143,11 @@ def get_token() -> dict:
 
 
 def start_ollama() -> dict:
-    log("Starting Ollama")
+    cmd = [OLLAMA_EXE, "serve"] if os.path.exists(OLLAMA_EXE) else ["ollama", "serve"]
+    log(f"Starting Ollama: {cmd[0]}")
     try:
         subprocess.Popen(
-            ["ollama", "serve"],
+            cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=_CREATION_FLAGS,
@@ -110,28 +156,6 @@ def start_ollama() -> dict:
     except Exception as e:
         log(f"Error starting Ollama: {e}")
         return {"ok": False, "error": str(e)}
-
-
-def _find_pids_on_port(port: int) -> list[int]:
-    """Parse ``netstat -ano -p TCP`` to find PIDs listening on *port*."""
-    try:
-        output = subprocess.check_output(
-            ["netstat", "-ano", "-p", "TCP"],
-            text=True,
-            creationflags=_CREATION_FLAGS,
-        )
-    except Exception:
-        return []
-
-    pids: set[int] = set()
-    pattern = re.compile(rf":\s*{port}\s+.*LISTENING\s+(\d+)", re.IGNORECASE)
-    for line in output.splitlines():
-        m = pattern.search(line)
-        if m:
-            pid = int(m.group(1))
-            if pid != 0:
-                pids.add(pid)
-    return sorted(pids)
 
 
 def stop_backend() -> dict:

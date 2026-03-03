@@ -1,2 +1,2 @@
 @echo off
-python "%~dp0native_host.py"
+"%~dp0.venv\Scripts\python.exe" "%~dp0native_host.py"

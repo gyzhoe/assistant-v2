@@ -28,9 +28,6 @@ Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 # --- Detect environment ---
-$ollamaDir = Join-Path $env:LOCALAPPDATA "Programs\Ollama"
-$ollamaUninstaller = Join-Path $ollamaDir "unins000.exe"
-$ollamaInstalled = Test-Path $ollamaUninstaller
 $modelsDir = Join-Path $env:USERPROFILE ".ollama\models"
 $modelsExist = Test-Path $modelsDir
 
@@ -62,7 +59,7 @@ $venvSizeMB = Get-DirSizeMB $venvDir
 $appDataExist = $chromaExist -or $logsExist -or $envExist -or $auditExist
 
 # If nothing to clean up, exit silently
-if (-not $ollamaInstalled -and -not $modelsExist -and -not $appDataExist -and -not $venvExist) {
+if (-not $modelsExist -and -not $appDataExist -and -not $venvExist) {
     exit 0
 }
 
@@ -76,7 +73,7 @@ $MUTED  = [System.Drawing.Color]::FromArgb(255, 107, 114, 128)
 # --- Build the dialog ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AI Helpdesk Assistant - Cleanup Options"
-$form.Size = New-Object System.Drawing.Size(480, 420)
+$form.Size = New-Object System.Drawing.Size(480, 390)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
@@ -153,11 +150,6 @@ $chkAppData = Add-CleanupOption "Remove application data (KB, logs, config)" $ap
 $venvNote = if ($venvSizeMB -gt 0) { "Python virtual environment (~$venvSizeMB MB)" } else { $null }
 $chkVenv = Add-CleanupOption "Remove Python environment (.venv)" $venvExist $venvExist $(
     if (-not $venvExist) { "No Python environment found" } else { $venvNote }
-)
-
-# --- Ollama ---
-$chkOllama = Add-CleanupOption "Remove Ollama LLM Runtime (~100 MB)" $ollamaInstalled $ollamaInstalled $(
-    if (-not $ollamaInstalled) { "Ollama not found - nothing to remove" } else { $null }
 )
 
 # --- Models ---
@@ -238,14 +230,6 @@ if ($chkAppData.Checked -and $appDataExist) {
 # Remove Python venv
 if ($chkVenv.Checked -and $venvExist) {
     try { Remove-Item -Path $venvDir -Recurse -Force -ErrorAction Stop } catch {}
-}
-
-# Remove Ollama runtime
-if ($chkOllama.Checked -and $ollamaInstalled) {
-    try {
-        $proc = Start-Process -FilePath $ollamaUninstaller -ArgumentList "/VERYSILENT /NORESTART" -Wait -PassThru
-        Get-Process -Name "ollama" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    } catch {}
 }
 
 # Remove LLM model data
