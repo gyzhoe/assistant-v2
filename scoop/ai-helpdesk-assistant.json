@@ -1,0 +1,23 @@
+{
+    "version": "1.14.0",
+    "description": "Local AI assistant for SolarWinds Web Help Desk — Edge extension + FastAPI backend, all inference via Ollama.",
+    "homepage": "https://github.com/gyzhoe/assistant-v2",
+    "license": "MIT",
+    "url": "https://github.com/gyzhoe/assistant-v2/releases/download/v1.14.0/AIHelpdeskAssistant-Setup-1.14.0.exe",
+    "hash": "TODO_HASH",
+    "innosetup": true,
+    "installer": {
+        "args": [
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-"
+        ]
+    },
+    "checkver": {
+        "github": "https://github.com/gyzhoe/assistant-v2"
+    },
+    "autoupdate": {
+        "url": "https://github.com/gyzhoe/assistant-v2/releases/download/v$version/AIHelpdeskAssistant-Setup-$version.exe"
+    }
+}
