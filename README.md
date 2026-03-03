@@ -2,7 +2,7 @@
 
 > **Proof of Concept** — This project is a working PoC. The current architecture runs the AI backend locally on the technician's machine via [Ollama](https://ollama.com). The intended end goal is to move AI inference to a shared server or cloud instance (e.g. Azure OpenAI, a self-hosted GPU server), with the Edge extension connecting to that remote backend instead. The local-Ollama setup exists to validate the concept without infrastructure costs.
 
-A local AI assistant for SolarWinds Web Help Desk (on-premises), delivered as a Microsoft Edge browser extension. All AI inference currently runs locally via [Ollama](https://ollama.com) — no data leaves your network.
+A local AI assistant for [SolarWinds Web Help Desk](https://www.solarwinds.com/web-help-desk) (on-premises), delivered as a Microsoft Edge browser extension with a Python backend. All AI inference runs locally via Ollama — no data leaves your network.
 
 ## Installation
 
@@ -13,42 +13,65 @@ irm https://raw.githubusercontent.com/gyzhoe/assistant-v2/main/scripts/install.p
 
 **Manual:** Download the latest `.exe` from [GitHub Releases](https://github.com/gyzhoe/assistant-v2/releases/latest) and run it.
 
+The installer bundles everything needed to run: Python 3.13, Ollama (with CUDA, Vulkan, and CPU runners), backend dependencies, and the Edge extension. No prerequisites required.
+
+After install:
+1. Load the extension in Edge: `edge://extensions` → Developer mode → Load unpacked → select the extension folder
+2. Pull the AI models: Start Menu → **Setup LLM Models**
+3. Open a WHD ticket and press `Alt+Shift+H` to open the sidebar
+
 ## What It Does
 
 When a technician opens a WHD ticket, the assistant:
-1. **Reads** the ticket subject, description, requester, category, and status automatically
-2. **Retrieves** relevant context from past resolved tickets and KB articles (RAG via ChromaDB)
-3. **Generates** a professional reply suggestion using a local LLM (default: `llama3.2:3b`)
-4. **Inserts** the reply into the WHD reply textarea with one click
+1. **Reads** the ticket subject, description, requester, category, and status from the page automatically
+2. **Retrieves** relevant context from past resolved tickets and KB articles via RAG (ChromaDB)
+3. **Searches** [Microsoft Learn](https://learn.microsoft.com) for relevant documentation in parallel
+4. **Generates** a professional reply suggestion using a local LLM (default: `qwen2.5:14b`)
+5. **Inserts** the reply into the WHD reply textarea with one click
 
-### Knowledge Import
+### Knowledge Base
 
-The sidebar includes a **Knowledge Base** panel for importing documents directly into ChromaDB — no CLI required:
-- Drag-and-drop file upload (PDF, HTML, JSON, CSV)
-- URL ingestion: paste a URL and the backend fetches, extracts, and chunks it
-- Progress tracking with per-file status and cancel support
-- Collection management: view document counts and clear collections
+- **Sidebar import** — drag-and-drop file upload (PDF, HTML, JSON, CSV) and URL ingestion directly from the sidebar
+- **Management page** — full KB management SPA at `/manage` for browsing, tagging, and deleting articles
+- **Two-phase RAG** — articles are tagged on import; retrieval filters by tag relevance before scoring by similarity
+- **Microsoft Learn** — live search runs in parallel with local KB lookups, adding documentation context without pre-ingestion
 
-### Microsoft Learn Live Search
+### Feedback Loop
 
-When generating a reply, the backend searches [Microsoft Learn](https://learn.microsoft.com) for documentation matching the ticket's subject and category. Results are included alongside your local KB articles as additional RAG context — no pre-ingestion required. This runs in parallel with the local ChromaDB lookup, so it adds no latency when the network is fast. Gracefully degrades if the search fails.
+Technicians can rate generated replies (thumbs up/down) with optional text feedback. Positively-rated replies are stored and used as additional RAG context for future generations, improving quality over time.
 
 ## Architecture
 
 ```
-Edge Extension (sidebar + content script)
+Edge Extension
+├── Content Script ─── reads WHD DOM, inserts replies
+├── Background SW ──── relays messages, native messaging lifecycle
+└── Sidebar UI ─────── React + Zustand, calls backend API
         ↕ fetch → http://localhost:8765
-FastAPI Backend
+FastAPI Backend (async, pure ASGI middleware)
+├── /generate ───── LLM reply generation with RAG context
+├── /ingest ─────── file upload + URL ingestion pipeline
+├── /kb ─────────── article CRUD, tagging, management
+├── /auth ───────── HttpOnly cookie sessions
+├── /health ─────── readiness + startup phase reporting
+├── /models ─────── Ollama model listing
+└── /feedback ───── reply rating storage
         ↕                      ↕
    Ollama (LLM + embed)   ChromaDB (vector store)
 ```
 
+The extension uses a three-layer message relay: content script ↔ background service worker ↔ sidebar. Messages are typed via discriminated unions in `src/shared/messages.ts`. The backend runs pure ASGI middleware (no `BaseHTTPMiddleware`) for streaming-safe request handling.
+
+See [Architecture Guide](docs/architecture.md) and [API Contract](docs/api-contract.md) for details.
+
 ## Prerequisites
+
+Only needed for development — the installer handles everything for end users.
 
 | Tool | Version | Purpose |
 |---|---|---|
 | [Node.js](https://nodejs.org) | ≥ 20 | Extension build |
-| [Python](https://python.org) | 3.13 | Backend (3.14 not supported) |
+| [Python](https://python.org) | 3.13 | Backend runtime (3.14 breaks chromadb) |
 | [uv](https://docs.astral.sh/uv/) | latest | Python package manager |
 | [Ollama](https://ollama.com) | latest | Local LLM inference |
 | Microsoft Edge | latest | Extension host |
@@ -56,27 +79,27 @@ FastAPI Backend
 ## Quick Start
 
 ```bash
-# Clone and setup
-git clone <repo-url>
-cd assistant
+# Clone
+git clone https://github.com/gyzhoe/assistant-v2.git
+cd assistant-v2
 npm install
 
-# Terminal 1: Start Ollama
+# Terminal 1: Ollama
 ollama serve
+ollama pull qwen2.5:14b
+ollama pull nomic-embed-text
 
-# Terminal 2: Start backend
+# Terminal 2: Backend
 cd backend
 python -m uv sync --dev --python 3.13
 python -m uv run uvicorn app.main:app --port 8765 --reload
 
-# Terminal 3: Build extension
-npm run build
+# Terminal 3: Extension
+npm run build    # or: npm run dev (watch mode)
 
-# Load extension in Edge:
-# 1. Open edge://extensions
-# 2. Enable Developer mode
-# 3. Click "Load unpacked" → select extension/dist/
-# 4. Open a WHD ticket → press Alt+Shift+H
+# Load in Edge:
+# edge://extensions → Developer mode → Load unpacked → extension/dist/
+# Open a WHD ticket → Alt+Shift+H
 ```
 
 ## Ingest Your Data
@@ -85,70 +108,108 @@ npm run build
 
 1. Open the sidebar (`Alt+Shift+H`) on any WHD ticket
 2. Expand the **Knowledge Base** panel
-3. Drag-and-drop files (PDF, HTML, JSON, CSV) into the Import tab
-4. Click **Import** and wait for processing to complete
+3. Drag-and-drop files (PDF, HTML, JSON, CSV) or paste a URL
+4. Click **Import** and wait for processing
 
 ### Via CLI
 
 ```bash
 cd backend
 
-# Import resolved tickets (WHD JSON/CSV export)
+# Resolved tickets (WHD JSON/CSV export)
 python -m uv run python -m ingestion.cli ingest-tickets export.json
 
-# Import KB articles
+# KB articles
 python -m uv run python -m ingestion.cli ingest-kb-html ./kb_articles/
 python -m uv run python -m ingestion.cli ingest-kb-pdf ./kb_pdfs/
 
-# Check ingestion status
+# Check status
 python -m uv run python -m ingestion.cli status
 ```
 
 ## Development
 
+### Testing
+
 ```bash
-# Run all tests
-npx --workspace=extension vitest run    # Extension unit tests (60 tests)
-cd backend && python -m uv run pytest tests/ -v  # Backend tests (152 tests)
+# Extension unit tests (186 tests)
+npx --workspace=extension vitest run
 
-# Type checking
-npm run typecheck
-cd backend && python -m uv run mypy app/ ingestion/
+# Backend tests (362 tests)
+cd backend && python -m uv run pytest tests/ -v --tb=short
 
-# Linting
-npm run lint
-cd backend && python -m uv run ruff check .
+# E2E tests — Management SPA (16 tests)
+npx --workspace=extension playwright test
 
-# Production build
-npm run build
+# Run a single test file
+npx --workspace=extension vitest run tests/unit/someFile.test.ts
+cd backend && python -m uv run pytest tests/test_health.py -v
+```
+
+### Linting and Type Checking
+
+```bash
+# Extension
+npm run typecheck     # tsc --noEmit (strict, no any)
+npm run lint          # eslint, zero warnings
+
+# Backend
+cd backend
+python -m uv run mypy app/ ingestion/   # strict mode
+python -m uv run ruff check .           # line length 100
+```
+
+### Build
+
+```bash
+npm run build    # two-stage Vite build (sidebar ESM + content script IIFE)
+npm run dev      # watch mode
 ```
 
 ## Project Structure
 
 ```
 assistant/
-├── extension/      TypeScript + React 18 + Vite + Manifest V3
-├── backend/        Python FastAPI + ChromaDB + Ollama (httpx)
-├── docs/           Architecture docs, API contract, WHD DOM selectors
-├── scripts/        Developer setup script
-└── .github/        CI workflows (backend + extension + Claude review)
+├── extension/
+│   └── src/
+│       ├── sidebar/        Sidebar UI — React + Zustand + TanStack Query
+│       ├── management/     KB Management SPA (/manage page)
+│       ├── content/        Content script — WHD DOM reader + reply inserter
+│       ├── background/     Service worker — message relay + native messaging
+│       ├── options/        Extension options page
+│       ├── shared/         Message types, constants, utilities
+│       └── lib/            Shared UI components
+├── backend/
+│   └── app/
+│       ├── routers/        API endpoints (generate, ingest, kb, auth, health, feedback, models)
+│       ├── services/       LLM, embedding, RAG, Microsoft Docs, session store, audit
+│       ├── middleware/      CSRF protection, security (rate limiting, size limits, CORS, auth)
+│       └── config.py       pydantic-settings configuration
+├── installer/              Inno Setup script + assets
+├── scripts/                Install script, dev setup
+├── docs/                   Architecture, API contract, security guide
+└── .github/workflows/      CI (backend + extension) + release pipeline
 ```
 
 ## Configuration
 
-The extension options page (right-click extension icon → Options) lets you configure:
+### Extension Options
+
+Right-click the extension icon → **Options**:
 - Backend URL (default: `http://localhost:8765`)
-- LLM model selection
+- LLM model selection (auto-populated from Ollama)
 - DOM selector overrides for custom WHD installations
 - Prompt suffix customization
-- Theme (light/dark/system)
+- Theme (light / dark / system)
 
-Backend configuration via `.env` in `backend/`:
+### Backend Environment
+
+Create `backend/.env`:
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
 CHROMA_PATH=./chroma_data
 CORS_ORIGIN=chrome-extension://<your-extension-id>
-DEFAULT_MODEL=llama3.2:3b
+DEFAULT_MODEL=qwen2.5:14b
 API_TOKEN=<generated-secret>
 MAX_UPLOAD_BYTES=52428800
 ```
@@ -156,18 +217,19 @@ MAX_UPLOAD_BYTES=52428800
 ## Security
 
 - All inference is local — no data sent to external services (Microsoft Learn search is opt-in)
-- CORS is locked to your specific extension origin (not `*`)
-- API token authentication via `X-Extension-Token` header
-- Rate limiting: 20 req/min for generation, 5 req/min for file/URL ingestion
-- Request size limits: 64 KB for API calls, 50 MB for file uploads, 5 MB for URL fetch
-- Concurrency control: single ingestion at a time (409 on concurrent attempts)
-- SSRF prevention for URL ingestion: private IP blocking, redirect re-validation, scheme whitelist
-- Backend validates all inputs via Pydantic
+- CORS locked to your specific extension origin (never `*`)
+- API token auth via `X-Extension-Token` header + HttpOnly cookie sessions
+- CSRF protection on state-changing endpoints
+- Rate limiting: 20 req/min generation, 5 req/min ingestion
+- Request size limits: 64 KB API calls, 50 MB file uploads, 5 MB URL fetch
+- SSRF prevention for URL ingestion: private IP blocking, redirect validation, scheme whitelist
+- Input validation via Pydantic on all endpoints
+- Audit logging for security-sensitive actions
 - See [Security Guide](docs/security.md) for production hardening
 
 ## License
 
-MIT
+MIT — See [LICENSE](installer/assets/license.txt)
 
 ## Acknowledgments
 
