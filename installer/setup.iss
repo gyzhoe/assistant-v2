@@ -29,6 +29,8 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 DisableDirPage=no
+AppendDefaultDirName=no
+UsePreviousAppDir=yes
 LicenseFile=assets\license.txt
 UninstallDisplayName={#MyAppName}
 VersionInfoVersion={#MyAppVersion}
@@ -140,6 +142,8 @@ Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: 
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
 [UninstallRun]
+; Kill Ollama processes by name before cleanup (locks DLLs if left running)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated
 ; Cleanup dialog — offer Ollama/model removal before anything is torn down
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated
 ; Kill backend on port 8765
@@ -198,6 +202,13 @@ begin
          ewWaitUntilTerminated, ResultCode);
   end;
 
+  // Kill Ollama processes by name (may run from different locations)
+  Exec('powershell.exe',
+    '-ExecutionPolicy Bypass -Command "' +
+    'Get-Process -Name ''ollama'',''ollama_llama_server'' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; ' +
+    'Start-Sleep -Seconds 2"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
   // Kill backend process listening on port 8765 (covers manual starts)
   Exec('powershell.exe',
     '-ExecutionPolicy Bypass -Command "' +
@@ -237,10 +248,19 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  CudaDll: String;
 begin
   if CurStep = ssPostInstall then
   begin
     ForceDirectories(ExpandConstant('{app}\logs'));
     GenerateNativeMessagingManifest;
+
+    // Verify CUDA runners installed correctly (diagnostic log)
+    CudaDll := ExpandConstant('{app}\tools\lib\ollama\cuda_v12\ggml-cuda.dll');
+    if FileExists(CudaDll) then
+      Log('CUDA runner verified: ' + CudaDll)
+    else
+      Log('WARNING: CUDA runner not found at ' + CudaDll + ' — GPU acceleration may be unavailable');
   end;
 end;

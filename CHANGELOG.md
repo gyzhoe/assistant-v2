@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Installer directory double-nesting — added `AppendDefaultDirName=no` to prevent Inno Setup from appending `AIHelpdeskAssistant` when the user browses to a folder already containing it
+- Ollama processes (`ollama`, `ollama_llama_server`) now killed by name before reinstall and uninstall — prevents locked DLLs from stale Ollama instances
+
+### Added
+
+- `UsePreviousAppDir=yes` explicit directive in installer for clarity
+- CUDA runner verification log at post-install — logs whether `ggml-cuda.dll` was installed correctly for GPU acceleration diagnostics
+
 ### Changed
 
 - Replaced NSSM Windows services with native messaging — sidebar "Start Backend" button now starts backend and Ollama directly via OS process management
