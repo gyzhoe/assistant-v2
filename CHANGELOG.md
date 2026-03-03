@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Installer directory double-nesting — added `AppendDefaultDirName=no` to prevent Inno Setup from appending `AIHelpdeskAssistant` when the user browses to a folder already containing it
 - Ollama processes (`ollama`, `ollama_llama_server`) now killed by name before reinstall and uninstall — prevents locked DLLs from stale Ollama instances
+- `stop_backend` now also kills Ollama processes (symmetric with `start_backend` which starts both) — previously Ollama kept running after backend stop
+- `/ollama/start` health endpoint now uses bundled `tools/ollama.exe` path with fallback, matching native_host.py behavior
+- `pull-models-gui.py` and `/ollama/start` now set `OLLAMA_RUNNERS_DIR` env var for AppLocker compatibility
 
 ### Added
 

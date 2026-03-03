@@ -46,13 +46,23 @@ def ollama_reachable() -> bool:
         return False
 
 
+def _ollama_env(ollama_exe: str) -> dict[str, str]:
+    """Build environment for Ollama with runners dir set for AppLocker compat."""
+    env = os.environ.copy()
+    runners_dir = os.path.join(os.path.dirname(ollama_exe), "lib", "ollama")
+    if os.path.isdir(runners_dir):
+        env["OLLAMA_RUNNERS_DIR"] = runners_dir
+    return env
+
+
 def ensure_ollama_running(ollama_exe: str) -> bool:
     if ollama_reachable():
         return True
     if os.path.isfile(ollama_exe):
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         subprocess.Popen([ollama_exe, "serve"], creationflags=flags,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         env=_ollama_env(ollama_exe))
     deadline = time.time() + OLLAMA_START_TIMEOUT
     while time.time() < deadline:
         time.sleep(1)
