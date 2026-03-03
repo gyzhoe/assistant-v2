@@ -129,6 +129,9 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\s
 ; Import bundled LLM models (copies pre-downloaded model files)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
 
+; Post-install: pull LLM models (visible window so user sees download progress)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""; Description: "Download LLM models (~9.5 GB — requires internet)"; Flags: postinstall nowait skipifsilent; Components: ollama
+
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
