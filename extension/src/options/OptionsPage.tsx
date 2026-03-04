@@ -290,7 +290,7 @@ export default function OptionsPage(): React.ReactElement {
             type="button"
             onClick={() => setSelectorsExpanded((v) => !v)}
             className="options-expand-btn"
-            aria-expanded={selectorsExpanded ? 'true' : 'false'}
+            aria-expanded={selectorsExpanded}
             aria-controls="selector-overrides"
           >
             <svg
