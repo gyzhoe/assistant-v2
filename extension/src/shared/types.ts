@@ -130,6 +130,19 @@ export interface KBArticleListItem {
   tags?: string[]
 }
 
+/** Toast notification */
+export interface ToastMessage {
+  id: string
+  text: string
+  type: 'success' | 'error' | 'info'
+  /** When true, the toast does not auto-dismiss — user must close it manually. */
+  persistent?: boolean
+  action?: {
+    label: string
+    onClick: () => void
+  }
+}
+
 /** KB article list response */
 export interface KBArticleListResponse {
   articles: KBArticleListItem[]

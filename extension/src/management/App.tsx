@@ -7,7 +7,7 @@ import { ArticleList } from './components/ArticleList'
 import { ImportSection } from './components/ImportSection'
 import { ArticleEditor } from './components/ArticleEditor'
 import { TokenGate } from './components/TokenGate'
-import { ToastContainer } from './components/Toast'
+import { ToastContainer } from '@/shared/components/Toast'
 
 type ThemeMode = 'light' | 'dark'
 

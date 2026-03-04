@@ -9,7 +9,7 @@ vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
 })))
 Element.prototype.scrollIntoView = vi.fn()
 
-describe('SidebarToastContainer', () => {
+describe('ToastContainer (shared)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -22,116 +22,151 @@ describe('SidebarToastContainer', () => {
   async function renderToastContainer() {
     const React = await import('react')
     const { render } = await import('@testing-library/react')
-    const { SidebarToastContainer, showSidebarToast } = await import(
-      '../../src/sidebar/components/Toast'
+    const { ToastContainer, showToast } = await import(
+      '../../src/shared/components/Toast'
     )
-    const result = render(React.createElement(SidebarToastContainer))
-    return { result, showSidebarToast }
+    const result = render(React.createElement(ToastContainer))
+    return { result, showToast }
   }
 
   it('renders nothing when no toasts present', async () => {
     const { result } = await renderToastContainer()
-    expect(result.container.querySelector('.sidebar-toast-container')).toBeNull()
+    expect(result.container.querySelector('.toast-container')).toBeNull()
   })
 
-  it('shows a toast when showSidebarToast is called', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+  it('shows a toast when showToast is called', async () => {
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Test message', 'success')
+      showToast('Test message', 'success')
     })
 
-    const container = result.container.querySelector('.sidebar-toast-container')
+    const container = result.container.querySelector('.toast-container')
     expect(container).not.toBeNull()
     expect(container?.textContent).toContain('Test message')
   })
 
   it('applies correct variant class for success type', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Success!', 'success')
+      showToast('Success!', 'success')
     })
 
-    const toast = result.container.querySelector('.sidebar-toast-success')
+    const toast = result.container.querySelector('.toast-success')
     expect(toast).not.toBeNull()
   })
 
   it('applies correct variant class for error type', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Error!', 'error')
+      showToast('Error!', 'error')
     })
 
-    const toast = result.container.querySelector('.sidebar-toast-error')
+    const toast = result.container.querySelector('.toast-error')
     expect(toast).not.toBeNull()
   })
 
   it('applies correct variant class for info type', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Info', 'info')
+      showToast('Info', 'info')
     })
 
-    const toast = result.container.querySelector('.sidebar-toast-info')
+    const toast = result.container.querySelector('.toast-info')
     expect(toast).not.toBeNull()
   })
 
   it('auto-dismisses toast after 4 seconds', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Auto-dismiss me', 'info')
+      showToast('Auto-dismiss me', 'info')
     })
 
-    expect(result.container.querySelector('.sidebar-toast-container')).not.toBeNull()
+    expect(result.container.querySelector('.toast-container')).not.toBeNull()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4000)
     })
 
-    expect(result.container.querySelector('.sidebar-toast-container')).toBeNull()
+    expect(result.container.querySelector('.toast-container')).toBeNull()
+  })
+
+  it('does not auto-dismiss a persistent toast', async () => {
+    const { result, showToast } = await renderToastContainer()
+
+    await act(async () => {
+      showToast('Stay visible', 'success', { persistent: true })
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000)
+    })
+
+    expect(result.container.querySelector('.toast-container')).not.toBeNull()
   })
 
   it('closes toast when dismiss button is clicked', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Dismiss me', 'success')
+      showToast('Dismiss me', 'success')
     })
 
-    const closeBtn = result.container.querySelector('.sidebar-toast-close') as HTMLButtonElement
+    const closeBtn = result.container.querySelector('.toast-close') as HTMLButtonElement
     expect(closeBtn).not.toBeNull()
 
     await act(async () => {
       closeBtn.click()
     })
 
-    expect(result.container.querySelector('.sidebar-toast-container')).toBeNull()
+    expect(result.container.querySelector('.toast-container')).toBeNull()
+  })
+
+  it('renders action button and calls callback on click', async () => {
+    const { result, showToast } = await renderToastContainer()
+    const onClick = vi.fn()
+
+    await act(async () => {
+      showToast('Undo delete', 'success', { action: { label: 'Undo', onClick } })
+    })
+
+    const actionBtn = result.container.querySelector('.toast-action') as HTMLButtonElement
+    expect(actionBtn).not.toBeNull()
+    expect(actionBtn.textContent).toBe('Undo')
+
+    await act(async () => {
+      actionBtn.click()
+    })
+
+    expect(onClick).toHaveBeenCalledOnce()
+    // Toast should be dismissed after action
+    expect(result.container.querySelector('.toast-container')).toBeNull()
   })
 
   it('shows multiple toasts at once', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('First', 'info')
-      showSidebarToast('Second', 'success')
+      showToast('First', 'info')
+      showToast('Second', 'success')
     })
 
-    const toasts = result.container.querySelectorAll('.sidebar-toast')
+    const toasts = result.container.querySelectorAll('.toast')
     expect(toasts.length).toBe(2)
   })
 
   it('has aria-live and role for accessibility', async () => {
-    const { result, showSidebarToast } = await renderToastContainer()
+    const { result, showToast } = await renderToastContainer()
 
     await act(async () => {
-      showSidebarToast('Accessible', 'info')
+      showToast('Accessible', 'info')
     })
 
-    const container = result.container.querySelector('.sidebar-toast-container')
+    const container = result.container.querySelector('.toast-container')
     expect(container?.getAttribute('aria-live')).toBe('polite')
     expect(container?.getAttribute('role')).toBe('status')
   })

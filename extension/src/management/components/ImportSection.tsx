@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
-import { showToast } from './Toast'
+import { showToast } from '@/shared/components/Toast'
 
 interface ImportSectionProps {
   isOpen: boolean
