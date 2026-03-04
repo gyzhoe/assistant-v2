@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
 import { showToast } from '@/shared/components/Toast'
+import { UploadIcon } from '../../shared/components/Icons'
+import { parseErrorDetail } from '../../lib/error-utils'
 
 interface ImportSectionProps {
   isOpen: boolean
@@ -67,7 +69,7 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
         }
         invalidateAll()
       } catch (err) {
-        const detail = err instanceof ApiError ? ((err.body as { detail?: string })?.detail ?? `Failed to import "${file.name}"`) : `Failed to import "${file.name}"`
+        const detail = err instanceof ApiError ? parseErrorDetail(err.body as Record<string, unknown>) : `Failed to import "${file.name}"`
         showToast(detail, 'error')
       } finally {
         setUploading(false)
@@ -113,7 +115,7 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
       setUrlError(null)
       invalidateAll()
     } catch (err) {
-      showToast(err instanceof ApiError ? ((err.body as { detail?: string })?.detail ?? 'Failed to import URL') : 'Failed to import URL', 'error')
+      showToast(err instanceof ApiError ? parseErrorDetail(err.body as Record<string, unknown>) : 'Failed to import URL', 'error')
     } finally {
       setImportingUrl(false)
     }
@@ -147,11 +149,7 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
             aria-label="Drop files here or click to browse"
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click() } }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
+            <UploadIcon />
             {uploading ? (
               <div className="import-upload-progress">
                 <p className="import-upload-filename">{uploadingFile}</p>

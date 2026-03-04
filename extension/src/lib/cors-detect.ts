@@ -1,14 +1,4 @@
-import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS } from '../shared/constants'
-
-/** Get the backend URL from settings (mirrors api-client logic). */
-async function getBackendUrl(): Promise<string> {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(STORAGE_KEY_SETTINGS, (result) => {
-      const settings = result[STORAGE_KEY_SETTINGS] as { backendUrl?: string } | undefined
-      resolve(settings?.backendUrl ?? DEFAULT_BACKEND_URL)
-    })
-  })
-}
+import { getBackendUrl } from './api-client'
 
 /**
  * Detect whether a network error is likely caused by CORS rejection

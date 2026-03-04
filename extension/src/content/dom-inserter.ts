@@ -1,17 +1,4 @@
-import { debugError } from '../shared/constants'
-
-/** Safe querySelector that catches SyntaxError from invalid CSS selectors. */
-function safeQuerySelector(selector: string): Element | null {
-  try {
-    return document.querySelector(selector)
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      debugError('Invalid CSS selector skipped:', selector, err.message)
-      return null
-    }
-    throw err
-  }
-}
+import { safeQuerySelector } from './dom-utils'
 
 export class DOMInserter {
   private readonly techNotesSelectors = [

@@ -1,18 +1,13 @@
 // Re-export shared types that were previously duplicated
 export type { IngestUploadResponse, IngestUrlResponse, HealthResponse, ToastMessage } from '@/shared/types'
+import type { KBArticleListItem } from '@/shared/types'
 
 /** Source type literals */
 export type SourceType = 'pdf' | 'html' | 'url' | 'json' | 'csv' | 'manual'
 
 /** Summary of a single KB article (narrows source_type from shared KBArticleListItem) */
-export interface ArticleSummary {
-  article_id: string
-  title: string
+export interface ArticleSummary extends Omit<KBArticleListItem, 'source_type'> {
   source_type: SourceType
-  source: string
-  chunk_count: number
-  imported_at: string | null
-  tags?: string[]
 }
 
 /** Full article detail including chunks */

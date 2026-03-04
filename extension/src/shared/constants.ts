@@ -78,6 +78,9 @@ export const MAX_PINNED_ARTICLES = 10
 /** MutationObserver debounce delay in ms */
 export const OBSERVER_DEBOUNCE_MS = 300
 
+/** Native messaging host ID for backend manager */
+export const NATIVE_HOST = 'com.assistant.backend_manager'
+
 /** Ticket URL detection patterns */
 export const TICKET_URL_PATTERNS = [/\/ticketDetail/, /\/tickets\/\d+/, /\/TicketActions\/view\?ticket=/]
 
