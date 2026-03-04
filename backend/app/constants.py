@@ -27,7 +27,7 @@ def distance_to_similarity(distance: float) -> float:
 
 
 def parse_tags(tags_str: str) -> list[str]:
-    """Parse a comma-separated tag string into a deduplicated, sorted list."""
+    """Parse a comma-separated tag string into a list of trimmed, non-empty tags."""
     if not tags_str:
         return []
     return [t.strip() for t in tags_str.split(",") if t.strip()]
