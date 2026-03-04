@@ -25,12 +25,16 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const deleteTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const queryClient = useQueryClient()
 
-  // Clear delete timer on unmount
+  // Clear all pending delete timers on unmount
   useEffect(() => {
-    return () => { if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current) }
+    const timers = deleteTimersRef.current
+    return () => {
+      for (const timer of timers.values()) clearTimeout(timer)
+      timers.clear()
+    }
   }, [])
 
   // Reset page when filters change
@@ -73,17 +77,23 @@ export function ArticleList({ onImportClick, onAuthRequired, onEditArticle }: Ar
       }
     )
 
-    // Delayed delete with undo support (8s to allow undo)
-    deleteTimerRef.current = setTimeout(() => {
+    // Delayed delete with undo support (8s to allow undo).
+    // Uses a Map keyed by articleId so rapid deletions each get their own timer.
+    const timer = setTimeout(() => {
+      deleteTimersRef.current.delete(articleId)
       deleteMutation.mutate(articleId)
     }, 8000)
-    const timer = deleteTimerRef.current
+    deleteTimersRef.current.set(articleId, timer)
 
     showToast(`Deleted "${title}"`, 'success', {
       action: {
         label: 'Undo',
         onClick: () => {
-          clearTimeout(timer)
+          const t = deleteTimersRef.current.get(articleId)
+          if (t) {
+            clearTimeout(t)
+            deleteTimersRef.current.delete(articleId)
+          }
           void queryClient.invalidateQueries({ queryKey: ['articles'] })
           void queryClient.invalidateQueries({ queryKey: ['stats'] })
         },

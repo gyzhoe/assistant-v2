@@ -80,8 +80,9 @@ describe('content/index.ts message handler', () => {
 
     await import('../../src/content/index')
     // Wait for init() to complete — init() chains multiple dynamic imports + await ready(),
-    // requiring several microtask flushes
-    await new Promise((r) => setTimeout(r, 50))
+    // requiring several microtask flushes. Use a generous delay to avoid flakiness in full
+    // suite runs where the event loop is more contended.
+    await new Promise((r) => setTimeout(r, 150))
   })
 
   it('INSERT_REPLY calls inserter and sends INSERT_SUCCESS', () => {

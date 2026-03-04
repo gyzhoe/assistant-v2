@@ -33,34 +33,31 @@ chrome.runtime.onMessage.addListener(
       msg.type === 'INSERT_FAILED' ||
       msg.type === 'NOT_A_TICKET_PAGE'
     ) {
-      // Forward from content script → sidebar (broadcast to all extension pages)
-      chrome.runtime.sendMessage(msg).catch(() => {
-        // Sidebar may not be open yet — ignore
-      })
+      // Only re-broadcast when the sender is a content script (has a tab).
+      // If the sender is the sidebar, it already received the message — don't
+      // re-broadcast or we create a duplicate delivery loop.
+      if (sender.tab) {
+        chrome.runtime.sendMessage(msg).catch(() => {
+          // Sidebar may not be open yet — ignore
+        })
+      }
       sendResponse({ ok: true })
       return true
     }
 
     if (msg.type === 'INSERT_REPLY' || msg.type === 'REQUEST_TICKET_DATA') {
-      // Forward from sidebar → active tab's content script
-      const tabId = sender.tab?.id
-      if (tabId !== undefined) {
-        chrome.tabs.sendMessage(tabId, msg)
-          .then(() => sendResponse({ ok: true }))
-          .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
-      } else {
-        // Sender is sidebar — query the active tab
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          const activeTab = tabs[0]
-          if (activeTab?.id !== undefined) {
-            chrome.tabs.sendMessage(activeTab.id, msg)
-              .then(() => sendResponse({ ok: true }))
-              .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
-          } else {
-            sendResponse({ ok: false, reason: 'no active tab' })
-          }
-        })
-      }
+      // Forward from sidebar → active tab's content script.
+      // Use lastFocusedWindow for better multi-window targeting.
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+        const activeTab = tabs[0]
+        if (activeTab?.id !== undefined) {
+          chrome.tabs.sendMessage(activeTab.id, msg)
+            .then(() => sendResponse({ ok: true }))
+            .catch(() => sendResponse({ ok: false, reason: 'content script unreachable' }))
+        } else {
+          sendResponse({ ok: false, reason: 'no active tab' })
+        }
+      })
       return true
     }
 

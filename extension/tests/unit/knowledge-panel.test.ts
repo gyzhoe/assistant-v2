@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act } from 'react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock chrome APIs
 vi.stubGlobal('chrome', {
@@ -132,18 +131,13 @@ describe('KnowledgePanel', () => {
   })
 })
 
-describe('KnowledgePanel — lazy polling', () => {
+describe('KnowledgePanel — store-driven doc counts', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
-    vi.useFakeTimers()
     vi.clearAllMocks()
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('does not poll while collapsed', async () => {
+  it('does not poll health on its own — reads from Zustand store', async () => {
     const { apiClient } = await import('../../src/lib/api-client')
     const mockHealth = apiClient.health as ReturnType<typeof vi.fn>
 
@@ -153,45 +147,8 @@ describe('KnowledgePanel — lazy polling', () => {
 
     render(React.createElement(KnowledgePanel))
 
-    // Allow initial fetch (panel is collapsed by default)
-    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
-    const callsAfterMount = mockHealth.mock.calls.length
-
-    // Advance well past the 10s poll interval — should not trigger new calls
-    await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
-    expect(mockHealth.mock.calls.length).toBe(callsAfterMount)
-  })
-
-  it('starts polling when expanded, stops when collapsed again', async () => {
-    const { apiClient } = await import('../../src/lib/api-client')
-    const mockHealth = apiClient.health as ReturnType<typeof vi.fn>
-
-    const React = await import('react')
-    const { render, screen, fireEvent } = await import('@testing-library/react')
-    const { KnowledgePanel } = await import('../../src/sidebar/components/KnowledgePanel')
-
-    render(React.createElement(KnowledgePanel))
-
-    // Wait for initial render
-    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
-
-    // Expand the panel
-    const trigger = screen.getByRole('button', { name: /knowledge base/i })
-    await act(async () => { fireEvent.click(trigger) })
-    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
-
-    const callsAfterExpand = mockHealth.mock.calls.length
-
-    // Advance past poll interval — should trigger a poll
-    await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
-    expect(mockHealth.mock.calls.length).toBeGreaterThan(callsAfterExpand)
-
-    // Collapse again
-    await act(async () => { fireEvent.click(trigger) })
-    const callsAfterCollapse = mockHealth.mock.calls.length
-
-    // Advance — no more polling
-    await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
-    expect(mockHealth.mock.calls.length).toBe(callsAfterCollapse)
+    // KnowledgePanel no longer polls — it reads chromaDocCounts from the store.
+    // BackendControl is responsible for fetching health and updating the store.
+    expect(mockHealth).not.toHaveBeenCalled()
   })
 })

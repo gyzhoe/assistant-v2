@@ -25,6 +25,7 @@ describe('SidebarHost', () => {
   it('start() sends TICKET_DATA_UPDATED when on a ticket page', async () => {
     // Create a mock DOMReader that returns ticket data
     const mockReader = {
+      isTicketPage: vi.fn().mockReturnValue(true),
       extract: vi.fn().mockReturnValue({
         subject: 'VPN Issue',
         description: 'Cannot connect',
@@ -46,7 +47,7 @@ describe('SidebarHost', () => {
   })
 
   it('start() sends NOT_A_TICKET_PAGE when reader returns null', async () => {
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(false), extract: vi.fn().mockReturnValue(null) }
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')
     const host = new SidebarHost(mockReader as never)
@@ -58,7 +59,7 @@ describe('SidebarHost', () => {
   })
 
   it('start() sets up a MutationObserver', async () => {
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(true), extract: vi.fn().mockReturnValue(null) }
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')
     const host = new SidebarHost(mockReader as never)
@@ -77,6 +78,7 @@ describe('SidebarHost', () => {
     vi.useRealTimers()
 
     const mockReader = {
+      isTicketPage: vi.fn().mockReturnValue(true),
       extract: vi.fn()
         .mockReturnValueOnce(null) // initial call from start()
         .mockReturnValue({ // mutation-triggered call
@@ -108,7 +110,7 @@ describe('SidebarHost', () => {
   })
 
   it('stop() disconnects the observer', async () => {
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(true), extract: vi.fn().mockReturnValue(null) }
     const disconnectSpy = vi.spyOn(MutationObserver.prototype, 'disconnect')
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')
@@ -123,7 +125,7 @@ describe('SidebarHost', () => {
   it('stop() clears the debounce timer so no further sends happen', async () => {
     vi.useRealTimers()
 
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(true), extract: vi.fn().mockReturnValue(null) }
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')
     const host = new SidebarHost(mockReader as never)
@@ -151,7 +153,7 @@ describe('SidebarHost', () => {
     form.id = 'ticketDetailForm'
     document.body.appendChild(form)
 
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(true), extract: vi.fn().mockReturnValue(null) }
     const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe')
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')
@@ -173,7 +175,7 @@ describe('SidebarHost', () => {
     main.id = 'mainContent'
     document.body.appendChild(main)
 
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(true), extract: vi.fn().mockReturnValue(null) }
     const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe')
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')
@@ -187,7 +189,7 @@ describe('SidebarHost', () => {
   })
 
   it('includes attributeFilter for value, selected, class', async () => {
-    const mockReader = { extract: vi.fn().mockReturnValue(null) }
+    const mockReader = { isTicketPage: vi.fn().mockReturnValue(true), extract: vi.fn().mockReturnValue(null) }
     const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe')
 
     const { SidebarHost } = await import('../../src/content/sidebar-host')

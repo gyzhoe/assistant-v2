@@ -75,6 +75,23 @@ export default function OptionsPage(): React.ReactElement {
   const handleSave = async () => {
     setIsSaving(true)
     setSaveMsg('')
+
+    // Validate backend URL format
+    if (settings.backendUrl) {
+      try {
+        const parsed = new URL(settings.backendUrl)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          setSaveMsg('Backend URL must start with http:// or https://')
+          setIsSaving(false)
+          return
+        }
+      } catch {
+        setSaveMsg('Backend URL is not a valid URL.')
+        setIsSaving(false)
+        return
+      }
+    }
+
     try {
       await storage.saveSettings(settings)
       await new Promise<void>((resolve, reject) => {

@@ -13,6 +13,25 @@ interface ReplyCacheEntry {
 /** Map of ticket URL → cached reply */
 type ReplyCache = Record<string, ReplyCacheEntry>
 
+/** Maximum number of cached replies before evicting oldest */
+const REPLY_CACHE_MAX_ENTRIES = 50
+
+/** Maximum age of a cached reply in milliseconds (1 hour) */
+const REPLY_CACHE_TTL_MS = 60 * 60 * 1000
+
+/** Prune expired and excess entries from the reply cache */
+function pruneReplyCache(cache: ReplyCache): ReplyCache {
+  const now = Date.now()
+  const entries = Object.entries(cache).filter(
+    ([, entry]) => now - entry.timestamp < REPLY_CACHE_TTL_MS
+  )
+  if (entries.length > REPLY_CACHE_MAX_ENTRIES) {
+    entries.sort(([, a], [, b]) => b.timestamp - a.timestamp)
+    entries.length = REPLY_CACHE_MAX_ENTRIES
+  }
+  return Object.fromEntries(entries)
+}
+
 interface SidebarState {
   ticketData: TicketData | null
   isTicketPage: boolean
@@ -25,10 +44,12 @@ interface SidebarState {
   abortController: AbortController | null
   isEditingReply: boolean
   replyRating: 'good' | 'bad' | null
+  feedbackDocId: string | null
   pinnedArticles: KBArticlePin[]
   settings: AppSettings
   settingsLoading: boolean
   ollamaReachable: boolean
+  chromaDocCounts: Record<string, number>
 
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
@@ -41,10 +62,12 @@ interface SidebarState {
   setAbortController: (ctrl: AbortController | null) => void
   setIsEditingReply: (val: boolean) => void
   setReplyRating: (rating: 'good' | 'bad' | null) => void
+  setFeedbackDocId: (id: string | null) => void
   pinArticle: (article: KBArticlePin) => void
   unpinArticle: (articleId: string) => void
   cancelGeneration: () => void
   setOllamaReachable: (val: boolean) => void
+  setChromaDocCounts: (counts: Record<string, number>) => void
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>
   saveReplyForTicket: (ticketUrl: string) => void
   restoreReplyForTicket: (ticketUrl: string) => Promise<void>
@@ -63,10 +86,12 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   abortController: null,
   isEditingReply: false,
   replyRating: null,
+  feedbackDocId: null,
   pinnedArticles: [],
   settings: DEFAULT_SETTINGS,
   settingsLoading: true,
   ollamaReachable: false,
+  chromaDocCounts: {},
 
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
@@ -79,7 +104,9 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setIsEditingReply: (val) => set({ isEditingReply: val }),
   setReplyRating: (rating) => set({ replyRating: rating }),
+  setFeedbackDocId: (id) => set({ feedbackDocId: id }),
   setOllamaReachable: (val) => set({ ollamaReachable: val }),
+  setChromaDocCounts: (counts) => set({ chromaDocCounts: counts }),
   pinArticle: (article) => {
     const { pinnedArticles } = get()
     if (pinnedArticles.length >= MAX_PINNED_ARTICLES) return
@@ -105,7 +132,8 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     if (!reply || !ticketUrl) return
     if (typeof chrome === 'undefined' || !chrome.storage?.session) return
     chrome.storage.session.get(STORAGE_KEY_REPLY_CACHE, (result) => {
-      const cache = (result[STORAGE_KEY_REPLY_CACHE] as ReplyCache | undefined) ?? {}
+      const raw = (result[STORAGE_KEY_REPLY_CACHE] as ReplyCache | undefined) ?? {}
+      const cache = pruneReplyCache(raw)
       cache[ticketUrl] = { reply, timestamp: Date.now() }
       chrome.storage.session.set({ [STORAGE_KEY_REPLY_CACHE]: cache }, () => {
         if (chrome.runtime.lastError) {
@@ -121,7 +149,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
       chrome.storage.session.get(STORAGE_KEY_REPLY_CACHE, (result) => {
         const cache = (result[STORAGE_KEY_REPLY_CACHE] as ReplyCache | undefined) ?? {}
         const entry = cache[ticketUrl]
-        if (entry?.reply) {
+        if (entry?.reply && Date.now() - entry.timestamp < REPLY_CACHE_TTL_MS) {
           set({ reply: entry.reply, isInserted: false, isEditingReply: false, replyRating: null })
         }
         resolve()
@@ -140,6 +168,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
       abortController: null,
       isEditingReply: false,
       replyRating: null,
+      feedbackDocId: null,
       pinnedArticles: [],
     })
   },

@@ -47,10 +47,26 @@ export const apiClient = {
 
   async health(): Promise<HealthResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    // /health/detail returns full info (ollama, chroma counts) behind auth
-    const resp = await fetch(`${base}/health/detail`, { headers, signal: AbortSignal.timeout(4000) })
-    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Health check failed' })
-    return resp.json() as Promise<HealthResponse>
+    // /health/detail returns full info (ollama, chroma counts) behind auth.
+    // On 401/403 (token not yet provisioned), fall back to unauthenticated /health.
+    const detailResp = await fetch(`${base}/health/detail`, { headers, signal: AbortSignal.timeout(4000) })
+    if (detailResp.ok) {
+      return detailResp.json() as Promise<HealthResponse>
+    }
+    if (detailResp.status === 401 || detailResp.status === 403) {
+      const basicResp = await fetch(`${base}/health`, { signal: AbortSignal.timeout(4000) })
+      if (basicResp.ok) {
+        const data = await basicResp.json() as { status: string; version?: string }
+        return {
+          status: data.status === 'ok' ? 'ok' : 'degraded',
+          ollama_reachable: false,
+          chroma_ready: false,
+          chroma_doc_counts: {},
+          version: data.version ?? '',
+        }
+      }
+    }
+    throw new ApiError(detailResp.status, { detail: 'Health check failed' })
   },
 
   async shutdown(): Promise<void> {

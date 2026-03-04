@@ -110,6 +110,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
   const selectedModel = useSidebarStore((s) => s.selectedModel)
   const setOllamaReachable = useSidebarStore((s) => s.setOllamaReachable)
+  const setChromaDocCounts = useSidebarStore((s) => s.setChromaDocCounts)
 
   // Load onboarding dismissed state
   useEffect(() => {
@@ -135,6 +136,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       setStatus('online')
       setOllamaOk(h.ollama_reachable)
       setOllamaReachable(h.ollama_reachable)
+      setChromaDocCounts(h.chroma_doc_counts ?? {})
       setVersion(h.version)
       if (h.ollama_reachable) setOllamaAction('idle')
       return true
@@ -146,7 +148,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       setVersion('')
       return false
     }
-  }, [setOllamaReachable])
+  }, [setOllamaReachable, setChromaDocCounts])
 
   const schedulePoll = useCallback((delayMs?: number) => {
     clearTimer()
