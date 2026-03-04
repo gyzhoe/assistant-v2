@@ -74,7 +74,7 @@ export function ManageTab({ docCounts, onRefresh, onSwitchToImport }: ManageTabP
         <p className="support-text error-text" role="alert">{clearError}</p>
       )}
       {collections.map(([name, count]) => (
-        <div key={name} className="kb-collection-row" aria-busy={clearingCollection === name ? "true" : "false"}>
+        <div key={name} className="kb-collection-row" aria-busy={clearingCollection === name}>
           <span className="kb-collection-name">{formatCollectionName(name)}</span>
           <span className="kb-file-size">{count} docs</span>
 

@@ -129,7 +129,7 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
         type="button"
         className="import-section-trigger"
         onClick={onToggle}
-        aria-expanded={isOpen ? "true" : "false"}
+        aria-expanded={isOpen}
       >
         <span className={`chevron${isOpen ? ' open' : ''}`} />
         <span className="import-section-label">Import</span>
@@ -190,7 +190,7 @@ export function ImportSection({ isOpen, onToggle, sectionRef }: ImportSectionPro
                 onChange={handleUrlChange}
                 disabled={isDisabled}
                 aria-describedby={urlError ? 'url-error' : undefined}
-                aria-invalid={urlError ? "true" : "false"}
+                aria-invalid={!!urlError}
               />
               <button
                 type="submit"

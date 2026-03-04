@@ -51,7 +51,7 @@ export function ArticleRow({ article, isExpanded, onToggle, onDelete, onEdit }: 
         type="button"
         className="article-row"
         onClick={onToggle}
-        aria-expanded={isExpanded ? "true" : "false"}
+        aria-expanded={isExpanded}
         aria-label={`${article.title}, ${article.chunk_count} parts, ${formatRelativeDate(article.imported_at)}`}
       >
         <span className={`source-badge source-${article.source_type}`}>

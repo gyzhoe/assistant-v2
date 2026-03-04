@@ -53,7 +53,7 @@ export function ReplyPanel(): React.ReactElement {
         <button
           className="section-heading-row collapsible-trigger"
           onClick={() => setContextCollapsed((c) => !c)}
-          aria-expanded={!contextCollapsed ? "true" : "false"}
+          aria-expanded={!contextCollapsed}
           aria-controls="ticket-context-body"
         >
           <h2 className="section-heading">Ticket context</h2>
@@ -84,7 +84,7 @@ export function ReplyPanel(): React.ReactElement {
           disabled={isGenerating || !ticketData}
           className="primary-btn"
           aria-label={autoInsert ? 'Generate and auto-insert AI reply' : 'Generate AI reply for this ticket'}
-          aria-busy={isGenerating ? "true" : "false"}
+          aria-busy={isGenerating}
         >
           {isGenerating ? 'Generating\u2026' : autoInsert ? 'Generate & Insert' : 'Generate Reply'}
         </button>
@@ -137,7 +137,7 @@ export function ReplyPanel(): React.ReactElement {
                     className={`rating-btn${replyRating === 'good' ? ' selected' : ''}${replyRating === 'bad' ? ' dimmed' : ''}`}
                     onClick={() => submitRating('good')}
                     aria-label="Rate as helpful"
-                    aria-pressed={replyRating === 'good' ? "true" : "false"}
+                    aria-pressed={replyRating === 'good'}
                   >
                     &#x1F44D;
                   </button>
@@ -146,7 +146,7 @@ export function ReplyPanel(): React.ReactElement {
                     className={`rating-btn${replyRating === 'bad' ? ' selected' : ''}${replyRating === 'good' ? ' dimmed' : ''}`}
                     onClick={() => submitRating('bad')}
                     aria-label="Rate as unhelpful"
-                    aria-pressed={replyRating === 'bad' ? "true" : "false"}
+                    aria-pressed={replyRating === 'bad'}
                   >
                     &#x1F44E;
                   </button>
