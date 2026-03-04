@@ -52,7 +52,8 @@ function parseUploadError(err: unknown): string {
     }
     if (err.status === 503) return 'Backend or Ollama is not reachable'
     if (err.status === 409) return 'Another import is already in progress'
-    return parseErrorDetail(body)
+    const parsed = parseErrorDetail(body)
+    return parsed !== 'An unexpected error occurred' ? parsed : `Upload failed (${err.status})`
   }
   if (err instanceof Error) return err.message
   return 'Upload failed'

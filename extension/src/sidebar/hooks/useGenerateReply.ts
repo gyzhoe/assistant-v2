@@ -72,8 +72,9 @@ export function useGenerateReply() {
         if (body?.['error_code'] === 'OLLAMA_DOWN' || err.status === 503) {
           message = 'Ollama is not running. Please start it and try again.'
         } else {
-          message = parseErrorDetail(body) !== 'An unexpected error occurred'
-            ? parseErrorDetail(body)
+          const parsed = parseErrorDetail(body)
+          message = parsed !== 'An unexpected error occurred'
+            ? parsed
             : `Generation failed (${err.status})`
         }
       } else if (err instanceof TypeError && err.message === 'Failed to fetch') {

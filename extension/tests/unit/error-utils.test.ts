@@ -81,4 +81,21 @@ describe('parseErrorDetail', () => {
     const body = { error_code: 'RATE_LIMIT', detail: { message: 'Too many requests' } }
     expect(parseErrorDetail(body)).toBe('[RATE_LIMIT] Too many requests')
   })
+
+  it('returns fallback for null body', () => {
+    expect(parseErrorDetail(null as unknown as Record<string, unknown>)).toBe('An unexpected error occurred')
+  })
+
+  it('returns fallback for undefined body', () => {
+    expect(parseErrorDetail(undefined as unknown as Record<string, unknown>)).toBe('An unexpected error occurred')
+  })
+
+  it('handles circular references without crashing', () => {
+    const body: Record<string, unknown> = { detail: {} }
+    const inner = body['detail'] as Record<string, unknown>
+    inner['self'] = body // circular reference
+    const result = parseErrorDetail(body)
+    expect(result).not.toContain('[object Object]')
+    expect(result).toBe('An unexpected error occurred')
+  })
 })
