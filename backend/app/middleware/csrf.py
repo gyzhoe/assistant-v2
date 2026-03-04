@@ -28,7 +28,7 @@ CSRF_COOKIE_NAME = "whd_csrf"
 CSRF_HEADER_NAME = b"x-csrf-token"
 
 # Paths that require CSRF validation on mutating methods
-CSRF_PROTECTED_PREFIXES = ("/kb/", "/ingest/", "/feedback")
+CSRF_PROTECTED_PREFIXES = ("/kb/", "/ingest/", "/feedback", "/generate", "/models")
 
 # Paths exempt from CSRF (auth endpoints handle their own security)
 CSRF_EXEMPT_PREFIXES = ("/auth/",)

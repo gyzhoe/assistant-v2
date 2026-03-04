@@ -16,8 +16,13 @@ class LLMService:
     """Generates text completions via Ollama using a shared async httpx client."""
 
     def __init__(self, client: httpx.AsyncClient) -> None:
-        self.base_url = settings.ollama_base_url
+        self._base_url = settings.ollama_base_url
         self._client = client
+
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """Public accessor for the shared httpx client."""
+        return self._client
 
     async def generate(self, prompt: str, model: str) -> str:
         """Generate a completion with retry logic. Raises ConnectionError if Ollama is unreachable."""
@@ -42,7 +47,7 @@ class LLMService:
     async def _generate_async(self, prompt: str, model: str) -> str:
         try:
             resp = await self._client.post(
-                f"{self.base_url}/api/generate",
+                "/api/generate",
                 json={
                     "model": model,
                     "prompt": prompt,
@@ -61,11 +66,11 @@ class LLMService:
             return str(resp.json()["response"])
         except httpx.ConnectError as exc:
             raise ConnectionError(
-                f"Ollama service unreachable at {self.base_url}"
+                f"Ollama service unreachable at {self._base_url}"
             ) from exc
         except httpx.TimeoutException as exc:
             raise ConnectionError(
-                f"Ollama request timed out after 120s at {self.base_url}"
+                f"Ollama request timed out after 120s at {self._base_url}"
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ConnectionError(

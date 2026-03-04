@@ -212,8 +212,10 @@ class RateLimitMiddleware:
             return
 
         path: str = scope["path"]
+        method: str = scope.get("method", "GET")
 
-        if path not in self.RATE_LIMITED_PATHS:
+        # Only rate-limit mutating methods — safe methods pass through
+        if path not in self.RATE_LIMITED_PATHS or method in {"GET", "HEAD", "OPTIONS"}:
             await self.app(scope, receive, send)
             return
 

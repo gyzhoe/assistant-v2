@@ -29,7 +29,7 @@ class EmbedService:
         model: str = "nomic-embed-text",
     ) -> None:
         self.model = model
-        self.base_url = settings.ollama_base_url
+        self._base_url = settings.ollama_base_url
         self._client = client
 
     @property
@@ -74,7 +74,7 @@ class EmbedService:
         assert isinstance(self._client, httpx.AsyncClient)
         try:
             resp = await self._client.post(
-                f"{self.base_url}/api/embeddings",
+                "/api/embeddings",
                 json={"model": self.model, "prompt": text},
             )
             resp.raise_for_status()
@@ -86,11 +86,11 @@ class EmbedService:
             return list(data["embedding"])
         except httpx.ConnectError as exc:
             raise ConnectionError(
-                f"Ollama embed service unreachable at {self.base_url}"
+                f"Ollama embed service unreachable at {self._base_url}"
             ) from exc
         except httpx.TimeoutException as exc:
             raise ConnectionError(
-                f"Ollama embed request timed out at {self.base_url}"
+                f"Ollama embed request timed out at {self._base_url}"
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ConnectionError(
@@ -105,7 +105,7 @@ class EmbedService:
         assert isinstance(self._client, httpx.Client)
         try:
             resp = self._client.post(
-                f"{self.base_url}/api/embeddings",
+                "/api/embeddings",
                 json={"model": self.model, "prompt": text},
             )
             resp.raise_for_status()
@@ -117,11 +117,11 @@ class EmbedService:
             return list(data["embedding"])
         except httpx.ConnectError as exc:
             raise ConnectionError(
-                f"Ollama embed service unreachable at {self.base_url}"
+                f"Ollama embed service unreachable at {self._base_url}"
             ) from exc
         except httpx.TimeoutException as exc:
             raise ConnectionError(
-                f"Ollama embed request timed out at {self.base_url}"
+                f"Ollama embed request timed out at {self._base_url}"
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ConnectionError(

@@ -139,7 +139,7 @@ class TestLLMServiceGenerateAsync:
         with pytest.raises(ConnectionError) as exc_info:
             await svc.generate("prompt", "llama3.2:3b")
 
-        assert svc.base_url in str(exc_info.value)
+        assert svc._base_url in str(exc_info.value)
 
     # --- timeout ---
 
@@ -262,7 +262,7 @@ class TestEmbedServiceEmbedSync:
         with pytest.raises(ConnectionError) as exc_info:
             svc._embed_sync("text")
 
-        assert svc.base_url in str(exc_info.value)
+        assert svc._base_url in str(exc_info.value)
 
     # --- timeout ---
 
