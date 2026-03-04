@@ -46,7 +46,15 @@ jobs:
           name: extension-dist
           path: extension/dist/
 
+      - name: Cache installer dependencies
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: installer/deps
+          key: installer-deps-ollama-v0.17.0-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
+
       - name: Download Ollama standalone
+        if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           # Ollama v0.17.0 standalone binary — pinned 2026-03-03
@@ -74,6 +82,7 @@ jobs:
           $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/ollama" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
           Write-Host "Ollama distribution: $fileCount files, $totalSize MB total"
       - name: Download uv standalone
+        if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           # uv v0.10.6 — pinned 2026-02-26
@@ -99,6 +108,7 @@ jobs:
           Remove-Item "installer/deps/uv.zip", "installer/deps/uv-extract" -Recurse -Force
 
       - name: Download Python 3.13 embeddable
+        if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           # Python 3.13.2 embeddable (win64) for offline backend install
@@ -122,50 +132,33 @@ jobs:
           Remove-Item "installer/deps/python-embed.zip"
           Write-Host "Python embeddable extracted to installer/deps/python/"
 
+      - name: Install Python 3.13 (for tkinter files)
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Add tkinter to embeddable Python
+        if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           # The embeddable distribution does not include tkinter, which is needed
-          # by pull-models-gui.py. Download the full installer and extract tkinter files.
-          $pyVersion = "3.13.2"
-          $installerUrl = "https://www.python.org/ftp/python/${pyVersion}/python-${pyVersion}-amd64.exe"
-
-          Write-Host "Downloading Python ${pyVersion} installer for tkinter extraction..."
-          Invoke-WebRequest -Uri $installerUrl -OutFile "python-installer.exe"
-
-          # Extract installer contents using the built-in /layout switch (no install)
-          Write-Host "Extracting installer layout..."
-          Start-Process -FilePath "python-installer.exe" -ArgumentList "/quiet", "/layout", "python-layout" -Wait -NoNewWindow
-
-          # The layout contains MSI packages; extract the tkinter-related ones
-          $layoutDir = "python-layout"
+          # by pull-models-gui.py. Copy tkinter files from the full Python install
+          # provided by actions/setup-python.
+          $pythonDir = Split-Path (Get-Command python).Source
           $targetDir = "installer/deps/python"
 
-          # Extract core MSI (contains DLLs/_tkinter.pyd) and tcltk MSI (contains tcl/tk DLLs + runtime)
-          $coreMsi = Get-ChildItem -Path $layoutDir -Filter "core.msi" -Recurse | Select-Object -First 1
-          $tcltkMsi = Get-ChildItem -Path $layoutDir -Filter "tcltk.msi" -Recurse | Select-Object -First 1
-          $libMsi = Get-ChildItem -Path $layoutDir -Filter "lib.msi" -Recurse | Select-Object -First 1
-
-          New-Item -ItemType Directory -Force -Path "msi-extract" | Out-Null
-
-          foreach ($msi in @($coreMsi, $tcltkMsi, $libMsi)) {
-            if ($msi) {
-              Write-Host "Extracting $($msi.Name)..."
-              Start-Process -FilePath "msiexec.exe" -ArgumentList "/a", "`"$($msi.FullName)`"", "/qn", "TARGETDIR=`"$((Resolve-Path 'msi-extract').Path)`"" -Wait -NoNewWindow
-            }
-          }
-
-          # Copy tkinter files to embeddable distribution
           # DLLs: _tkinter.pyd, tcl86t.dll, tk86t.dll
           $dllsDir = Join-Path $targetDir "DLLs"
           New-Item -ItemType Directory -Force -Path $dllsDir | Out-Null
 
           $tkFiles = @("_tkinter.pyd", "tcl86t.dll", "tk86t.dll")
           foreach ($f in $tkFiles) {
-            $src = Get-ChildItem -Path "msi-extract" -Filter $f -Recurse | Select-Object -First 1
-            if ($src) {
-              Copy-Item $src.FullName (Join-Path $dllsDir $f)
-              Write-Host "  Copied $f ($([math]::Round($src.Length / 1KB)) KB)"
+            $src = Join-Path $pythonDir "DLLs/$f"
+            if (Test-Path $src) {
+              Copy-Item $src (Join-Path $dllsDir $f)
+              $size = [math]::Round((Get-Item $src).Length / 1KB)
+              Write-Host "  Copied $f ($size KB)"
             } else {
               Write-Error "Missing tkinter file: $f"
               exit 1
@@ -173,11 +166,11 @@ jobs:
           }
 
           # Lib/tkinter/ module
-          $tkinterLib = Get-ChildItem -Path "msi-extract" -Directory -Filter "tkinter" -Recurse | Select-Object -First 1
-          if ($tkinterLib) {
+          $tkinterSrc = Join-Path $pythonDir "Lib/tkinter"
+          if (Test-Path $tkinterSrc) {
             $libDir = Join-Path $targetDir "Lib"
             New-Item -ItemType Directory -Force -Path $libDir | Out-Null
-            Copy-Item -Recurse $tkinterLib.FullName (Join-Path $libDir "tkinter")
+            Copy-Item -Recurse $tkinterSrc (Join-Path $libDir "tkinter")
             $count = (Get-ChildItem -Recurse (Join-Path $libDir "tkinter") -File).Count
             Write-Host "  Copied Lib/tkinter/ ($count files)"
           } else {
@@ -186,11 +179,9 @@ jobs:
           }
 
           # tcl/ runtime data (tcl8.6, tk8.6)
-          $tclDir = Get-ChildItem -Path "msi-extract" -Directory -Filter "tcl" -Recurse |
-            Where-Object { (Get-ChildItem $_.FullName -Directory -Filter "tcl8*").Count -gt 0 } |
-            Select-Object -First 1
-          if ($tclDir) {
-            Copy-Item -Recurse $tclDir.FullName (Join-Path $targetDir "tcl")
+          $tclSrc = Join-Path $pythonDir "tcl"
+          if (Test-Path $tclSrc) {
+            Copy-Item -Recurse $tclSrc (Join-Path $targetDir "tcl")
             $tclSize = [math]::Round((Get-ChildItem -Recurse (Join-Path $targetDir "tcl") -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
             Write-Host "  Copied tcl/ runtime ($tclSize MB)"
           } else {
@@ -209,11 +200,10 @@ jobs:
             }
           }
 
-          # Cleanup
-          Remove-Item -Recurse -Force "python-installer.exe", "python-layout", "msi-extract" -ErrorAction SilentlyContinue
           Write-Host "Tkinter added to embeddable Python successfully"
 
       - name: Download Python wheels (hash-pinned)
+        if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           # Pre-download all backend dependencies as wheels for offline install.
