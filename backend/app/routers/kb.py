@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from chromadb.api import ClientAPI
-from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.models.kb import (
     ArticleDeleteResponse,
@@ -110,36 +110,40 @@ _refresh_in_progress = False
 
 
 async def _rebuild_article_cache(chroma_client: ClientAPI) -> None:
-    """Rebuild the article index from ChromaDB (runs in background or inline)."""
+    """Rebuild the article index from ChromaDB (runs in background or inline).
+
+    Acquires _cache_lock to ensure global mutations are serialised.
+    """
     global _article_cache, _cache_timestamp, _total_chunks_cached, _refresh_in_progress
 
-    try:
-        col = await asyncio.to_thread(
-            chroma_client.get_collection, KB_COLLECTION,
+    async with _cache_lock:
+        try:
+            col = await asyncio.to_thread(
+                chroma_client.get_collection, KB_COLLECTION,
+            )
+        except (ValueError, Exception):
+            _article_cache = {}
+            _total_chunks_cached = 0
+            _cache_timestamp = time.monotonic()
+            return
+        finally:
+            _refresh_in_progress = False
+
+        result = await asyncio.to_thread(
+            col.get, include=["metadatas"],
         )
-    except (ValueError, Exception):
-        _article_cache = {}
-        _total_chunks_cached = 0
+
+        ids: list[str] = result.get("ids", [])
+        metadatas = cast(
+            list[dict[str, Any]], result.get("metadatas", []),
+        )
+
+        new_cache, new_total = _build_article_index(ids, metadatas)
+
+        _article_cache = new_cache
+        _total_chunks_cached = new_total
         _cache_timestamp = time.monotonic()
-        return
-    finally:
         _refresh_in_progress = False
-
-    result = await asyncio.to_thread(
-        col.get, include=["metadatas"],
-    )
-
-    ids: list[str] = result.get("ids", [])
-    metadatas = cast(
-        list[dict[str, Any]], result.get("metadatas", []),
-    )
-
-    new_cache, new_total = _build_article_index(ids, metadatas)
-
-    _article_cache = new_cache
-    _total_chunks_cached = new_total
-    _cache_timestamp = time.monotonic()
-    _refresh_in_progress = False
 
 
 async def _get_article_index(
@@ -165,13 +169,8 @@ async def _get_article_index(
         return _article_cache, _total_chunks_cached
 
     # Cold cache (first call): must block until data is ready
-    async with _cache_lock:
-        # Double-check after acquiring lock
-        if _is_cache_valid():
-            return _article_cache, _total_chunks_cached
-
-        await _rebuild_article_cache(chroma_client)
-        return _article_cache, _total_chunks_cached
+    await _rebuild_article_cache(chroma_client)
+    return _article_cache, _total_chunks_cached
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -180,8 +179,8 @@ async def _get_article_index(
 @router.get("/articles", response_model=ArticleListResponse)
 async def list_articles(
     request: Request,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = None,
     source_type: str | None = None,
 ) -> ArticleListResponse:

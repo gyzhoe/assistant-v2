@@ -56,8 +56,14 @@ router = APIRouter(tags=["auth"])
 @router.post("/login")
 async def login(request: Request) -> JSONResponse:
     """Exchange an API token for an HttpOnly session cookie."""
-    body = await request.json()
-    provided_token: str = body.get("token", "")
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Request body must be valid JSON."},
+        )
+    provided_token: str = body.get("token", "") if isinstance(body, dict) else ""
 
     client_ip = request.client.host if request.client else ""
 

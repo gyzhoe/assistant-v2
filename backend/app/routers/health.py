@@ -55,7 +55,7 @@ async def health_detail(request: Request) -> dict[str, object]:
     """Return detailed system health status including Ollama and ChromaDB state."""
     ollama_reachable = False
     try:
-        llm_client = request.app.state.llm_service._client
+        llm_client = request.app.state.llm_service.client
         resp = await llm_client.get("/api/tags", timeout=5.0)
         ollama_reachable = resp.status_code == 200
     except Exception:
@@ -81,10 +81,9 @@ async def health_detail(request: Request) -> dict[str, object]:
     }
 
 
-@router.post("/shutdown", dependencies=[Depends(_require_token)])
+@router.post("/shutdown", dependencies=[Depends(_require_token), Depends(_require_localhost)])
 async def shutdown_backend(request: Request) -> dict[str, str]:
     """Gracefully shut down the backend server after a short delay."""
-    _require_localhost(request)
 
     client_ip = request.client.host if request.client else ""
     audit_log("shutdown", client_ip=client_ip)
@@ -97,14 +96,13 @@ async def shutdown_backend(request: Request) -> dict[str, str]:
     return {"status": "shutting_down"}
 
 
-@router.post("/ollama/start", dependencies=[Depends(_require_token)])
+@router.post("/ollama/start", dependencies=[Depends(_require_token), Depends(_require_localhost)])
 async def start_ollama(request: Request) -> dict[str, str]:
     """Start the Ollama server as a detached background process."""
-    _require_localhost(request)
 
     # Check if already running
     try:
-        llm_client = request.app.state.llm_service._client
+        llm_client = request.app.state.llm_service.client
         resp = await llm_client.get("/api/tags", timeout=3.0)
         if resp.status_code == 200:
             return {"status": "already_running"}
@@ -131,10 +129,9 @@ async def start_ollama(request: Request) -> dict[str, str]:
     return {"status": "starting"}
 
 
-@router.post("/ollama/stop", dependencies=[Depends(_require_token)])
+@router.post("/ollama/stop", dependencies=[Depends(_require_token), Depends(_require_localhost)])
 async def stop_ollama(request: Request) -> dict[str, str]:
     """Stop the Ollama server process."""
-    _require_localhost(request)
 
     if sys.platform == "win32":
         await asyncio.to_thread(

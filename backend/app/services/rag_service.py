@@ -118,19 +118,23 @@ class RAGService:
         except Exception:
             return []
 
-        count = col.count()
-        if count == 0:
-            return []
+        try:
+            count = col.count()
+            if count == 0:
+                return []
 
-        n_results = min(n_results, count)
-        query_kwargs: dict[str, Any] = {
-            "query_embeddings": [embedding],
-            "n_results": n_results,
-            "include": ["documents", "metadatas", "distances"],
-        }
-        if where is not None:
-            query_kwargs["where"] = where
-        results: Any = col.query(**query_kwargs)
+            n_results = min(n_results, count)
+            query_kwargs: dict[str, Any] = {
+                "query_embeddings": [embedding],
+                "n_results": n_results,
+                "include": ["documents", "metadatas", "distances"],
+            }
+            if where is not None:
+                query_kwargs["where"] = where
+            results: Any = col.query(**query_kwargs)
+        except Exception:
+            logger.warning("ChromaDB query failed for collection %s", name, exc_info=True)
+            return []
 
         docs = []
         for content, meta, distance in zip(

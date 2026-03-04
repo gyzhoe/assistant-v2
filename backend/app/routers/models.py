@@ -10,7 +10,7 @@ router = APIRouter(tags=["models"])
 async def list_models(request: Request) -> dict[str, list[str]]:
     """Proxy Ollama's /api/tags to return available model names."""
     try:
-        client = request.app.state.llm_service._client
+        client = request.app.state.llm_service.client
         resp = await client.get("/api/tags", timeout=10.0)
         resp.raise_for_status()
         data = resp.json()

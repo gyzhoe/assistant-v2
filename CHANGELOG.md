@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Backend: CSRF protection now covers `/generate` and `/models` endpoints
+- Backend: Login endpoint validates JSON body (returns 422 instead of 500 on malformed requests)
+- Backend: Version string updated to 1.14.0
+- Backend: Fixed httpx URL construction in LLM/Embed services (use relative paths with base_url)
+- Backend: IngestionPipeline httpx client lazily created and properly closed
+- Backend: ChromaDB query errors in RAG service return empty results instead of crashing with 500
+- Backend: `list_articles` validates pagination params (page >= 1, page_size 1-100)
+- Backend: Rate limiting only applies to mutating HTTP methods (POST), not GET
+- Backend: Public accessor for LLM service httpx client (removes private attribute access)
+- Backend: Process-control endpoints use consistent FastAPI dependency injection
+- Backend: KB article cache refresh runs under asyncio.Lock for safe global mutations
+
 ### Changed
 
 - Default Ollama port from 11434 to 11435 to avoid conflicts with system-installed Ollama
