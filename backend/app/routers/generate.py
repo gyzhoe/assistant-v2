@@ -7,14 +7,13 @@ from chromadb.api import ClientAPI
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
+from app.constants import KB_COLLECTION, RATED_REPLIES_COLLECTION, distance_to_similarity
 from app.models.request_models import GenerateRequest
 from app.models.response_models import ContextDoc, GenerateResponse
-from app.routers.feedback import RATED_REPLIES_COLLECTION
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 from app.services.microsoft_docs import MicrosoftDocsService
 from app.services.rag_service import RAGService
-from ingestion.pipeline import KB_COLLECTION
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +163,7 @@ async def _get_dynamic_examples(
             results["metadatas"][0],
             results["distances"][0],
         )):
-            score = max(0.0, 1.0 - float(distance))
+            score = distance_to_similarity(distance)
             if score >= _MIN_FEWSHOT_SIMILARITY:
                 # Prefer explicit metadata; fall back to document text for older entries
                 subject = str(meta.get("ticket_subject", ""))

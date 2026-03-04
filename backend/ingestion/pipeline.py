@@ -8,18 +8,14 @@ import logging
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-import httpx
 from chromadb import Collection
 from chromadb.api import ClientAPI
 
-from app.config import settings
+from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, TICKET_COLLECTION
 from ingestion.kb_loader import load_kb_html, load_kb_html_dir, load_kb_pdf, load_kb_pdf_dir
 from ingestion.ticket_loader import load_tickets
 
 logger = logging.getLogger(__name__)
-
-TICKET_COLLECTION = "whd_tickets"
-KB_COLLECTION = "kb_articles"
 
 # Batch size for upsert calls — keeps memory usage predictable
 _BATCH_SIZE = 50
@@ -38,21 +34,17 @@ class IngestionPipeline:
     def __init__(
         self,
         chroma_client: ClientAPI,
-        embed_fn: Callable[[str], list[float]] | None = None,
+        embed_fn: Callable[[str], list[float]],
     ) -> None:
         self.client = chroma_client
-        self._custom_embed_fn = embed_fn
-        # Shared sync client for the default _embed path — avoids opening a
-        # new TCP connection for every chunk when no custom embed_fn is given.
-        # Lazily created only when needed (custom embed_fn skips this path).
-        self._http_client: httpx.Client | None = None
+        self._embed_fn = embed_fn
 
     # ── Ticket ingestion ─────────────────────────────────────────────────────
 
     def ingest_tickets(self, path: Path) -> int:
         col = self.client.get_or_create_collection(
             name=TICKET_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
+            metadata=COSINE_COLLECTION_META,
         )
         return self._upsert_stream(col, load_tickets(path))
 
@@ -61,14 +53,14 @@ class IngestionPipeline:
     def ingest_kb_html(self, directory: Path) -> int:
         col = self.client.get_or_create_collection(
             name=KB_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
+            metadata=COSINE_COLLECTION_META,
         )
         return self._upsert_stream(col, load_kb_html_dir(directory))
 
     def ingest_kb_pdf(self, directory: Path) -> int:
         col = self.client.get_or_create_collection(
             name=KB_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
+            metadata=COSINE_COLLECTION_META,
         )
         return self._upsert_stream(col, load_kb_pdf_dir(directory))
 
@@ -90,7 +82,7 @@ class IngestionPipeline:
 
         col = self.client.get_or_create_collection(
             name=collection_name,
-            metadata={"hnsw:space": "cosine"},
+            metadata=COSINE_COLLECTION_META,
         )
 
         if suffix in (".json", ".csv"):
@@ -174,33 +166,5 @@ class IngestionPipeline:
         return total
 
     def _do_embed(self, text: str) -> list[float]:
-        """Embed text using the injected embed_fn or the default Ollama call."""
-        if self._custom_embed_fn is not None:
-            return self._custom_embed_fn(text)
-        return self._embed(text)
-
-    def close(self) -> None:
-        """Close the internal httpx client (if created)."""
-        if self._http_client is not None:
-            self._http_client.close()
-            self._http_client = None
-
-    def _get_http_client(self) -> httpx.Client:
-        """Lazily create the shared httpx client on first use."""
-        if self._http_client is None:
-            self._http_client = httpx.Client(timeout=60.0)
-        return self._http_client
-
-    def _embed(self, text: str) -> list[float]:
-        """Embed text using nomic-embed-text via Ollama (synchronous).
-
-        Reuses ``self._http_client`` across calls to avoid per-chunk
-        TCP connection overhead.
-        """
-        client = self._get_http_client()
-        resp = client.post(
-            f"{settings.ollama_base_url}/api/embeddings",
-            json={"model": "nomic-embed-text", "prompt": text},
-        )
-        resp.raise_for_status()
-        return list(resp.json()["embedding"])
+        """Embed text using the injected embed_fn."""
+        return self._embed_fn(text)

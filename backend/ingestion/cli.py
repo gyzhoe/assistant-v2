@@ -24,11 +24,17 @@ app = typer.Typer(
 
 def _make_pipeline() -> IngestionPipeline:
     import chromadb
+    import httpx
 
     from app.config import settings
+    from app.services.embed_service import EmbedService
 
-    client = chromadb.PersistentClient(path=settings.chroma_path)
-    return IngestionPipeline(chroma_client=client)
+    chroma = chromadb.PersistentClient(path=settings.chroma_path)
+    sync_client = httpx.Client(
+        base_url=settings.ollama_base_url, timeout=60.0,
+    )
+    embed_svc = EmbedService(client=sync_client)
+    return IngestionPipeline(chroma_client=chroma, embed_fn=embed_svc.embed_fn)
 
 
 @app.command()

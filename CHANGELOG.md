@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Backend: Extract shared ASGI helpers (`send_json_error`, `get_header`, `get_client_ip`) into `app/middleware/asgi_utils.py`
+- Backend: Centralize collection names, cosine metadata, chunk defaults, retry constants, and utility functions in `app/constants.py`
+- Backend: Consolidate `EmbedService._embed_async`/`_embed_sync` via shared `_parse_embed_response()` helper
+- Backend: Merge identical `CreateArticleRequest`/`UpdateArticleRequest` into single `ArticleRequest` model
+- Backend: Extract `_get_article_chunks()` helper in kb.py — eliminates 5x repeated article lookup pattern
+- Backend: Extract `get_client_ip()` and `require_ingestion_available()` helpers in shared router module
+- Backend: Remove `IngestionPipeline._embed` fallback — `embed_fn` is now a required parameter
+- Backend: Unify retry constants between `LLMService` and `EmbedService` via shared `OLLAMA_MAX_RETRIES`/`OLLAMA_RETRY_DELAY`
+- Backend: Use `parse_tags()`/`serialize_tags()` from constants for all tag operations
+- Backend: `conftest.py` delegates to `helpers.setup_app_state()` instead of duplicating mock setup
+
 ### Fixed
 
 - Backend: CSRF protection now covers `/generate` and `/models` endpoints

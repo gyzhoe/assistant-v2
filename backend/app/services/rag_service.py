@@ -5,6 +5,7 @@ from typing import Any
 from chromadb.api import ClientAPI
 
 from app.config import settings
+from app.constants import KB_COLLECTION, TICKET_COLLECTION, distance_to_similarity
 from app.models.response_models import ContextDoc
 from app.services.embed_service import EmbedService
 
@@ -13,9 +14,6 @@ logger = logging.getLogger(__name__)
 
 class RAGService:
     """Retrieves relevant documents from ChromaDB using semantic search."""
-
-    TICKET_COLLECTION = "whd_tickets"
-    KB_COLLECTION = "kb_articles"
 
     def __init__(self, chroma_client: ClientAPI, embed_svc: EmbedService) -> None:
         self.client = chroma_client
@@ -42,10 +40,10 @@ class RAGService:
             filtered_target = kb_target // 2 + 1
             ticket_docs, kb_filtered, kb_unfiltered = await asyncio.gather(
                 self._query_collection(
-                    self.TICKET_COLLECTION, embedding, ticket_target,
+                    TICKET_COLLECTION, embedding, ticket_target,
                 ),
                 self._query_collection(
-                    self.KB_COLLECTION, embedding, filtered_target,
+                    KB_COLLECTION, embedding, filtered_target,
                     # NOTE: $contains does substring match on the comma-separated
                     # tags string. Category "NET" will also match "NETWORK".
                     # Acceptable for two-phase retrieval since phase 2 backfills
@@ -53,7 +51,7 @@ class RAGService:
                     where={"tags": {"$contains": category}},
                 ),
                 self._query_collection(
-                    self.KB_COLLECTION, embedding, kb_target,
+                    KB_COLLECTION, embedding, kb_target,
                 ),
             )
 
@@ -76,9 +74,9 @@ class RAGService:
         else:
             ticket_docs, kb_docs = await asyncio.gather(
                 self._query_collection(
-                    self.TICKET_COLLECTION, embedding, ticket_target,
+                    TICKET_COLLECTION, embedding, ticket_target,
                 ),
-                self._query_collection(self.KB_COLLECTION, embedding, kb_target),
+                self._query_collection(KB_COLLECTION, embedding, kb_target),
             )
             all_docs = ticket_docs + kb_docs
 
@@ -142,8 +140,8 @@ class RAGService:
             results["metadatas"][0],
             results["distances"][0],
         ):
-            source = "ticket" if name == self.TICKET_COLLECTION else "kb"
-            score = max(0.0, 1.0 - float(distance))
+            source = "ticket" if name == TICKET_COLLECTION else "kb"
+            score = distance_to_similarity(distance)
             docs.append(
                 ContextDoc(
                     content=content,

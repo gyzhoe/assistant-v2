@@ -15,6 +15,7 @@ from typing import Any, cast
 from chromadb.api import ClientAPI
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
+from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, parse_tags, serialize_tags
 from app.models.kb import (
     ArticleDeleteResponse,
     ArticleDetailResponse,
@@ -32,10 +33,14 @@ from app.models.request_models import (
     UpdateArticleRequest,
     UpdateTagsRequest,
 )
-from app.routers.shared import upload_semaphore
+from app.routers.shared import (
+    get_client_ip,
+    require_ingestion_available,
+    upload_semaphore,
+)
 from app.services.audit import audit_log
 from app.utils.chunker import chunk_by_markdown_headings
-from ingestion.pipeline import KB_COLLECTION, IngestionPipeline
+from ingestion.pipeline import IngestionPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +84,7 @@ def _build_article_index(
         if not aid:
             continue
 
-        tags_str = metadata.get("tags", "")
-        chunk_tags = (
-            [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
-        )
+        chunk_tags = parse_tags(metadata.get("tags", ""))
 
         if aid not in index:
             # Determine source: source_file for html/pdf, source_url for url
@@ -171,6 +173,51 @@ async def _get_article_index(
     # Cold cache (first call): must block until data is ready
     await _rebuild_article_cache(chroma_client)
     return _article_cache, _total_chunks_cached
+
+
+# ── Shared article lookup ─────────────────────────────────────────────────────
+
+
+async def _get_article_chunks(
+    chroma_client: ClientAPI,
+    article_id: str,
+    include: list[Any] | None = None,
+) -> tuple[Any, list[str], list[dict[str, Any]]]:
+    """Fetch all chunks for an article; raise 404 if not found.
+
+    Returns (collection, chunk_ids, metadatas).
+    If *include* contains ``"documents"``, documents are available via
+    ``col.get`` results but not returned directly — callers that need
+    documents should use the returned collection to fetch them.
+    """
+    try:
+        col = await asyncio.to_thread(
+            chroma_client.get_collection, KB_COLLECTION,
+        )
+    except (ValueError, Exception) as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Article not found: {article_id}",
+        ) from exc
+
+    result = await asyncio.to_thread(
+        col.get,
+        where={"article_id": article_id},
+        include=include or ["metadatas"],
+    )
+
+    ids: list[str] = result.get("ids", [])
+    metadatas = cast(list[dict[str, Any]], result.get("metadatas", []))
+
+    if not ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Article not found: {article_id}",
+        )
+
+    # Stash full result for callers that need documents
+    col._last_result = result  # type: ignore[attr-defined]
+    return col, ids, metadatas
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -263,12 +310,7 @@ async def create_article(
     except (ValueError, Exception):
         pass  # Collection doesn't exist yet — fine
 
-    # Check semaphore (non-blocking)
-    if upload_semaphore.locked():
-        raise HTTPException(
-            status_code=409,
-            detail="Another ingestion is already in progress. Please wait.",
-        )
+    require_ingestion_available()
 
     async with upload_semaphore:
         try:
@@ -285,6 +327,7 @@ async def create_article(
 
             # Build chunk stream: (chunk_id, text, metadata)
             now = datetime.now(UTC).isoformat()
+            tags_str = serialize_tags(body.tags)
 
             def chunk_stream() -> Iterator[tuple[str, str, dict[str, str]]]:
                 for idx, (section_title, chunk_text) in enumerate(sections):
@@ -295,7 +338,7 @@ async def create_article(
                         "section": section_title,
                         "source_type": "manual",
                         "imported_at": now,
-                        "tags": ",".join(body.tags),
+                        "tags": tags_str,
                     }
                     yield chunk_id, chunk_text, metadata
 
@@ -303,7 +346,7 @@ async def create_article(
             col = await asyncio.to_thread(
                 chroma_client.get_or_create_collection,
                 KB_COLLECTION,
-                metadata={"hnsw:space": "cosine"},
+                metadata=COSINE_COLLECTION_META,
             )
 
             embed_service = request.app.state.sync_embed_service
@@ -355,28 +398,9 @@ async def update_article(
     chroma_client = request.app.state.chroma_client
 
     # 1. Verify article exists and is manual
-    try:
-        col = await asyncio.to_thread(
-            chroma_client.get_collection, KB_COLLECTION,
-        )
-    except (ValueError, Exception) as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        ) from exc
-
-    result = await asyncio.to_thread(
-        col.get, where={"article_id": article_id}, include=["metadatas"],
+    col, ids, metadatas = await _get_article_chunks(
+        chroma_client, article_id,
     )
-
-    ids: list[str] = result.get("ids", [])
-    metadatas: list[dict[str, Any]] = result.get("metadatas", [])
-
-    if not ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        )
 
     first_meta = metadatas[0]
     if first_meta.get("source_type") != "manual":
@@ -387,12 +411,7 @@ async def update_article(
 
     original_imported_at = first_meta.get("imported_at", "")
 
-    # Check semaphore (non-blocking)
-    if upload_semaphore.locked():
-        raise HTTPException(
-            status_code=409,
-            detail="Another ingestion is already in progress. Please wait.",
-        )
+    require_ingestion_available()
 
     async with upload_semaphore:
         try:
@@ -409,6 +428,7 @@ async def update_article(
 
             # 3. Build chunk stream preserving original article_id and imported_at
             new_chunk_ids: list[str] = []
+            tags_str = serialize_tags(body.tags)
 
             def chunk_stream() -> Iterator[tuple[str, str, dict[str, str]]]:
                 for idx, (section_title, chunk_text) in enumerate(sections):
@@ -420,7 +440,7 @@ async def update_article(
                         "section": section_title,
                         "source_type": "manual",
                         "imported_at": original_imported_at,
-                        "tags": ",".join(body.tags),
+                        "tags": tags_str,
                     }
                     yield chunk_id, chunk_text, metadata
 
@@ -474,31 +494,11 @@ async def get_article(
     """Get article detail with all chunks."""
     chroma_client = request.app.state.chroma_client
 
-    try:
-        col = await asyncio.to_thread(
-            chroma_client.get_collection, KB_COLLECTION,
-        )
-    except (ValueError, Exception) as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        ) from exc
-
-    result = await asyncio.to_thread(
-        col.get,
-        where={"article_id": article_id},
-        include=["documents", "metadatas"],
+    col, ids, metadatas = await _get_article_chunks(
+        chroma_client, article_id, include=["documents", "metadatas"],
     )
-
-    ids: list[str] = result.get("ids", [])
+    result = col._last_result
     documents: list[str] = result.get("documents", [])
-    metadatas: list[dict[str, Any]] = result.get("metadatas", [])
-
-    if not ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        )
 
     # Build article metadata from first chunk
     first_meta = metadatas[0]
@@ -507,9 +507,7 @@ async def get_article(
     # Merge tags from all chunks (union)
     all_tags: set[str] = set()
     for meta in metadatas:
-        tags_str = meta.get("tags", "")
-        if tags_str:
-            all_tags.update(t.strip() for t in tags_str.split(",") if t.strip())
+        all_tags.update(parse_tags(meta.get("tags", "")))
 
     chunks = [
         ChunkDetail(
@@ -541,27 +539,12 @@ async def update_tags(
 ) -> UpdateTagsResponse:
     """Update tags on all chunks of an article."""
     chroma_client = request.app.state.chroma_client
-    try:
-        col = await asyncio.to_thread(chroma_client.get_collection, KB_COLLECTION)
-    except (ValueError, Exception) as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        ) from exc
 
-    result = await asyncio.to_thread(
-        col.get, where={"article_id": article_id}, include=["metadatas"],
+    col, ids, metadatas = await _get_article_chunks(
+        chroma_client, article_id,
     )
-    ids: list[str] = result.get("ids", [])
-    metadatas: list[dict[str, Any]] = result.get("metadatas", [])
 
-    if not ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        )
-
-    tags_str = ",".join(body.tags)
+    tags_str = serialize_tags(body.tags)
     updated_metas = [{**m, "tags": tags_str} for m in metadatas]
     await asyncio.to_thread(col.update, ids=ids, metadatas=updated_metas)
     invalidate_article_cache()
@@ -589,35 +572,13 @@ async def delete_article(
     """Delete all chunks belonging to an article."""
     chroma_client = request.app.state.chroma_client
 
-    try:
-        col = await asyncio.to_thread(
-            chroma_client.get_collection, KB_COLLECTION,
-        )
-    except (ValueError, Exception) as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        ) from exc
-
-    # Get chunk IDs for this article
-    result = await asyncio.to_thread(
-        col.get, where={"article_id": article_id},
-    )
-
-    ids: list[str] = result.get("ids", [])
-
-    if not ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Article not found: {article_id}",
-        )
+    col, ids, _ = await _get_article_chunks(chroma_client, article_id)
 
     await asyncio.to_thread(col.delete, ids=ids)
     invalidate_article_cache()
 
-    client_ip = request.client.host if request.client else ""
     audit_log(
-        "article_delete", client_ip=client_ip,
+        "article_delete", client_ip=get_client_ip(request),
         detail=f"article_id={article_id} chunks={len(ids)}",
     )
 

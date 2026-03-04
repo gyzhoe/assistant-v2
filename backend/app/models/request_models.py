@@ -112,7 +112,9 @@ def _validate_tag_list(v: list[str]) -> list[str]:
     return cleaned
 
 
-class CreateArticleRequest(BaseModel):
+class ArticleRequest(BaseModel):
+    """Shared model for creating and updating KB articles."""
+
     title: str = Field(min_length=1, max_length=200, description="Article title")
     content: str = Field(min_length=1, max_length=100_000, description="Markdown content")
     tags: list[str] = Field(default_factory=list, description="Article tags (max 20)")
@@ -123,15 +125,9 @@ class CreateArticleRequest(BaseModel):
         return _validate_tag_list(v)
 
 
-class UpdateArticleRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=200, description="Article title")
-    content: str = Field(min_length=1, max_length=100_000, description="Markdown content")
-    tags: list[str] = Field(default_factory=list, description="Article tags (max 20)")
-
-    @field_validator("tags")
-    @classmethod
-    def validate_tags(cls, v: list[str]) -> list[str]:
-        return _validate_tag_list(v)
+# Backwards-compatible aliases
+CreateArticleRequest = ArticleRequest
+UpdateArticleRequest = ArticleRequest
 
 
 class UpdateTagsRequest(BaseModel):

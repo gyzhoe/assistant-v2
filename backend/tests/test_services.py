@@ -133,13 +133,15 @@ class TestLLMServiceGenerateAsync:
     @pytest.mark.asyncio
     async def test_connect_error_message_contains_base_url(self) -> None:
         """ConnectionError message references the configured base URL."""
+        from app.config import settings
+
         svc, mock_client = self._svc()
         mock_client.post.side_effect = httpx.ConnectError("refused")
 
         with pytest.raises(ConnectionError) as exc_info:
             await svc.generate("prompt", "llama3.2:3b")
 
-        assert svc._base_url in str(exc_info.value)
+        assert settings.ollama_base_url in str(exc_info.value)
 
     # --- timeout ---
 
@@ -255,6 +257,8 @@ class TestEmbedServiceEmbedSync:
 
     def test_connect_error_message_contains_base_url(self) -> None:
         """ConnectionError message references the configured base URL."""
+        from app.config import settings
+
         svc = self._svc()
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.side_effect = httpx.ConnectError("refused")
@@ -262,7 +266,7 @@ class TestEmbedServiceEmbedSync:
         with pytest.raises(ConnectionError) as exc_info:
             svc._embed_sync("text")
 
-        assert svc._base_url in str(exc_info.value)
+        assert settings.ollama_base_url in str(exc_info.value)
 
     # --- timeout ---
 
