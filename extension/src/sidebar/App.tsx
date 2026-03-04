@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { BackendControl } from './components/BackendControl'
 import { KnowledgePanel } from './components/KnowledgePanel'
 import { ReplyPanel } from './components/ReplyPanel'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 import { ToastContainer } from '@/shared/components/Toast'
 import { useTheme } from './hooks/useTheme'
 

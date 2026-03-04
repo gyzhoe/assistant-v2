@@ -1,5 +1,5 @@
 import type { ExtensionMessage } from '../shared/messages'
-import { STORAGE_KEY_SECRETS, debugLog } from '../shared/constants'
+import { STORAGE_KEY_SECRETS, NATIVE_HOST, debugLog } from '../shared/constants'
 
 // Open side panel when toolbar button is clicked
 chrome.action.onClicked.addListener((tab) => {
@@ -74,7 +74,6 @@ chrome.runtime.onMessage.addListener(
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason !== 'install' && details.reason !== 'update') return
 
-  const NATIVE_HOST = 'com.assistant.backend_manager'
   chrome.runtime.sendNativeMessage(NATIVE_HOST, { action: 'get_token' }, (response) => {
     if (chrome.runtime.lastError) {
       debugLog('Auto-token: native host unavailable:', chrome.runtime.lastError.message)

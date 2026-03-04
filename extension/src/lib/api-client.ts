@@ -1,8 +1,8 @@
 import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
-import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS } from '../shared/constants'
+import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS, NATIVE_HOST } from '../shared/constants'
 import { ApiError } from '../shared/api-error'
 
-async function getBackendUrl(): Promise<string> {
+export async function getBackendUrl(): Promise<string> {
   return new Promise((resolve) => {
     chrome.storage.sync.get(STORAGE_KEY_SETTINGS, (result) => {
       const settings = result[STORAGE_KEY_SETTINGS] as { backendUrl?: string } | undefined
@@ -180,8 +180,6 @@ export const apiClient = {
     return resp.json() as Promise<IngestUrlResponse>
   },
 }
-
-const NATIVE_HOST = 'com.assistant.backend_manager'
 
 interface NativeResponse {
   ok: boolean

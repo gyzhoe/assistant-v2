@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { login } from '../api'
+import { LockIcon } from '../../shared/components/Icons'
 
 interface TokenGateProps {
   onAuthenticated: () => void
@@ -40,10 +41,7 @@ export function TokenGate({ onAuthenticated, errorMessage }: TokenGateProps): Re
     <div className="token-gate">
       <div className="token-gate-card">
         <div className="token-gate-icon" aria-hidden="true">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
+          <LockIcon />
         </div>
         <h2 className="token-gate-title">Authentication Required</h2>
         <p className="token-gate-desc">Enter the API token to access KB management.</p>

@@ -3,6 +3,7 @@ import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient, sendNativeCommand } from '../../lib/api-client'
 import { isCorsProbablyBlocked } from '../../lib/cors-detect'
 import { ThemeToggle } from './ThemeToggle'
+import { GearIcon } from '../../shared/components/Icons'
 import { DEFAULT_MODEL } from '../../shared/constants'
 import type { AppSettings } from '../../shared/types'
 
@@ -387,10 +388,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
           aria-label="Open settings"
           title="Settings"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="8" cy="8" r="2" />
-            <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
-          </svg>
+          <GearIcon />
         </button>
       </div>
 

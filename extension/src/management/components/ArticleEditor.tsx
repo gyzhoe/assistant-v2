@@ -4,6 +4,7 @@ import { managementApi, ApiError } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
 import { showToast } from '@/shared/components/Toast'
 import { DEFAULT_TAG_SUGGESTIONS } from '../constants/tagSuggestions'
+import { BackIcon } from '../../shared/components/Icons'
 import type { ArticleDetail, CreateArticleResponse, UpdateArticleResponse } from '../types'
 
 const CONTENT_TEMPLATE = `## Problem
@@ -362,8 +363,3 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
   )
 }
 
-const BackIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M8.5 2.5L4 7l4.5 4.5" />
-  </svg>
-)

@@ -5,8 +5,8 @@ import {
   TICKET_DOM_MARKERS,
   TICKET_CONTENT_SENTINELS,
   STORAGE_KEY_SETTINGS,
-  debugError,
 } from '../shared/constants'
+import { safeQuerySelector } from './dom-utils'
 
 /**
  * WHD label-text → field mapping.
@@ -20,23 +20,6 @@ const WHD_LABELS: Record<string, readonly string[]> = {
   requesterName: ['Client', 'Requester', 'Requested By'],
   category: ['Request Type', 'Category', 'Problem Type'],
   status: ['Status'],
-}
-
-/**
- * Safe wrapper around document.querySelector that catches SyntaxError
- * thrown by invalid CSS selectors (e.g. user-supplied overrides from options page).
- * Returns null and logs the error instead of crashing the content script.
- */
-function safeQuerySelector(selector: string): Element | null {
-  try {
-    return document.querySelector(selector)
-  } catch (err) {
-    if (err instanceof SyntaxError) {
-      debugError('Invalid CSS selector skipped:', selector, err.message)
-      return null
-    }
-    throw err
-  }
 }
 
 export class DOMReader {

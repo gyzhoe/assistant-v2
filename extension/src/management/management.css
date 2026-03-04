@@ -1521,3 +1521,32 @@ body {
     gap: 0.4rem;
   }
 }
+
+/* ─── Error boundary fallback ─────────────────────── */
+.error-fallback {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--error-text);
+}
+
+.error-fallback .title {
+  font-weight: 600;
+}
+
+.error-fallback .detail {
+  font-size: 0.75rem;
+}
+
+.error-fallback .hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.error-fallback-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}

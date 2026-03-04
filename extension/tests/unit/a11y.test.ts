@@ -26,7 +26,7 @@ describe('Accessibility attributes', () => {
   })
 
   it('ErrorBoundary copy button has aria-label', async () => {
-    const { ErrorBoundary } = await import('../../src/sidebar/components/ErrorBoundary')
+    const { ErrorBoundary } = await import('../../src/shared/components/ErrorBoundary')
     const React = await import('react')
     const { render } = await import('@testing-library/react')
 

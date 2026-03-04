@@ -9,6 +9,7 @@ import { ModelSelector } from './ModelSelector'
 import { SkeletonLoader } from './SkeletonLoader'
 import { InsertButton } from './InsertButton'
 import { ErrorState } from './ErrorState'
+import { CopyIcon } from '../../shared/components/Icons'
 
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
@@ -171,10 +172,7 @@ export function ReplyPanel(): React.ReactElement {
                   {copyState === 'copied' ? (
                     '\u2713 Copied!'
                   ) : (
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <rect x="5" y="5" width="9" height="9" rx="1" />
-                      <path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2" />
-                    </svg>
+                    <CopyIcon />
                   )}
                 </button>
                 <button

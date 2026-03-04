@@ -8,6 +8,7 @@ import { ImportSection } from './components/ImportSection'
 import { ArticleEditor } from './components/ArticleEditor'
 import { TokenGate } from './components/TokenGate'
 import { ToastContainer } from '@/shared/components/Toast'
+import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 
 type ThemeMode = 'light' | 'dark'
 
@@ -122,32 +123,34 @@ export function App(): React.ReactElement {
 
   return (
     <div className="app-shell" data-theme={theme}>
-      <Header
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onImportClick={handleImportClick}
-        onNewArticle={handleNewArticle}
-        showNewArticle={view === 'list'}
-      />
-      {view === 'create' ? (
-        <main className="mgmt-main">
-          <ArticleEditor onBack={handleBackToList} />
-        </main>
-      ) : view === 'edit' && editArticleId ? (
-        <main className="mgmt-main">
-          <ArticleEditor onBack={handleBackToList} mode="edit" articleId={editArticleId} />
-        </main>
-      ) : (
-        <main className="mgmt-main">
-          <StatCards stats={stats} health={health} isLoading={statsLoading || healthLoading} />
-          <ArticleList onImportClick={handleImportClick} onAuthRequired={handleAuthRequired} onEditArticle={handleEditArticle} />
-          <ImportSection
-            isOpen={importOpen}
-            onToggle={() => setImportOpen(prev => !prev)}
-            sectionRef={importRefCallback}
-          />
-        </main>
-      )}
+      <ErrorBoundary>
+        <Header
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onImportClick={handleImportClick}
+          onNewArticle={handleNewArticle}
+          showNewArticle={view === 'list'}
+        />
+        {view === 'create' ? (
+          <main className="mgmt-main">
+            <ArticleEditor onBack={handleBackToList} />
+          </main>
+        ) : view === 'edit' && editArticleId ? (
+          <main className="mgmt-main">
+            <ArticleEditor onBack={handleBackToList} mode="edit" articleId={editArticleId} />
+          </main>
+        ) : (
+          <main className="mgmt-main">
+            <StatCards stats={stats} health={health} isLoading={statsLoading || healthLoading} />
+            <ArticleList onImportClick={handleImportClick} onAuthRequired={handleAuthRequired} onEditArticle={handleEditArticle} />
+            <ImportSection
+              isOpen={importOpen}
+              onToggle={() => setImportOpen(prev => !prev)}
+              sectionRef={importRefCallback}
+            />
+          </main>
+        )}
+      </ErrorBoundary>
       <ToastContainer />
     </div>
   )
