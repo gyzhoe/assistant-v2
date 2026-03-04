@@ -1,7 +1,7 @@
 """pull-models-gui.py — Download Ollama models with a native tkinter progress window.
 
-Launch via pythonw.exe so no console window appears.
-Usage: pythonw.exe pull-models-gui.py [--app-dir <path>]
+Falls back to console-based progress if tkinter is unavailable (e.g. embeddable Python).
+Usage: python pull-models-gui.py [--app-dir <path>]
 """
 
 import argparse
@@ -11,10 +11,15 @@ import subprocess
 import sys
 import threading
 import time
-import tkinter as tk
 import urllib.error
 import urllib.request
-from tkinter import ttk
+
+try:
+    import tkinter as tk
+    from tkinter import ttk
+    HAS_TKINTER = True
+except ImportError:
+    HAS_TKINTER = False
 
 OLLAMA_BASE = "http://localhost:11435"
 MODELS = ["nomic-embed-text", "qwen3.5:9b"]
@@ -195,10 +200,57 @@ def worker(win: PullWindow, app_dir: str) -> None:
     win.post_done()
 
 
+def console_pull(app_dir: str) -> None:
+    """Fallback: pull models with console output when tkinter is unavailable."""
+    print("=" * 50)
+    print("AI Helpdesk Assistant — Downloading Models")
+    print("(tkinter unavailable, using console mode)")
+    print("=" * 50)
+
+    ollama_exe = find_ollama_exe(app_dir)
+
+    print("Starting Ollama...")
+    if not ensure_ollama_running(ollama_exe):
+        print(f"ERROR: Ollama did not start within {OLLAMA_START_TIMEOUT}s.")
+        print(f"Check: {ollama_exe}")
+        input("Press Enter to exit...")
+        sys.exit(1)
+
+    for idx, model in enumerate(MODELS):
+        print(f"\n[{idx + 1}/{len(MODELS)}] Pulling {model}...")
+        try:
+            last_status = ""
+
+            def on_progress(status: str, pct: "float | None") -> None:
+                nonlocal last_status
+                if pct is not None:
+                    bar_len = 30
+                    filled = int(bar_len * pct / 100)
+                    bar = "#" * filled + "-" * (bar_len - filled)
+                    print(f"\r  [{bar}] {pct:5.1f}%  {status[:60]}", end="", flush=True)
+                elif status != last_status:
+                    print(f"  {status}")
+                last_status = status
+
+            pull_model(model, on_progress)
+            print()  # newline after progress bar
+        except Exception as exc:
+            print(f"\nERROR: Failed to pull {model}: {exc}")
+            input("Press Enter to exit...")
+            sys.exit(1)
+
+    print(f"\nDone! All {len(MODELS)} models downloaded successfully.")
+    time.sleep(2)
+
+
 def main() -> None:
     args = parse_args()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     app_dir = args.app_dir or os.path.dirname(script_dir)
+
+    if not HAS_TKINTER:
+        console_pull(app_dir)
+        return
 
     root = tk.Tk()
     style = ttk.Style(root)
