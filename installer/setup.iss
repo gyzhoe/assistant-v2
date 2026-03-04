@@ -134,7 +134,7 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\s
 ; Import bundled LLM models (copies pre-downloaded model files)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
 
-; Pull LLM models — tkinter GUI if available, console fallback if not (embeddable Python lacks tkinter)
+; Pull LLM models — tkinter GUI with console fallback (python.exe so errors are visible)
 Filename: "{app}\backend\.venv\Scripts\python.exe"; Parameters: """{app}\scripts\pull-models-gui.py"" --app-dir ""{app}"""; StatusMsg: "Downloading LLM models..."; Flags: waituntilterminated; Components: models
 
 ; Post-install: open extension folder and Edge extensions page
