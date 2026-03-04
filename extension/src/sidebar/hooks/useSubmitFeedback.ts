@@ -10,11 +10,12 @@ export function useSubmitFeedback() {
   const reply = useSidebarStore((s) => s.reply)
   const replyRating = useSidebarStore((s) => s.replyRating)
   const setReplyRating = useSidebarStore((s) => s.setReplyRating)
+  const feedbackDocId = useSidebarStore((s) => s.feedbackDocId)
+  const setFeedbackDocId = useSidebarStore((s) => s.setFeedbackDocId)
   const [feedbackError, setFeedbackError] = useState<string | null>(null)
   const [ratingConfirmed, setRatingConfirmed] = useState(false)
   const [ratingRemoved, setRatingRemoved] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const feedbackDocIdRef = useRef<string | null>(null)
 
   const submitRating = useCallback(async (rating: 'good' | 'bad') => {
     // Toggle off if the same rating is clicked again — delete from backend
@@ -24,15 +25,14 @@ export function useSubmitFeedback() {
       setRatingConfirmed(false)
       setRatingRemoved(false)
 
-      const docId = feedbackDocIdRef.current
-      if (docId) {
+      if (feedbackDocId) {
         try {
-          await apiClient.deleteFeedback(docId)
-          feedbackDocIdRef.current = null
+          await apiClient.deleteFeedback(feedbackDocId)
+          setFeedbackDocId(null)
           if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
           setRatingRemoved(true)
           confirmTimerRef.current = setTimeout(() => setRatingRemoved(false), RATING_CONFIRMED_DURATION_MS)
-          debugLog('Feedback deleted: id=%s', docId)
+          debugLog('Feedback deleted: id=%s', feedbackDocId)
         } catch (err) {
           debugError('Failed to delete feedback:', err)
           setFeedbackError('Remove failed')
@@ -56,7 +56,7 @@ export function useSubmitFeedback() {
         reply,
         rating,
       })
-      feedbackDocIdRef.current = result.id
+      setFeedbackDocId(result.id)
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
       setRatingConfirmed(true)
       confirmTimerRef.current = setTimeout(() => setRatingConfirmed(false), RATING_CONFIRMED_DURATION_MS)
@@ -64,9 +64,9 @@ export function useSubmitFeedback() {
       debugError('Failed to submit feedback:', err)
       setFeedbackError('Rating not saved')
     }
-  // setReplyRating is a stable Zustand setter — safe to omit from deps.
+  // setReplyRating and setFeedbackDocId are stable Zustand setters — safe to omit from deps.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticketData, reply, replyRating])
+  }, [ticketData, reply, replyRating, feedbackDocId])
 
   return { submitRating, feedbackError, ratingConfirmed, ratingRemoved }
 }

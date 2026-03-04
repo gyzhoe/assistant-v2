@@ -1,70 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { apiClient } from '../../lib/api-client'
+import { useSidebarStore } from '../store/sidebarStore'
 import { ImportTab } from './ImportTab'
 import { ManageTab } from './ManageTab'
-
-const POLL_INTERVAL_MS = 10000
 
 export function KnowledgePanel(): React.ReactElement {
   const [collapsed, setCollapsed] = useState(true)
   const [activeTab, setActiveTab] = useState<'import' | 'manage'>('import')
-  const [docCounts, setDocCounts] = useState<Record<string, number>>({})
-  const mountedRef = useRef(true)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const docCounts = useSidebarStore((s) => s.chromaDocCounts)
+  const setChromaDocCounts = useSidebarStore((s) => s.setChromaDocCounts)
 
   const totalDocs = Object.values(docCounts).reduce((sum, n) => sum + n, 0)
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-  }, [])
-
-  const fetchCounts = useCallback(async () => {
+  const handleRefresh = useCallback(async () => {
     try {
       const h = await apiClient.health()
-      if (mountedRef.current) setDocCounts(h.chroma_doc_counts ?? {})
+      setChromaDocCounts(h.chroma_doc_counts ?? {})
     } catch {
       // Ignore — backend may be offline
     }
-  }, [])
-
-  const schedulePoll = useCallback(() => {
-    clearTimer()
-    timerRef.current = setTimeout(() => {
-      if (mountedRef.current) {
-        fetchCounts().finally(() => {
-          if (mountedRef.current) schedulePoll()
-        })
-      }
-    }, POLL_INTERVAL_MS)
-  }, [fetchCounts, clearTimer])
-
-  // Only poll when expanded; stop polling when collapsed
-  useEffect(() => {
-    mountedRef.current = true
-    if (!collapsed) {
-      // Panel just expanded — fetch immediately, then start polling
-      fetchCounts().finally(() => {
-        if (mountedRef.current) schedulePoll()
-      })
-    } else {
-      // Panel collapsed — stop polling
-      clearTimer()
-    }
-    return () => {
-      mountedRef.current = false
-      clearTimer()
-    }
-  }, [collapsed, fetchCounts, schedulePoll, clearTimer])
-
-  const handleRefresh = useCallback(() => {
-    clearTimer()
-    fetchCounts().finally(() => {
-      if (mountedRef.current) schedulePoll()
-    })
-  }, [fetchCounts, schedulePoll, clearTimer])
+  }, [setChromaDocCounts])
 
   return (
     <section className="panel" aria-label="Knowledge Base">

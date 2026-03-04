@@ -213,16 +213,16 @@ export function useKnowledgeImport() {
   }, [stagedFiles, uploadFiles])
 
   const retryFailed = useCallback(async () => {
-    // Reset failed files to pending first
-    setStagedFiles((prev) =>
-      prev.map((f) => f.uploadStatus === 'error' ? { ...f, uploadStatus: 'pending' as FileUploadStatus, errorMessage: null } : f)
-    )
-    // We need to use a microtask to ensure state is updated before reading it
-    // Instead, collect failed file IDs now and filter from updated state inside uploadFiles
-    const failedFiles = stagedFiles.filter((f) => f.uploadStatus === 'error')
+    // Collect failed files and reset them to pending in one pass to avoid
+    // reading stale stagedFiles from the closure after setStagedFiles.
+    let failedFiles: StagedFile[] = []
+    setStagedFiles((prev) => {
+      failedFiles = prev.filter((f) => f.uploadStatus === 'error')
+      return prev.map((f) => f.uploadStatus === 'error' ? { ...f, uploadStatus: 'pending' as FileUploadStatus, errorMessage: null } : f)
+    })
     if (failedFiles.length === 0) return
     await uploadFiles(failedFiles)
-  }, [stagedFiles, uploadFiles])
+  }, [uploadFiles])
 
   const cancelUpload = useCallback(() => {
     if (abortRef.current) {

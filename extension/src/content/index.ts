@@ -40,18 +40,24 @@ async function init(): Promise<void> {
 chrome.runtime.onMessage.addListener(
   (message: SidebarToContentMessage, _sender, sendResponse) => {
     if (message.type === 'INSERT_REPLY') {
-      if (inserter) {
-        const success = inserter.insertReply(message.payload.text)
-        if (success) {
-          chrome.runtime.sendMessage({ type: 'INSERT_SUCCESS' }).catch(() => {})
-          sendResponse({ ok: true })
-        } else {
-          chrome.runtime.sendMessage({
-            type: 'INSERT_FAILED',
-            payload: { reason: 'Reply textarea not found' },
-          }).catch(() => {})
-          sendResponse({ ok: false })
-        }
+      if (!inserter) {
+        chrome.runtime.sendMessage({
+          type: 'INSERT_FAILED',
+          payload: { reason: 'Content script not ready' },
+        }).catch(() => {})
+        sendResponse({ ok: false, reason: 'content script not ready' })
+        return true
+      }
+      const success = inserter.insertReply(message.payload.text)
+      if (success) {
+        chrome.runtime.sendMessage({ type: 'INSERT_SUCCESS' }).catch(() => {})
+        sendResponse({ ok: true })
+      } else {
+        chrome.runtime.sendMessage({
+          type: 'INSERT_FAILED',
+          payload: { reason: 'Reply textarea not found' },
+        }).catch(() => {})
+        sendResponse({ ok: false })
       }
       return true
     }

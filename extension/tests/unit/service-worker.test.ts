@@ -82,12 +82,16 @@ describe('service-worker onInstalled auto-token', () => {
     )
   })
 
-  it('does nothing on update reason', async () => {
+  it('re-provisions token on update reason', async () => {
     await loadServiceWorker()
     const listener = installedListeners[installedListeners.length - 1]
     listener({ reason: 'update' } as chrome.runtime.InstalledDetails)
 
-    expect(chrome.runtime.sendNativeMessage).not.toHaveBeenCalled()
+    expect(chrome.runtime.sendNativeMessage).toHaveBeenCalledWith(
+      'com.assistant.backend_manager',
+      { action: 'get_token' },
+      expect.any(Function)
+    )
   })
 
   it('handles native host unavailable gracefully', async () => {

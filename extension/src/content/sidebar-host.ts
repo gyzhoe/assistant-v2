@@ -56,6 +56,10 @@ export class SidebarHost {
   }
 
   private startObserver(): void {
+    // Don't observe on non-ticket pages — avoids watching all of document.body
+    // for mutations that will never produce ticket data.
+    if (!this.reader.isTicketPage()) return
+
     this.observer = new MutationObserver(() => {
       // Debounce to avoid flooding on WHD's rapid partial DOM updates
       if (this.debounceTimer !== null) clearTimeout(this.debounceTimer)

@@ -1,3 +1,18 @@
+import { debugError } from '../shared/constants'
+
+/** Safe querySelector that catches SyntaxError from invalid CSS selectors. */
+function safeQuerySelector(selector: string): Element | null {
+  try {
+    return document.querySelector(selector)
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      debugError('Invalid CSS selector skipped:', selector, err.message)
+      return null
+    }
+    throw err
+  }
+}
+
 export class DOMInserter {
   private readonly techNotesSelectors = [
     'textarea#techNotes',
@@ -44,15 +59,15 @@ export class DOMInserter {
   }
 
   private findTextarea(): HTMLTextAreaElement | null {
-    // Try user-configured selector first
+    // Try user-configured selector first (may be invalid — use safe wrapper)
     if (this.customSelector) {
-      const el = document.querySelector(this.customSelector)
+      const el = safeQuerySelector(this.customSelector)
       if (el instanceof HTMLTextAreaElement) return el
     }
 
     // Fall back to built-in selectors
     for (const sel of this.techNotesSelectors) {
-      const el = document.querySelector(sel)
+      const el = safeQuerySelector(sel)
       if (el instanceof HTMLTextAreaElement) return el
     }
     return null

@@ -17,7 +17,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps): React.ReactElement {
-  const container = document.querySelector('.app-shell') as HTMLElement | null
+  const container = (document.querySelector('.app-shell') ?? document.body) as HTMLElement
 
   return (
     <AlertDialog.Root open={open} onOpenChange={isOpen => { if (!isOpen) onCancel() }}>
