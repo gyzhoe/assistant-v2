@@ -5,6 +5,15 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.2] — Installer Fix (2026-03-04)
+
+### Fixed
+
+- Installer: bundle tkinter with embeddable Python — model pull GUI now works in CI-built installers
+- Installer: `python.exe` instead of `pythonw.exe` for model pull — errors visible if tkinter unavailable
+- Installer: `Components: models` triggers model pull (was `ollama` — wrong checkbox binding)
+- Installer: console-based progress fallback when tkinter is unavailable (defense-in-depth)
+
 ## [1.14.1] — QA Sweep & Code Quality (2026-03-04)
 
 ### Changed
