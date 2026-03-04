@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { apiClient } from '../../lib/api-client'
 import { ApiError } from '../../lib/api-client'
+import { parseErrorDetail } from '../../lib/error-utils'
 import type { IngestUploadResponse } from '../../shared/types'
 import { debugLog } from '../../shared/constants'
 
@@ -45,13 +46,14 @@ function getExtension(name: string): string {
 
 function parseUploadError(err: unknown): string {
   if (err instanceof ApiError) {
-    const body = err.body as { detail?: string; error_code?: string }
-    if (body?.error_code === 'PAYLOAD_TOO_LARGE' || err.status === 413) {
+    const body = err.body as Record<string, unknown>
+    if (body?.['error_code'] === 'PAYLOAD_TOO_LARGE' || err.status === 413) {
       return 'File is too large. Please reduce the file size and try again.'
     }
     if (err.status === 503) return 'Backend or Ollama is not reachable'
     if (err.status === 409) return 'Another import is already in progress'
-    return body?.detail ?? `Upload failed (${err.status})`
+    const parsed = parseErrorDetail(body)
+    return parsed !== 'An unexpected error occurred' ? parsed : `Upload failed (${err.status})`
   }
   if (err instanceof Error) return err.message
   return 'Upload failed'

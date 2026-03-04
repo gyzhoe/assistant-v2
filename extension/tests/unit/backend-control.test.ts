@@ -37,6 +37,10 @@ const mockShutdown = vi.fn().mockResolvedValue(undefined)
 const mockOllamaStop = vi.fn().mockResolvedValue({ status: 'stopped' })
 const mockSendNativeCommand = vi.fn()
 
+vi.mock('../../src/lib/cors-detect', () => ({
+  isCorsProbablyBlocked: vi.fn().mockResolvedValue(false),
+}))
+
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     health: vi.fn().mockResolvedValue({

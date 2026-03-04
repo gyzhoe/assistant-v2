@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { apiClient, sendNativeCommand } from '../../lib/api-client'
+import { isCorsProbablyBlocked } from '../../lib/cors-detect'
 import { ThemeToggle } from './ThemeToggle'
 import { DEFAULT_MODEL } from '../../shared/constants'
 import type { AppSettings } from '../../shared/types'
 
-type BackendStatus = 'online' | 'offline' | 'checking' | 'stopping' | 'starting'
+type BackendStatus = 'online' | 'offline' | 'cors_blocked' | 'checking' | 'stopping' | 'starting'
 
 interface BackendControlProps {
   themeSetting: AppSettings['theme']
@@ -142,7 +143,10 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       return true
     } catch {
       if (!mountedRef.current) return false
-      setStatus('offline')
+      // Distinguish CORS rejection from genuine offline
+      const corsBlocked = await isCorsProbablyBlocked()
+      if (!mountedRef.current) return false
+      setStatus(corsBlocked ? 'cors_blocked' : 'offline')
       setOllamaOk(false)
       setOllamaReachable(false)
       setVersion('')
@@ -203,6 +207,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   // Auto-dismiss onboarding when all service checks pass
   const backendOk = status === 'online'
+  const isCorsBlocked = status === 'cors_blocked'
   const modelOk = selectedModel.length > 0
   const allServicesOk = backendOk && ollamaOk && modelOk
 
@@ -220,6 +225,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   // Show onboarding when ALL service checks fail and user hasn't dismissed.
   // Don't show during initial 'checking' phase to avoid a flash.
+  // CORS blocked means backend is reachable — don't show onboarding.
   const showOnboarding =
     status === 'offline' && !ollamaOk && !onboardingDismissed
 
@@ -345,12 +351,13 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const chipLabel =
     status === 'checking' || status === 'starting' ? 'Checking\u2026' :
     status === 'stopping' ? 'Stopping\u2026' :
+    status === 'cors_blocked' ? 'CORS Blocked' :
     status === 'offline' ? 'Offline' :
     allReady ? 'Ready' : 'Attention'
 
   const chipClass =
     status === 'checking' || status === 'starting' || status === 'stopping' ? 'pending' :
-    status === 'offline' ? 'error' :
+    status === 'offline' || status === 'cors_blocked' ? 'error' :
     allReady ? 'ok' : 'pending'
 
   return (
@@ -431,6 +438,23 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
                 {ollamaAction === 'stopping' && <span className="svc-action">Stopping…</span>}
               </div>
             </>
+          )}
+
+          {/* --- CORS blocked --- */}
+          {isCorsBlocked && (
+            <div className="offline-controls">
+              <p className="support-text error-text" role="alert">
+                Connection blocked — the backend is running but CORS is rejecting requests.
+                Check that your extension ID matches the allowed origin in the backend configuration.
+              </p>
+              <button
+                onClick={() => chrome.runtime.openOptionsPage()}
+                className="svc-btn full-width"
+                aria-label="Open settings"
+              >
+                Open Settings
+              </button>
+            </div>
           )}
 
           {/* --- Offline --- */}

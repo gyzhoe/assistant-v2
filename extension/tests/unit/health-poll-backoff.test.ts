@@ -35,6 +35,10 @@ const mockHealth = vi.fn().mockImplementation(() => {
   return Promise.reject(new Error('Connection refused'))
 })
 
+vi.mock('../../src/lib/cors-detect', () => ({
+  isCorsProbablyBlocked: vi.fn().mockResolvedValue(false),
+}))
+
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     health: (...args: unknown[]) => mockHealth(...args),

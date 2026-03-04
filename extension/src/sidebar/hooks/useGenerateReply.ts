@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useSettings } from './useSettings'
 import { apiClient, ApiError } from '../../lib/api-client'
+import { parseErrorDetail } from '../../lib/error-utils'
 import { debugLog, debugError } from '../../shared/constants'
 
 export function useGenerateReply() {
@@ -67,11 +68,14 @@ export function useGenerateReply() {
       }
       let message = 'Failed to generate reply'
       if (err instanceof ApiError) {
-        const body = err.body as { message?: string; detail?: string; error_code?: string }
-        if (body?.error_code === 'OLLAMA_DOWN' || err.status === 503) {
+        const body = err.body as Record<string, unknown>
+        if (body?.['error_code'] === 'OLLAMA_DOWN' || err.status === 503) {
           message = 'Ollama is not running. Please start it and try again.'
         } else {
-          message = body?.message ?? body?.detail ?? `Generation failed (${err.status})`
+          const parsed = parseErrorDetail(body)
+          message = parsed !== 'An unexpected error occurred'
+            ? parsed
+            : `Generation failed (${err.status})`
         }
       } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
         message = 'Network error — check connection and backend status'
