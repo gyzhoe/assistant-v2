@@ -32,7 +32,7 @@ const mockGenerate = vi.fn()
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     generate: (...args: unknown[]) => mockGenerate(...args),
-    models: vi.fn().mockResolvedValue(['qwen2.5:14b']),
+    models: vi.fn().mockResolvedValue(['qwen3.5:9b']),
     health: vi.fn().mockResolvedValue({ status: 'ok' }),
   },
   ApiError: class ApiError extends Error {
@@ -69,15 +69,15 @@ describe('useGenerateReply', () => {
       isGenerating: false,
       generateError: null,
       lastResponse: null,
-      selectedModel: 'qwen2.5:14b',
+      selectedModel: 'qwen3.5:9b',
       isInserted: false,
       isEditingReply: false,
       replyRating: null,
       pinnedArticles: [],
       settings: {
         backendUrl: 'http://localhost:8765',
-        defaultModel: 'qwen2.5:14b',
-        availableModels: ['qwen2.5:14b'],
+        defaultModel: 'qwen3.5:9b',
+        availableModels: ['qwen3.5:9b'],
         selectorOverrides: {},
         promptSuffix: '',
         theme: 'system',
@@ -106,13 +106,13 @@ describe('useGenerateReply', () => {
 
     // Resolve to clean up
     await act(async () => {
-      resolveGenerate!({ reply: 'done', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 100 })
+      resolveGenerate!({ reply: 'done', model_used: 'qwen3.5:9b', context_docs: [], latency_ms: 100 })
       await generatePromise!
     })
   })
 
   it('sends correct payload fields in API call', async () => {
-    mockGenerate.mockResolvedValueOnce({ reply: 'Hi', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+    mockGenerate.mockResolvedValueOnce({ reply: 'Hi', model_used: 'qwen3.5:9b', context_docs: [], latency_ms: 50 })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -129,7 +129,7 @@ describe('useGenerateReply', () => {
         requester_name: 'Alice',
         category: 'Network',
         status: 'Open',
-        model: 'qwen2.5:14b',
+        model: 'qwen3.5:9b',
         include_web_context: true,
       }),
       expect.any(AbortSignal),
@@ -137,7 +137,7 @@ describe('useGenerateReply', () => {
   })
 
   it('sets reply text on successful generation', async () => {
-    mockGenerate.mockResolvedValueOnce({ reply: 'Try restarting.', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+    mockGenerate.mockResolvedValueOnce({ reply: 'Try restarting.', model_used: 'qwen3.5:9b', context_docs: [], latency_ms: 50 })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -217,7 +217,7 @@ describe('useGenerateReply', () => {
         autoInsert: true,
       },
     })
-    mockGenerate.mockResolvedValueOnce({ reply: 'Auto-inserted reply', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+    mockGenerate.mockResolvedValueOnce({ reply: 'Auto-inserted reply', model_used: 'qwen3.5:9b', context_docs: [], latency_ms: 50 })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -236,7 +236,7 @@ describe('useGenerateReply', () => {
   })
 
   it('does not send INSERT_REPLY when autoInsert is disabled', async () => {
-    mockGenerate.mockResolvedValueOnce({ reply: 'Normal reply', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+    mockGenerate.mockResolvedValueOnce({ reply: 'Normal reply', model_used: 'qwen3.5:9b', context_docs: [], latency_ms: 50 })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -254,7 +254,7 @@ describe('useGenerateReply', () => {
   })
 
   it('saves reply to session storage after successful generation', async () => {
-    mockGenerate.mockResolvedValueOnce({ reply: 'Cached reply', model_used: 'qwen2.5:14b', context_docs: [], latency_ms: 50 })
+    mockGenerate.mockResolvedValueOnce({ reply: 'Cached reply', model_used: 'qwen3.5:9b', context_docs: [], latency_ms: 50 })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')

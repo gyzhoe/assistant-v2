@@ -69,7 +69,7 @@ async def test_health_detail_with_token_configured_requires_token(client: AsyncC
     """When api_token is set, /health/detail requires valid X-Extension-Token."""
     with patch("app.routers.health.settings") as mock_settings:
         mock_settings.api_token = "secret-token"
-        mock_settings.ollama_base_url = "http://localhost:11434"
+        mock_settings.ollama_base_url = "http://localhost:11435"
         response = await client.get("/health/detail")
     assert response.status_code == 401
 
@@ -78,7 +78,7 @@ async def test_health_detail_with_token_configured_requires_token(client: AsyncC
 async def test_health_detail_with_valid_token_returns_200(client: AsyncClient) -> None:
     with patch("app.routers.health.settings") as mock_settings:
         mock_settings.api_token = "secret-token"
-        mock_settings.ollama_base_url = "http://localhost:11434"
+        mock_settings.ollama_base_url = "http://localhost:11435"
         mock_settings.version = "1.11.0"
         response = await client.get(
             "/health/detail",

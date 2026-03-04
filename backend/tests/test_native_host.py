@@ -33,7 +33,7 @@ def _get_token(env_dir):
 
 class TestGetToken:
     def test_reads_valid_token(self, env_dir):
-        _write_env(env_dir, "OLLAMA_BASE_URL=http://localhost:11434\nAPI_TOKEN=abc123def456\n")
+        _write_env(env_dir, "OLLAMA_BASE_URL=http://localhost:11435\nAPI_TOKEN=abc123def456\n")
         result = _get_token(env_dir)
         assert result == {"ok": True, "token": "abc123def456"}
 
@@ -64,7 +64,7 @@ class TestGetToken:
         assert result == {"ok": True, "token": "my_secret_token"}
 
     def test_no_api_token_line(self, env_dir):
-        _write_env(env_dir, "OLLAMA_BASE_URL=http://localhost:11434\n")
+        _write_env(env_dir, "OLLAMA_BASE_URL=http://localhost:11435\n")
         result = _get_token(env_dir)
         assert result["ok"] is False
         assert "not found" in result["error"]
