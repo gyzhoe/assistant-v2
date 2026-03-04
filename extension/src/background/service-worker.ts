@@ -72,7 +72,7 @@ chrome.runtime.onMessage.addListener(
  * authenticated from the start — zero user configuration.
  */
 chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason !== 'install') return
+  if (details.reason !== 'install' && details.reason !== 'update') return
 
   const NATIVE_HOST = 'com.assistant.backend_manager'
   chrome.runtime.sendNativeMessage(NATIVE_HOST, { action: 'get_token' }, (response) => {
