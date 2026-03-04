@@ -8,7 +8,7 @@
 
 #define MyAppName     "AI Helpdesk Assistant"
 #define MyAppPublisher "AI Helpdesk"
-#define MyAppURL      "https://github.com/gyzhoe/assistant"
+#define MyAppURL      "https://github.com/gyzhoe/assistant-v2"
 
 [Setup]
 AppId={{B8F2A1D4-7E3C-4A90-9D5F-1C6E8B4A2F07}

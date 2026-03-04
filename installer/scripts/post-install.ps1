@@ -118,8 +118,10 @@ if (Test-Path $envFile) {
 
     $envContent = Get-Content $envExample -Raw
     $envContent = $envContent -replace "API_TOKEN=REPLACE_WITH_STRONG_SECRET", "API_TOKEN=$token"
+    # Set CORS_ORIGIN to the deterministic extension ID (fixed via manifest.json key field)
+    $envContent = $envContent -replace "CORS_ORIGIN=chrome-extension://REPLACE_WITH_YOUR_EXTENSION_ID", "CORS_ORIGIN=chrome-extension://inapklomefcicbehlgihcidbmboiimgc"
     Set-Content -Path $envFile -Value $envContent -NoNewline
-    Write-Host "API token generated and written to .env (auto-detected by extension)." -ForegroundColor Green
+    Write-Host "API token generated and CORS origin configured in .env." -ForegroundColor Green
 } else {
     Write-Host "Warning: .env.example not found — skipping .env creation." -ForegroundColor Yellow
 }

@@ -102,12 +102,21 @@ jobs:
         shell: pwsh
         run: |
           # Python 3.13.2 embeddable (win64) for offline backend install
+          # SHA256 sourced from: python.org direct download verification
           $pyVersion = "3.13.2"
           $pyUrl = "https://www.python.org/ftp/python/${pyVersion}/python-${pyVersion}-embed-amd64.zip"
+          $pySha256 = "1e803610b140cbf69dfa2ceaaeb39651bef75a239c381289e827c30862a27b93"
 
           New-Item -ItemType Directory -Force -Path installer/deps/python | Out-Null
           Write-Host "Downloading Python ${pyVersion} embeddable..."
           Invoke-WebRequest -Uri $pyUrl -OutFile "installer/deps/python-embed.zip"
+
+          $actual = (Get-FileHash -Path "installer/deps/python-embed.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $pySha256) {
+            Write-Error "Python SHA256 mismatch! Expected: $pySha256 | Got: $actual"
+            exit 1
+          }
+          Write-Host "Python SHA256 verified OK"
 
           Expand-Archive -Path "installer/deps/python-embed.zip" -DestinationPath "installer/deps/python" -Force
           Remove-Item "installer/deps/python-embed.zip"
@@ -164,7 +173,7 @@ jobs:
             4. Pull models via Start Menu → Setup LLM Models
 
             ### Manual Setup
-            1. Install [Ollama](https://ollama.com) and pull models: `ollama pull qwen2.5:14b && ollama pull nomic-embed-text`
+            1. Install [Ollama](https://ollama.com) and pull models: `ollama pull qwen3.5:9b && ollama pull nomic-embed-text`
             2. Install [uv](https://docs.astral.sh/uv/): `pip install uv`
             3. Clone the repo and run: `cd backend && uv sync && uv run uvicorn app.main:app --port 8765`
             4. Extract the extension zip and load unpacked in Edge
