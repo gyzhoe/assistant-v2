@@ -26,7 +26,7 @@ When a technician opens a WHD ticket, the assistant:
 1. **Reads** the ticket subject, description, requester, category, and status from the page automatically
 2. **Retrieves** relevant context from past resolved tickets and KB articles via RAG (ChromaDB)
 3. **Searches** [Microsoft Learn](https://learn.microsoft.com) for relevant documentation in parallel
-4. **Generates** a professional reply suggestion using a local LLM (default: `qwen2.5:14b`)
+4. **Generates** a professional reply suggestion using a local LLM (default: `qwen3.5:9b`)
 5. **Inserts** the reply into the WHD reply textarea with one click
 
 ### Knowledge Base
@@ -86,7 +86,7 @@ npm install
 
 # Terminal 1: Ollama
 ollama serve
-ollama pull qwen2.5:14b
+ollama pull qwen3.5:9b
 ollama pull nomic-embed-text
 
 # Terminal 2: Backend
@@ -206,10 +206,10 @@ Right-click the extension icon → **Options**:
 
 Create `backend/.env`:
 ```env
-OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://localhost:11435
 CHROMA_PATH=./chroma_data
 CORS_ORIGIN=chrome-extension://<your-extension-id>
-DEFAULT_MODEL=qwen2.5:14b
+DEFAULT_MODEL=qwen3.5:9b
 API_TOKEN=<generated-secret>
 MAX_UPLOAD_BYTES=52428800
 ```

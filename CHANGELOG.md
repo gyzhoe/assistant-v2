@@ -5,6 +5,19 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Default Ollama port from 11434 to 11435 to avoid conflicts with system-installed Ollama
+- Default model from `qwen2.5:14b` to `qwen3.5:9b` (Qwen 3.5, 9B parameters — smaller, faster, better benchmarks)
+- Thinking mode disabled by default for Qwen 3.5 models (suppresses internal reasoning blocks in replies)
+
+### Migration
+
+- Users with a custom `OLLAMA_BASE_URL` in their `.env` file should update the port from `11434` to `11435`
+- The old `qwen2.5:14b` model can be removed manually with `ollama rm qwen2.5:14b` to reclaim ~9 GB of disk space
+
 ## [1.14.0] — Installer Overhaul & Ollama Fixes (2026-03-03)
 
 ### Fixed

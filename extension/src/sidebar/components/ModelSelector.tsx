@@ -4,7 +4,7 @@ import { apiClient } from '../../lib/api-client'
 import { DEFAULT_MODEL } from '../../shared/constants'
 
 const MODEL_DESCRIPTIONS: Record<string, string> = {
-  'qwen2.5:14b': '14B parameters — slower, higher quality',
+  'qwen3.5:9b': '9B — fast, excellent quality',
   'llama3.2:3b': '3B parameters — fast, lighter quality',
 }
 
