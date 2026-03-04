@@ -11,7 +11,7 @@ describe('sidebarStore', () => {
       isGenerating: false,
       generateError: null,
       lastResponse: null,
-      selectedModel: 'qwen2.5:14b',
+      selectedModel: 'qwen3.5:9b',
       isInserted: false,
     })
   })
@@ -24,7 +24,7 @@ describe('sidebarStore', () => {
     expect(state.isGenerating).toBe(false)
     expect(state.generateError).toBeNull()
     expect(state.lastResponse).toBeNull()
-    expect(state.selectedModel).toBe('qwen2.5:14b')
+    expect(state.selectedModel).toBe('qwen3.5:9b')
     expect(state.isInserted).toBe(false)
   })
 

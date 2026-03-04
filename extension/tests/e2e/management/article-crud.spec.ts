@@ -16,7 +16,7 @@ async function loginAndNavigate(page: import('@playwright/test').Page): Promise<
 
 async function checkOllamaAvailable(request: import('@playwright/test').APIRequestContext): Promise<boolean> {
   try {
-    const resp = await request.get('http://localhost:11434', { timeout: 3000 })
+    const resp = await request.get('http://localhost:11435', { timeout: 3000 })
     return resp.ok()
   } catch {
     return false
