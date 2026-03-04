@@ -47,7 +47,7 @@ vi.mock('../../src/lib/api-client', () => ({
     shutdown: (...args: unknown[]) => mockShutdown(...args),
     ollamaStop: (...args: unknown[]) => mockOllamaStop(...args),
     ollamaStart: vi.fn().mockResolvedValue({ status: 'started' }),
-    models: vi.fn().mockResolvedValue(['qwen2.5:14b']),
+    models: vi.fn().mockResolvedValue(['qwen3.5:9b']),
   },
   sendNativeCommand: (...args: unknown[]) => mockSendNativeCommand(...args),
   ApiError: class ApiError extends Error {
@@ -81,7 +81,7 @@ describe('BackendControl — native stop commands', () => {
         customFields: {},
       },
       isTicketPage: true,
-      selectedModel: 'qwen2.5:14b',
+      selectedModel: 'qwen3.5:9b',
     })
   })
 

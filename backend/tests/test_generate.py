@@ -89,7 +89,7 @@ async def test_generate_ollama_down_returns_503(client: AsyncClient) -> None:
     mock_rag.retrieve = AsyncMock(return_value=[])
     mock_llm = MagicMock()
     mock_llm.generate = AsyncMock(
-        side_effect=ConnectionError("Ollama service unreachable at http://localhost:11434")
+        side_effect=ConnectionError("Ollama service unreachable at http://localhost:11435")
     )
     mock_ms = _mock_ms_docs()
 

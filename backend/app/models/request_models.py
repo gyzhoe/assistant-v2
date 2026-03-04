@@ -28,7 +28,7 @@ class GenerateRequest(BaseModel):
     requester_name: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="Requester's name")
     category: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="WHD ticket category")
     status: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="WHD ticket status")
-    model: str = Field(default="qwen2.5:14b", max_length=_MODEL_MAX, description="Ollama model to use")
+    model: str = Field(default="qwen3.5:9b", max_length=_MODEL_MAX, description="Ollama model to use")
     max_context_docs: int = Field(default=5, ge=1, le=20)
     stream: bool = Field(default=False)
     custom_fields: dict[str, str] = Field(

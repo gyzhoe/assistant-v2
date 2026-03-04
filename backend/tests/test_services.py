@@ -47,7 +47,7 @@ def _make_response(
 
 def _make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
     """Build a minimal HTTPStatusError for the given status code."""
-    request = httpx.Request("POST", "http://localhost:11434/api/generate")
+    request = httpx.Request("POST", "http://localhost:11435/api/generate")
     response = httpx.Response(status_code, request=request)
     return httpx.HTTPStatusError(
         f"Server error {status_code}",

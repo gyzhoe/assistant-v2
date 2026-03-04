@@ -18,9 +18,12 @@ if (Test-Path (Join-Path $bundledModels "blobs")) {
 # Online fallback: pull models from Ollama registry
 Write-Host "No bundled models found — pulling from internet..." -ForegroundColor Yellow
 
+# Bind Ollama to non-default port to avoid conflicts with system installs
+$env:OLLAMA_HOST = "127.0.0.1:11435"
+
 # Start Ollama if not already running
 try {
-    $null = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 2 -ErrorAction Stop
+    $null = Invoke-WebRequest -Uri "http://localhost:11435/api/tags" -TimeoutSec 2 -ErrorAction Stop
 } catch {
     if (Test-Path $ollamaExe) {
         Write-Host "Starting Ollama..." -ForegroundColor Yellow
@@ -33,7 +36,7 @@ $maxRetries = 30
 $retryCount = 0
 while ($retryCount -lt $maxRetries) {
     try {
-        $null = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 2 -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri "http://localhost:11435/api/tags" -TimeoutSec 2 -ErrorAction Stop
         break
     } catch {
         $retryCount++
@@ -48,8 +51,8 @@ if ($retryCount -eq $maxRetries) {
     exit 1
 }
 
-Write-Host "Pulling qwen2.5:14b (~9 GB)..." -ForegroundColor Yellow
-& $ollamaExe pull qwen2.5:14b
+Write-Host "Pulling qwen3.5:9b (~6 GB)..." -ForegroundColor Yellow
+& $ollamaExe pull qwen3.5:9b
 
 Write-Host "Pulling nomic-embed-text (~275 MB)..." -ForegroundColor Yellow
 & $ollamaExe pull nomic-embed-text
