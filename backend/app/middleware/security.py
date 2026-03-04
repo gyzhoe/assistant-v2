@@ -11,7 +11,6 @@ Provides:
 """
 
 import asyncio
-import json
 import logging
 import secrets
 import time
@@ -21,46 +20,9 @@ from collections.abc import MutableMapping
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
+from app.middleware.asgi_utils import get_client_ip, get_header, send_json_error
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Shared ASGI helper
-# ---------------------------------------------------------------------------
-
-
-async def _send_error_response(send: Send, status: int, body: dict[str, object]) -> None:
-    """Send JSON error directly via ASGI send (no FastAPI dependency)."""
-    payload = json.dumps(body).encode("utf-8")
-    await send(
-        {
-            "type": "http.response.start",
-            "status": status,
-            "headers": [
-                [b"content-type", b"application/json"],
-                [b"content-length", str(len(payload)).encode("ascii")],
-            ],
-        }
-    )
-    await send({"type": "http.response.body", "body": payload})
-
-
-def _get_header(scope: Scope, name: bytes) -> str:
-    """Extract a single header value from an ASGI scope (case-insensitive key)."""
-    headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
-    for key, value in headers:
-        if key.lower() == name:
-            return value.decode("latin-1")
-    return ""
-
-
-def _get_client_ip(scope: Scope) -> str:
-    """Extract the client IP from an ASGI scope."""
-    client: tuple[str, int] | None = scope.get("client")
-    if client:
-        return client[0]
-    return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +69,7 @@ class APITokenMiddleware:
             return
 
         # Method 1: X-Extension-Token header (extension sidebar)
-        provided = _get_header(scope, b"x-extension-token")
+        provided = get_header(scope, b"x-extension-token")
         if provided and secrets.compare_digest(provided, self._token):
             await self.app(scope, receive, send)
             return
@@ -123,9 +85,9 @@ class APITokenMiddleware:
                 await self.app(scope, receive, send)
                 return
 
-        client_ip = _get_client_ip(scope)
+        client_ip = get_client_ip(scope)
         logger.warning("Auth failure on %s from %s", path, client_ip)
-        await _send_error_response(
+        await send_json_error(
             send,
             401,
             {"detail": "Unauthorized. Missing or invalid credentials."},
@@ -219,7 +181,7 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        client_ip = _get_client_ip(scope)
+        client_ip = get_client_ip(scope)
         rate_key = f"{path}:{client_ip}"
         limit = self._path_limits.get(path, self._max)
         now = time.monotonic()
@@ -238,7 +200,7 @@ class RateLimitMiddleware:
 
             if len(self._counts[rate_key]) >= limit:
                 logger.warning("Rate limit exceeded for %s on %s", client_ip, path)
-                await _send_error_response(
+                await send_json_error(
                     send,
                     429,
                     {
@@ -292,7 +254,7 @@ class RequestSizeLimitMiddleware:
             return
 
         # Fast path: check Content-Length header
-        content_length_str = _get_header(scope, b"content-length")
+        content_length_str = get_header(scope, b"content-length")
         if content_length_str:
             try:
                 content_length = int(content_length_str)
@@ -345,7 +307,7 @@ class RequestSizeLimitMiddleware:
         await self.app(scope, replay_receive, send)
 
     async def _send_too_large(self, send: Send) -> None:
-        await _send_error_response(
+        await send_json_error(
             send,
             413,
             {

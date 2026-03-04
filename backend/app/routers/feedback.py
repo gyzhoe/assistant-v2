@@ -13,11 +13,10 @@ from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from app.constants import COSINE_COLLECTION_META, RATED_REPLIES_COLLECTION
 from app.models.request_models import FeedbackRequest
 
 logger = logging.getLogger(__name__)
-
-RATED_REPLIES_COLLECTION = "rated_replies"
 
 router = APIRouter(tags=["feedback"])
 
@@ -35,7 +34,7 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONRespon
         col = await asyncio.to_thread(
             chroma_client.get_or_create_collection,
             name=RATED_REPLIES_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
+            metadata=COSINE_COLLECTION_META,
         )
         await asyncio.to_thread(
             col.add,
@@ -78,7 +77,7 @@ async def delete_feedback(
         col = await asyncio.to_thread(
             chroma_client.get_or_create_collection,
             name=RATED_REPLIES_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
+            metadata=COSINE_COLLECTION_META,
         )
 
         # Check if the document exists before deleting

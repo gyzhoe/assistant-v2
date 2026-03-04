@@ -8,11 +8,9 @@ from collections.abc import Callable
 import httpx
 
 from app.config import settings
+from app.constants import OLLAMA_MAX_RETRIES, OLLAMA_RETRY_DELAY
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 2
-RETRY_DELAY = 1.0
 
 
 class EmbedService:
@@ -29,7 +27,6 @@ class EmbedService:
         model: str = "nomic-embed-text",
     ) -> None:
         self.model = model
-        self._base_url = settings.ollama_base_url
         self._client = client
 
     @property
@@ -50,7 +47,7 @@ class EmbedService:
     async def embed(self, text: str) -> list[float]:
         """Return the embedding vector with retry logic (async path)."""
         last_error: ConnectionError | None = None
-        for attempt in range(1 + MAX_RETRIES):
+        for attempt in range(1 + OLLAMA_MAX_RETRIES):
             try:
                 if isinstance(self._client, httpx.AsyncClient):
                     result = await self._embed_async(text)
@@ -61,14 +58,41 @@ class EmbedService:
                 return result
             except ConnectionError as exc:
                 last_error = exc
-                if attempt < MAX_RETRIES:
+                if attempt < OLLAMA_MAX_RETRIES:
                     logger.warning(
                         "Ollama embed attempt %d failed, retrying in %.1fs: %s",
-                        attempt + 1, RETRY_DELAY, exc,
+                        attempt + 1, OLLAMA_RETRY_DELAY, exc,
                     )
-                    await asyncio.sleep(RETRY_DELAY)
-        logger.error("Ollama embed failed after %d attempts", 1 + MAX_RETRIES)
+                    await asyncio.sleep(OLLAMA_RETRY_DELAY)
+        logger.error("Ollama embed failed after %d attempts", 1 + OLLAMA_MAX_RETRIES)
         raise last_error  # type: ignore[misc]
+
+    def _parse_embed_response(self, resp: httpx.Response) -> list[float]:
+        """Parse and validate an Ollama embed response (shared by async and sync paths)."""
+        resp.raise_for_status()
+        data = resp.json()
+        if "embedding" not in data:
+            raise ConnectionError(
+                f"Ollama embed response missing 'embedding' key: {list(data.keys())}"
+            )
+        return list(data["embedding"])
+
+    def _handle_request_error(self, exc: Exception) -> ConnectionError:
+        """Convert httpx exceptions to ConnectionError with descriptive messages."""
+        base_url = settings.ollama_base_url
+        if isinstance(exc, httpx.ConnectError):
+            return ConnectionError(f"Ollama embed service unreachable at {base_url}")
+        if isinstance(exc, httpx.TimeoutException):
+            return ConnectionError(f"Ollama embed request timed out at {base_url}")
+        if isinstance(exc, httpx.HTTPStatusError):
+            return ConnectionError(
+                f"Ollama embed returned error {exc.response.status_code}"
+            )
+        if isinstance(exc, (json.JSONDecodeError, KeyError)):
+            return ConnectionError(
+                f"Ollama embed response invalid or missing expected key: {exc}"
+            )
+        return ConnectionError(str(exc))
 
     async def _embed_async(self, text: str) -> list[float]:
         assert isinstance(self._client, httpx.AsyncClient)
@@ -77,29 +101,11 @@ class EmbedService:
                 "/api/embeddings",
                 json={"model": self.model, "prompt": text},
             )
-            resp.raise_for_status()
-            data = resp.json()
-            if "embedding" not in data:
-                raise ConnectionError(
-                    f"Ollama embed response missing 'embedding' key: {list(data.keys())}"
-                )
-            return list(data["embedding"])
-        except httpx.ConnectError as exc:
-            raise ConnectionError(
-                f"Ollama embed service unreachable at {self._base_url}"
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise ConnectionError(
-                f"Ollama embed request timed out at {self._base_url}"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            raise ConnectionError(
-                f"Ollama embed returned error {exc.response.status_code}"
-            ) from exc
-        except (json.JSONDecodeError, KeyError) as exc:
-            raise ConnectionError(
-                f"Ollama embed response invalid or missing expected key: {exc}"
-            ) from exc
+            return self._parse_embed_response(resp)
+        except ConnectionError:
+            raise
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
+            raise self._handle_request_error(exc) from exc
 
     def _embed_sync(self, text: str) -> list[float]:
         assert isinstance(self._client, httpx.Client)
@@ -108,26 +114,8 @@ class EmbedService:
                 "/api/embeddings",
                 json={"model": self.model, "prompt": text},
             )
-            resp.raise_for_status()
-            data = resp.json()
-            if "embedding" not in data:
-                raise ConnectionError(
-                    f"Ollama embed response missing 'embedding' key: {list(data.keys())}"
-                )
-            return list(data["embedding"])
-        except httpx.ConnectError as exc:
-            raise ConnectionError(
-                f"Ollama embed service unreachable at {self._base_url}"
-            ) from exc
-        except httpx.TimeoutException as exc:
-            raise ConnectionError(
-                f"Ollama embed request timed out at {self._base_url}"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            raise ConnectionError(
-                f"Ollama embed returned error {exc.response.status_code}"
-            ) from exc
-        except (json.JSONDecodeError, KeyError) as exc:
-            raise ConnectionError(
-                f"Ollama embed response invalid or missing expected key: {exc}"
-            ) from exc
+            return self._parse_embed_response(resp)
+        except ConnectionError:
+            raise
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
+            raise self._handle_request_error(exc) from exc

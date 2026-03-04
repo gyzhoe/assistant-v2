@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.constants import DEFAULT_CHUNK_MAX_TOKENS, DEFAULT_CHUNK_OVERLAP_TOKENS
 from app.utils.chunker import chunk_by_tokens
 from ingestion.utils import content_id as _content_id
 from ingestion.utils import extract_html_text
@@ -181,7 +182,7 @@ def load_url(url: str) -> Iterator[tuple[str, str, dict[str, str]]]:
     article_id = _content_id(final_url)
     imported_at = datetime.now(UTC).isoformat()
 
-    for chunk in chunk_by_tokens(text, max_tokens=500, overlap_tokens=50):
+    for chunk in chunk_by_tokens(text, max_tokens=DEFAULT_CHUNK_MAX_TOKENS, overlap_tokens=DEFAULT_CHUNK_OVERLAP_TOKENS):
         if not chunk.strip():
             continue
         doc_id = _content_id(chunk)

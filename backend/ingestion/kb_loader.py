@@ -13,6 +13,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup, Tag
 from pypdf import PdfReader
 
+from app.constants import DEFAULT_CHUNK_MAX_TOKENS, DEFAULT_CHUNK_OVERLAP_TOKENS
 from app.utils.chunker import chunk_by_tokens
 from ingestion.utils import content_id as _content_id
 
@@ -59,7 +60,7 @@ def load_kb_html(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
     for heading, body in sections:
         if not body.strip():
             continue
-        for chunk in chunk_by_tokens(body, max_tokens=500, overlap_tokens=50):
+        for chunk in chunk_by_tokens(body, max_tokens=DEFAULT_CHUNK_MAX_TOKENS, overlap_tokens=DEFAULT_CHUNK_OVERLAP_TOKENS):
             combined = f"{heading}\n\n{chunk}" if heading != article_title else chunk
             doc_id = _content_id(combined)
             metadata: dict[str, str] = {
@@ -103,7 +104,7 @@ def load_kb_pdf(path: Path) -> Iterator[tuple[str, str, dict[str, str]]]:
 
     full_text = "\n\n".join(full_text_parts)
 
-    for chunk in chunk_by_tokens(full_text, max_tokens=500, overlap_tokens=50):
+    for chunk in chunk_by_tokens(full_text, max_tokens=DEFAULT_CHUNK_MAX_TOKENS, overlap_tokens=DEFAULT_CHUNK_OVERLAP_TOKENS):
         if not chunk.strip():
             continue
         doc_id = _content_id(chunk)

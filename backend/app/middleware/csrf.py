@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import logging
 import secrets
+from http.cookies import SimpleCookie
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
+from app.middleware.asgi_utils import get_header, send_json_error
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +39,8 @@ CSRF_EXEMPT_PREFIXES = ("/auth/",)
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
-def _get_header(scope: Scope, name: bytes) -> str:
-    """Extract a single header value from ASGI scope."""
-    headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
-    for key, value in headers:
-        if key.lower() == name:
-            return value.decode("latin-1")
-    return ""
-
-
 def _get_cookie(scope: Scope, cookie_name: str) -> str:
     """Extract a cookie value from ASGI scope headers."""
-    from http.cookies import SimpleCookie
-
     headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
     for key, value in headers:
         if key == b"cookie":
@@ -59,24 +50,6 @@ def _get_cookie(scope: Scope, cookie_name: str) -> str:
             if morsel is not None:
                 return str(morsel.value)
     return ""
-
-
-async def _send_error(send: Send, status: int, detail: str) -> None:
-    """Send a JSON error response via ASGI."""
-    import json
-
-    payload = json.dumps({"detail": detail}).encode("utf-8")
-    await send(
-        {
-            "type": "http.response.start",
-            "status": status,
-            "headers": [
-                [b"content-type", b"application/json"],
-                [b"content-length", str(len(payload)).encode("ascii")],
-            ],
-        }
-    )
-    await send({"type": "http.response.body", "body": payload})
 
 
 class CSRFMiddleware:
@@ -126,21 +99,21 @@ class CSRFMiddleware:
             return
 
         # Extension requests are exempt (they use header-based auth, not cookies)
-        extension_token = _get_header(scope, b"x-extension-token")
+        extension_token = get_header(scope, b"x-extension-token")
         if extension_token:
             await self.app(scope, receive, send)
             return
 
         # Validate CSRF: cookie must exist AND header must match
         csrf_cookie = _get_cookie(scope, CSRF_COOKIE_NAME)
-        csrf_header = _get_header(scope, CSRF_HEADER_NAME)
+        csrf_header = get_header(scope, CSRF_HEADER_NAME)
 
         if not csrf_cookie or not csrf_header:
             logger.warning(
                 "CSRF validation failed on %s %s — missing token",
                 method, path,
             )
-            await _send_error(send, 403, "CSRF token missing.")
+            await send_json_error(send, 403, {"detail": "CSRF token missing."})
             return
 
         if not secrets.compare_digest(csrf_cookie, csrf_header):
@@ -148,7 +121,7 @@ class CSRFMiddleware:
                 "CSRF validation failed on %s %s — token mismatch",
                 method, path,
             )
-            await _send_error(send, 403, "CSRF token mismatch.")
+            await send_json_error(send, 403, {"detail": "CSRF token mismatch."})
             return
 
         await self.app(scope, receive, send)

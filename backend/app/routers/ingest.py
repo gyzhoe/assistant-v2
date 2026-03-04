@@ -14,12 +14,13 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from app.config import settings
+from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, TICKET_COLLECTION
 from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.routers.kb import invalidate_article_cache
-from app.routers.shared import upload_semaphore
+from app.routers.shared import get_client_ip, require_ingestion_available, upload_semaphore
 from app.services.audit import audit_log
-from ingestion.pipeline import KB_COLLECTION, TICKET_COLLECTION, IngestionPipeline
+from ingestion.pipeline import IngestionPipeline
 from ingestion.url_loader import (
     ContentTypeError,
     ResponseTooLargeError,
@@ -56,12 +57,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
             ),
         )
 
-    # Try to acquire the upload semaphore (non-blocking)
-    if upload_semaphore.locked():
-        raise HTTPException(
-            status_code=409,
-            detail="Another upload is already in progress. Please wait.",
-        )
+    require_ingestion_available()
 
     async with upload_semaphore:
         tmp_path: Path | None = None
@@ -156,8 +152,7 @@ async def clear_collection(request: Request, name: str) -> dict[str, str]:
 
     invalidate_article_cache()
 
-    client_ip = request.client.host if request.client else ""
-    audit_log("collection_clear", client_ip=client_ip, detail=f"collection={name}")
+    audit_log("collection_clear", client_ip=get_client_ip(request), detail=f"collection={name}")
 
     return {"status": "ok", "collection": name}
 
@@ -169,12 +164,7 @@ async def ingest_url(
     """Fetch a URL, extract content, and ingest into ChromaDB."""
     url_str = str(body.url)
 
-    # Shared semaphore with file upload — one ingestion at a time
-    if upload_semaphore.locked():
-        raise HTTPException(
-            status_code=409,
-            detail="Another ingestion is already in progress. Please wait.",
-        )
+    require_ingestion_available()
 
     async with upload_semaphore:
         try:
@@ -206,7 +196,7 @@ async def ingest_url(
             col = await asyncio.to_thread(
                 chroma_client.get_or_create_collection,
                 KB_COLLECTION,
-                metadata={"hnsw:space": "cosine"},
+                metadata=COSINE_COLLECTION_META,
             )
 
             total = await asyncio.to_thread(
