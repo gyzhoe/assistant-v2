@@ -8,7 +8,7 @@ Write-Host "=== AI Helpdesk Assistant - Health Check ===" -ForegroundColor Cyan
 # Check Ollama
 Write-Host "`n[Ollama]" -ForegroundColor White
 try {
-    $r = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 3 -ErrorAction Stop
+    $r = Invoke-WebRequest -Uri "http://localhost:11435/api/tags" -TimeoutSec 3 -ErrorAction Stop
     $models = ($r.Content | ConvertFrom-Json).models.name
     Write-Host "  Status: Running" -ForegroundColor Green
     Write-Host "  Models: $($models -join ', ')" -ForegroundColor Gray

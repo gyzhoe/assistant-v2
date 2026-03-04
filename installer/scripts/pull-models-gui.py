@@ -16,8 +16,8 @@ import urllib.error
 import urllib.request
 from tkinter import ttk
 
-OLLAMA_BASE = "http://localhost:11434"
-MODELS = ["nomic-embed-text", "qwen2.5:14b"]
+OLLAMA_BASE = "http://localhost:11435"
+MODELS = ["nomic-embed-text", "qwen3.5:9b"]
 OLLAMA_START_TIMEOUT = 30  # seconds to wait for Ollama to become reachable
 AUTO_CLOSE_DELAY = 3000  # ms to wait before closing after success
 
@@ -47,8 +47,9 @@ def ollama_reachable() -> bool:
 
 
 def _ollama_env(ollama_exe: str) -> dict[str, str]:
-    """Build environment for Ollama with runners dir set for AppLocker compat."""
+    """Build environment for Ollama with runners dir and custom port."""
     env = os.environ.copy()
+    env["OLLAMA_HOST"] = "127.0.0.1:11435"
     runners_dir = os.path.join(os.path.dirname(ollama_exe), "lib", "ollama")
     if os.path.isdir(runners_dir):
         env["OLLAMA_RUNNERS_DIR"] = runners_dir

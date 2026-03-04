@@ -75,8 +75,9 @@ def _is_port_listening(port: int) -> bool:
 
 
 def _ollama_env() -> dict[str, str]:
-    """Build environment for Ollama with runners dir set for AppLocker compat."""
+    """Build environment for Ollama with runners dir and custom port."""
     env = os.environ.copy()
+    env["OLLAMA_HOST"] = "127.0.0.1:11435"
     if os.path.isdir(OLLAMA_RUNNERS_DIR):
         env["OLLAMA_RUNNERS_DIR"] = OLLAMA_RUNNERS_DIR
     return env
@@ -90,7 +91,7 @@ def start_backend() -> dict:
 
     # Start Ollama first if not already running
     ollama_started = False
-    if not _is_port_listening(11434):
+    if not _is_port_listening(11435):
         cmd = [OLLAMA_EXE, "serve"] if os.path.exists(OLLAMA_EXE) else ["ollama", "serve"]
         log(f"Ollama not running — starting: {cmd[0]}")
         try:

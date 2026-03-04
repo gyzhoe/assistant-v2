@@ -12,10 +12,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    ollama_base_url: str = "http://localhost:11434"
+    ollama_base_url: str = "http://localhost:11435"
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
-    default_model: str = "qwen2.5:14b"
+    default_model: str = "qwen3.5:9b"
     version: str = "1.13.0"
     prompt_template_path: str | None = None
 

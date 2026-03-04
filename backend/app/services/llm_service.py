@@ -54,6 +54,7 @@ class LLMService:
                         "repeat_penalty": settings.llm_repeat_penalty,
                         "num_predict": settings.llm_num_predict,
                     },
+                    "think": False,
                 },
             )
             resp.raise_for_status()
