@@ -3,7 +3,7 @@ import { BackendControl } from './components/BackendControl'
 import { KnowledgePanel } from './components/KnowledgePanel'
 import { ReplyPanel } from './components/ReplyPanel'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { SidebarToastContainer } from './components/Toast'
+import { ToastContainer } from '@/shared/components/Toast'
 import { useTheme } from './hooks/useTheme'
 
 export default function App(): React.ReactElement {
@@ -27,7 +27,7 @@ export default function App(): React.ReactElement {
           <ReplyPanel />
         </main>
       </ErrorBoundary>
-      <SidebarToastContainer />
+      <ToastContainer />
     </div>
   )
 }

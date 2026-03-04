@@ -8,7 +8,7 @@ import { Pagination } from './Pagination'
 import { ArticleRow } from './ArticleRow'
 import { SkeletonTable } from './SkeletonTable'
 import { EmptyState } from './EmptyState'
-import { showToast } from './Toast'
+import { showToast } from '@/shared/components/Toast'
 
 interface ArticleListProps {
   onImportClick: () => void

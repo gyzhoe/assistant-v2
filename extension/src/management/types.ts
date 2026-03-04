@@ -1,5 +1,5 @@
 // Re-export shared types that were previously duplicated
-export type { IngestUploadResponse, IngestUrlResponse, HealthResponse } from '@/shared/types'
+export type { IngestUploadResponse, IngestUrlResponse, HealthResponse, ToastMessage } from '@/shared/types'
 
 /** Source type literals */
 export type SourceType = 'pdf' | 'html' | 'url' | 'json' | 'csv' | 'manual'
@@ -83,17 +83,4 @@ export interface ArticleListParams {
   page_size: number
   search?: string
   source_type?: SourceType | ''
-}
-
-/** Toast notification */
-export interface ToastMessage {
-  id: string
-  text: string
-  type: 'success' | 'error' | 'info'
-  /** When true, the toast does not auto-dismiss — user must close it manually. */
-  persistent?: boolean
-  action?: {
-    label: string
-    onClick: () => void
-  }
 }

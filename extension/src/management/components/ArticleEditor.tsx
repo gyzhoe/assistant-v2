@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { managementApi, ApiError } from '../api'
 import { ConfirmDialog } from './ConfirmDialog'
-import { showToast } from './Toast'
+import { showToast } from '@/shared/components/Toast'
 import { DEFAULT_TAG_SUGGESTIONS } from '../constants/tagSuggestions'
 import type { ArticleDetail, CreateArticleResponse, UpdateArticleResponse } from '../types'
 
