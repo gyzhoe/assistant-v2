@@ -230,7 +230,7 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
   "requester_name": "Alex Johnson",
   "category": "Network",
   "status": "Open",
-  "model": "qwen2.5:14b",
+  "model": "qwen3.5:9b",
   "max_context_docs": 5,
   "stream": false,
   "include_web_context": true,
@@ -249,7 +249,7 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 | `requester_name` | string | no | `""` | Requester's name (max 200 chars) |
 | `category` | string | no | `""` | Ticket category (max 200 chars) |
 | `status` | string | no | `""` | Ticket status (max 200 chars) |
-| `model` | string | no | `"qwen2.5:14b"` | Ollama model to use (max 100 chars) |
+| `model` | string | no | `"qwen3.5:9b"` | Ollama model to use (max 100 chars) |
 | `max_context_docs` | integer | no | `5` | Max RAG documents to include (1-20) |
 | `stream` | boolean | no | `false` | Reserved for future streaming support |
 | `include_web_context` | boolean | no | `true` | Include Microsoft Learn search results as additional context |
@@ -262,7 +262,7 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 ```json
 {
   "reply": "Hi Alex,\n\n1. Press Windows+R, type...",
-  "model_used": "qwen2.5:14b",
+  "model_used": "qwen3.5:9b",
   "context_docs": [
     {
       "content": "When a user cannot access a network drive after a password reset...",
@@ -931,7 +931,7 @@ List available Ollama models. Proxies Ollama's `/api/tags` endpoint.
 
 ```json
 {
-  "models": ["qwen2.5:14b", "llama3.2:3b", "nomic-embed-text"]
+  "models": ["qwen3.5:9b", "llama3.2:3b", "nomic-embed-text"]
 }
 ```
 

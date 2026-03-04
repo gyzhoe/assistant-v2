@@ -70,7 +70,7 @@ export const STORAGE_KEY_SECRETS = 'localSecrets'
 export const DEFAULT_BACKEND_URL = 'http://localhost:8765'
 
 /** Default LLM model */
-export const DEFAULT_MODEL = 'qwen2.5:14b'
+export const DEFAULT_MODEL = 'qwen3.5:9b'
 
 /** Maximum number of pinned KB articles */
 export const MAX_PINNED_ARTICLES = 10

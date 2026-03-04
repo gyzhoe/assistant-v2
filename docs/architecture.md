@@ -30,7 +30,7 @@ All processing is local — no data leaves the machine.
            │                     │
 ┌──────────▼──────────┐ ┌────────▼───────────────┐
 │   Ollama Server     │ │   ChromaDB (local)     │
-│  llama3.2:3b (gen)  │ │  - whd_tickets         │
+│  qwen3.5:9b (gen)   │ │  - whd_tickets         │
 │  nomic-embed-text   │ │  - kb_articles         │
 └─────────────────────┘ └────────────────────────┘
 ```
