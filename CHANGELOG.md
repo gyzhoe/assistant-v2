@@ -5,7 +5,7 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.14.1] — QA Sweep & Code Quality (2026-03-04)
 
 ### Changed
 
@@ -24,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Backend: CSRF protection now covers `/generate` and `/models` endpoints
 - Backend: Login endpoint validates JSON body (returns 422 instead of 500 on malformed requests)
-- Backend: Version string updated to 1.14.0
 - Backend: Fixed httpx URL construction in LLM/Embed services (use relative paths with base_url)
 - Backend: IngestionPipeline httpx client lazily created and properly closed
 - Backend: ChromaDB query errors in RAG service return empty results instead of crashing with 500
@@ -33,17 +32,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend: Public accessor for LLM service httpx client (removes private attribute access)
 - Backend: Process-control endpoints use consistent FastAPI dependency injection
 - Backend: KB article cache refresh runs under asyncio.Lock for safe global mutations
+- Extension: Background service worker deduplicates message relay (prevents double delivery)
+- Extension: Reply cache entries expire after 5 minutes (prevents stale AI replies)
+- Extension: Health check falls back to `no-cors` probe to distinguish CORS rejection from backend offline
+- Extension: Zustand store persists `feedbackDocId` (survives sidebar reload)
+- Extension: ArticleList delete handler uses Map for O(1) lookup instead of repeated array filter
+- Extension: `safeQuerySelector` validates selector strings before calling `querySelector`
+- Extension: Backend URL validation rejects non-HTTP(S) schemes
+- Extension: MutationObserver scoped to ticket container instead of `document.body`
+- Extension: KnowledgePanel wired to Zustand store (was using local state)
+- Extension: ConfirmDialog renders in portal to avoid sidebar clipping
+- Extension: `retryFailed` closure captures fresh state on each invocation
+- Extension: INSERT_REPLY handler guards against null content script inserter
+- Extension: Token re-provisioned automatically on extension upgrade
+- Extension: Shared `parseErrorDetail()` handles nested objects, Pydantic arrays, never returns `[object Object]`
+- Extension: CORS-vs-offline detection via `no-cors` probe in `cors-detect.ts`
+- Extension: Shared Toast component replaces duplicate sidebar/management implementations
+- Extension: 16 ARIA attribute fixes — boolean expressions instead of string ternaries across 11 files
+- Installer: CORS_ORIGIN auto-configured to deterministic extension ID at install time
+- Installer: Model reference updated from `qwen2.5:14b` to `qwen3.5:9b`
+- Installer: AppURL corrected in setup.iss metadata
+- Installer: `OLLAMA_HOST` and `OLLAMA_RUNNERS_DIR` env vars set consistently across all scripts
 
 ### Changed
 
-- Default Ollama port from 11434 to 11435 to avoid conflicts with system-installed Ollama
-- Default model from `qwen2.5:14b` to `qwen3.5:9b` (Qwen 3.5, 9B parameters — smaller, faster, better benchmarks)
-- Thinking mode disabled by default for Qwen 3.5 models (suppresses internal reasoning blocks in replies)
-
-### Migration
-
-- Users with a custom `OLLAMA_BASE_URL` in their `.env` file should update the port from `11434` to `11435`
-- The old `qwen2.5:14b` model can be removed manually with `ollama rm qwen2.5:14b` to reclaim ~9 GB of disk space
+- Extension: Shared `Icons.tsx` component provides 12 SVG icons (replaces inline duplicates)
+- Extension: `ErrorBoundary` moved to `shared/components/` (used by both sidebar and management)
+- Extension: `safeQuerySelector` extracted to `content/dom-utils.ts` utility
+- Extension: `NATIVE_HOST` constant moved to `shared/constants.ts`
+- Extension: Management SPA uses shared `parseErrorDetail` and `getBackendUrl`
 
 ## [1.14.0] — Installer Overhaul & Ollama Fixes (2026-03-03)
 
