@@ -28,7 +28,7 @@ if (Test-Path $runnersDir) { $env:OLLAMA_RUNNERS_DIR = $runnersDir }
 
 # Start Ollama if not already running
 try {
-    $null = Invoke-WebRequest -Uri "http://localhost:11435/api/tags" -TimeoutSec 2 -ErrorAction Stop
+    $null = Invoke-WebRequest -Uri "http://127.0.0.1:11435/api/tags" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
 } catch {
     if (Test-Path $ollamaExe) {
         Write-Host "Starting Ollama..." -ForegroundColor Yellow
@@ -41,7 +41,7 @@ $maxRetries = 30
 $retryCount = 0
 while ($retryCount -lt $maxRetries) {
     try {
-        $null = Invoke-WebRequest -Uri "http://localhost:11435/api/tags" -TimeoutSec 2 -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri "http://127.0.0.1:11435/api/tags" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
         break
     } catch {
         $retryCount++

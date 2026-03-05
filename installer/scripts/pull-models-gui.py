@@ -21,7 +21,7 @@ try:
 except ImportError:
     HAS_TKINTER = False
 
-OLLAMA_BASE = "http://localhost:11435"
+OLLAMA_BASE = "http://127.0.0.1:11435"
 MODELS = ["nomic-embed-text", "qwen3.5:9b"]
 OLLAMA_START_TIMEOUT = 30  # seconds to wait for Ollama to become reachable
 AUTO_CLOSE_DELAY = 3000  # ms to wait before closing after success
