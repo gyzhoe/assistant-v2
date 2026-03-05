@@ -6,7 +6,6 @@ from httpx import AsyncClient
 from app.main import app
 from app.routers.models import _is_generate_model
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for _is_generate_model helper
 # ---------------------------------------------------------------------------
