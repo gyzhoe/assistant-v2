@@ -1,4 +1,4 @@
-# post-install.ps1 — Sets up Python environment via uv (offline-capable)
+# post-install.ps1 - Sets up Python environment via uv (offline-capable)
 param(
     [string]$AppDir = (Split-Path -Parent $PSScriptRoot)
 )
@@ -13,7 +13,7 @@ $venvDir = Join-Path $backendDir ".venv"
 
 Write-Host "=== AI Helpdesk Assistant - Post-Install Setup ===" -ForegroundColor Cyan
 
-# ── Kill stale processes that may lock .venv files ───────────────────────────────────────
+# -- Kill stale processes that may lock .venv files ----------------------------------
 Write-Host "Checking for running backend processes..." -ForegroundColor Yellow
 
 # Stop backend on port 8765 (covers manual starts and service mode)
@@ -41,7 +41,7 @@ try {
     Start-Sleep -Seconds 1
 } catch { }
 
-# ── Remove old venv if it exists (clean slate for new deps) ──────────────────────────────
+# -- Remove old venv if it exists (clean slate for new deps) -------------------------
 if (Test-Path $venvDir) {
     Write-Host "Removing old virtual environment..." -ForegroundColor Yellow
     Remove-Item -Recurse -Force $venvDir -ErrorAction SilentlyContinue
@@ -104,12 +104,12 @@ if ($offlineMode) {
     }
 }
 
-# ── Generate API token and create .env if needed ──────────────────────────────
+# -- Generate API token and create .env if needed -----------------------------
 $envFile = Join-Path $backendDir ".env"
 $envExample = Join-Path $backendDir ".env.example"
 
 if (Test-Path $envFile) {
-    Write-Host "Existing .env found — skipping token generation." -ForegroundColor Yellow
+    Write-Host "Existing .env found - skipping token generation." -ForegroundColor Yellow
 } elseif (Test-Path $envExample) {
     Write-Host "Generating API token..." -ForegroundColor Yellow
     $tokenBytes = [byte[]]::new(32)
@@ -123,7 +123,7 @@ if (Test-Path $envFile) {
     Set-Content -Path $envFile -Value $envContent -NoNewline
     Write-Host "API token generated and CORS origin configured in .env." -ForegroundColor Green
 } else {
-    Write-Host "Warning: .env.example not found — skipping .env creation." -ForegroundColor Yellow
+    Write-Host "Warning: .env.example not found - skipping .env creation." -ForegroundColor Yellow
 }
 
 Write-Host "Post-install setup complete!" -ForegroundColor Green

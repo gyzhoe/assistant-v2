@@ -1,4 +1,4 @@
-"""pull-models-gui.py — Download Ollama models with a native tkinter progress window.
+"""pull-models-gui.py - Download Ollama models with a native tkinter progress window.
 
 Falls back to console-based progress if tkinter is unavailable (e.g. embeddable Python).
 Usage: python pull-models-gui.py [--app-dir <path>]
@@ -203,7 +203,7 @@ def worker(win: PullWindow, app_dir: str) -> None:
 def console_pull(app_dir: str) -> None:
     """Fallback: pull models with console output when tkinter is unavailable."""
     print("=" * 50)
-    print("AI Helpdesk Assistant — Downloading Models")
+    print("AI Helpdesk Assistant - Downloading Models")
     print("(tkinter unavailable, using console mode)")
     print("=" * 50)
 

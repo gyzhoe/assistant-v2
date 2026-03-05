@@ -1,4 +1,4 @@
-# check-health.ps1 — Verify all components are working
+# check-health.ps1 - Verify all components are working
 param([switch]$NonInteractive)
 $AppDir = Split-Path -Parent $PSScriptRoot
 $allGood = $true
