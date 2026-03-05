@@ -1,4 +1,4 @@
-# import-models.ps1 — Import bundled Ollama models (offline install)
+# import-models.ps1 - Import bundled Ollama models (offline install)
 param(
     [string]$AppDir = (Split-Path -Parent $PSScriptRoot),
     [switch]$NonInteractive
