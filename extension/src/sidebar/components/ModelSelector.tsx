@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
-import { apiClient } from '../../lib/api-client'
+import { apiClient, ApiError } from '../../lib/api-client'
+import { parseErrorDetail } from '../../lib/error-utils'
 import { DEFAULT_MODEL } from '../../shared/constants'
 
 const MODEL_DESCRIPTIONS: Record<string, string> = {
@@ -17,18 +18,30 @@ export function ModelSelector(): React.ReactElement {
   const setSelectedModel = useSidebarStore((s) => s.setSelectedModel)
   const ollamaReachable = useSidebarStore((s) => s.ollamaReachable)
   const [models, setModels] = useState<string[]>([DEFAULT_MODEL])
-  const [fetchError, setFetchError] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const prevOllamaRef = useRef(ollamaReachable)
 
   const fetchModels = useCallback(() => {
-    setFetchError(false)
+    setFetchError(null)
     apiClient.models().then((list) => {
       if (list.length > 0) {
         setModels(list)
-        setFetchError(false)
+        setFetchError(null)
       }
-    }).catch(() => {
-      setFetchError(true)
+    }).catch((err: unknown) => {
+      if (err instanceof ApiError) {
+        const body = err.body as Record<string, unknown>
+        if (body?.['error_code'] === 'OLLAMA_DOWN') {
+          setFetchError('Ollama is not running')
+        } else {
+          const parsed = parseErrorDetail(body)
+          setFetchError(parsed !== 'An unexpected error occurred' ? parsed : 'Could not fetch models')
+        }
+      } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        setFetchError('Cannot reach backend')
+      } else {
+        setFetchError('Could not fetch models')
+      }
     })
   }, [])
 
@@ -67,7 +80,7 @@ export function ModelSelector(): React.ReactElement {
         ))}
       </select>
       {fetchError && (
-        <span className="support-text error-text">(could not fetch models)</span>
+        <span className="support-text error-text">({fetchError})</span>
       )}
     </div>
   )

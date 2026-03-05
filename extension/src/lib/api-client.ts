@@ -92,7 +92,10 @@ export const apiClient = {
   async models(): Promise<string[]> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
     const resp = await fetch(`${base}/models`, { headers })
-    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to fetch models' })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Failed to fetch models' }))
+      throw new ApiError(resp.status, error)
+    }
     const data = (await resp.json()) as { models: string[] }
     return data.models
   },

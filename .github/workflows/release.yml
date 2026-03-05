@@ -51,17 +51,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: installer/deps
-          key: installer-deps-ollama-v0.17.0-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
+          key: installer-deps-ollama-v0.17.6-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
 
       - name: Download Ollama standalone
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # Ollama v0.17.0 standalone binary — pinned 2026-03-03
-          # SHA256 sourced from: https://github.com/ollama/ollama/releases/download/v0.17.0/sha256sum.txt
-          $ollamaVersion = "v0.17.0"
+          # Ollama v0.17.6 standalone binary — pinned 2026-03-05
+          # SHA256 sourced from: https://github.com/ollama/ollama/releases/download/v0.17.6/sha256sum.txt
+          $ollamaVersion = "v0.17.6"
           $ollamaUrl = "https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip"
-          $ollamaSha256 = "cd17faeda399324db3aee1be49b5143b00681e74c3023aeb7306223f7203be0d"
+          $ollamaSha256 = "170d8856f597d710fa31c8e8935eba798520f47afd3afdf61eb01cfe221b0375"
 
           New-Item -ItemType Directory -Force -Path installer/deps | Out-Null
           Write-Host "Downloading Ollama ${ollamaVersion} standalone..."

@@ -8,7 +8,7 @@ Write-Host "=== AI Helpdesk Assistant - Health Check ===" -ForegroundColor Cyan
 # Check Ollama
 Write-Host "`n[Ollama]" -ForegroundColor White
 try {
-    $r = Invoke-WebRequest -Uri "http://localhost:11435/api/tags" -TimeoutSec 3 -ErrorAction Stop
+    $r = Invoke-WebRequest -Uri "http://127.0.0.1:11435/api/tags" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     $models = ($r.Content | ConvertFrom-Json).models.name
     Write-Host "  Status: Running" -ForegroundColor Green
     Write-Host "  Models: $($models -join ', ')" -ForegroundColor Gray
@@ -20,7 +20,7 @@ try {
 # Check Backend
 Write-Host "`n[Backend]" -ForegroundColor White
 try {
-    $r = Invoke-WebRequest -Uri "http://localhost:8765/health" -TimeoutSec 3 -ErrorAction Stop
+    $r = Invoke-WebRequest -Uri "http://127.0.0.1:8765/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     Write-Host "  Status: Running" -ForegroundColor Green
     $data = $r.Content | ConvertFrom-Json
     Write-Host "  Ollama: $(if ($data.ollama_reachable) { 'reachable' } else { 'NOT reachable' })" -ForegroundColor Gray

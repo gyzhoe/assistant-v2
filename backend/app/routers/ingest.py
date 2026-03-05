@@ -14,7 +14,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from app.config import settings
-from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, TICKET_COLLECTION
+from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, TICKET_COLLECTION, OllamaModelError
 from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.routers.kb import invalidate_article_cache
@@ -108,6 +108,12 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
             raise HTTPException(
                 status_code=413,
                 detail={"message": str(exc), "error_code": "PAYLOAD_TOO_LARGE"},
+            ) from exc
+        except OllamaModelError as exc:
+            logger.error("Ollama model error during ingestion: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={"message": str(exc), "error_code": "MODEL_ERROR"},
             ) from exc
         except ConnectionError as exc:
             logger.error("Ollama unavailable during ingestion: %s", exc)
@@ -227,6 +233,12 @@ async def ingest_url(
             raise HTTPException(
                 status_code=413,
                 detail={"message": str(exc), "error_code": "PAYLOAD_TOO_LARGE"},
+            ) from exc
+        except OllamaModelError as exc:
+            logger.error("Ollama model error during URL ingestion: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={"message": str(exc), "error_code": "MODEL_ERROR"},
             ) from exc
         except ConnectionError as exc:
             logger.error("Ollama unavailable during URL ingestion: %s", exc)

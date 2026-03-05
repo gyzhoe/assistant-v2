@@ -88,7 +88,7 @@ ChromaDB stores embeddings of your ticket/KB content. Protect it:
 
 Ensure Ollama is also bound to localhost:
 ```
-# Edit Ollama service to set OLLAMA_HOST=127.0.0.1:11434
+# Edit Ollama service to set OLLAMA_HOST=127.0.0.1:11435
 ```
 
 Ollama has no built-in authentication. The FastAPI backend is the only component

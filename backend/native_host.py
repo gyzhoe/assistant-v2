@@ -78,6 +78,7 @@ def _ollama_env() -> dict[str, str]:
     """Build environment for Ollama with runners dir and custom port."""
     env = os.environ.copy()
     env["OLLAMA_HOST"] = "127.0.0.1:11435"
+    env["OLLAMA_VULKAN"] = "1"
     if os.path.isdir(OLLAMA_RUNNERS_DIR):
         env["OLLAMA_RUNNERS_DIR"] = OLLAMA_RUNNERS_DIR
     return env

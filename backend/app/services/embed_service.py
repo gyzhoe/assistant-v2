@@ -8,7 +8,7 @@ from collections.abc import Callable
 import httpx
 
 from app.config import settings
-from app.constants import OLLAMA_MAX_RETRIES, OLLAMA_RETRY_DELAY
+from app.constants import OLLAMA_MAX_RETRIES, OLLAMA_RETRY_DELAY, OllamaModelError
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,12 @@ class EmbedService:
         return self._embed_sync
 
     async def embed(self, text: str) -> list[float]:
-        """Return the embedding vector with retry logic (async path)."""
+        """Return the embedding vector with retry logic (async path).
+
+        Raises:
+            ConnectionError: Ollama is unreachable (retried).
+            OllamaModelError: Ollama returned an HTTP error (not retried).
+        """
         last_error: ConnectionError | None = None
         for attempt in range(1 + OLLAMA_MAX_RETRIES):
             try:
@@ -56,6 +61,8 @@ class EmbedService:
                 if attempt > 0:
                     logger.info("Ollama embed succeeded on attempt %d", attempt + 1)
                 return result
+            except OllamaModelError:
+                raise  # Model/API errors are not transient — don't retry
             except ConnectionError as exc:
                 last_error = exc
                 if attempt < OLLAMA_MAX_RETRIES:
@@ -77,16 +84,21 @@ class EmbedService:
             )
         return list(data["embedding"])
 
-    def _handle_request_error(self, exc: Exception) -> ConnectionError:
-        """Convert httpx exceptions to ConnectionError with descriptive messages."""
+    def _handle_request_error(self, exc: Exception) -> ConnectionError | OllamaModelError:
+        """Convert httpx exceptions to appropriate error types.
+
+        Returns ``OllamaModelError`` for HTTP status errors (model/API issues)
+        and ``ConnectionError`` for connectivity/parsing issues.
+        """
         base_url = settings.ollama_base_url
         if isinstance(exc, httpx.ConnectError):
             return ConnectionError(f"Ollama embed service unreachable at {base_url}")
         if isinstance(exc, httpx.TimeoutException):
             return ConnectionError(f"Ollama embed request timed out at {base_url}")
         if isinstance(exc, httpx.HTTPStatusError):
-            return ConnectionError(
-                f"Ollama embed returned error {exc.response.status_code}"
+            return OllamaModelError(
+                f"Ollama embed returned HTTP {exc.response.status_code} for model '{self.model}'",
+                status_code=exc.response.status_code,
             )
         if isinstance(exc, (json.JSONDecodeError, KeyError)):
             return ConnectionError(

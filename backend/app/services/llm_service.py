@@ -5,7 +5,7 @@ import logging
 import httpx
 
 from app.config import settings
-from app.constants import OLLAMA_MAX_RETRIES, OLLAMA_RETRY_DELAY
+from app.constants import OLLAMA_MAX_RETRIES, OLLAMA_RETRY_DELAY, OllamaModelError
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,14 @@ class LLMService:
         return self._client
 
     async def generate(self, prompt: str, model: str) -> str:
-        """Generate a completion with retry logic. Raises ConnectionError if Ollama is unreachable."""
+        """Generate a completion with retry logic.
+
+        Raises:
+            ConnectionError: Ollama is unreachable (retried up to OLLAMA_MAX_RETRIES).
+            OllamaModelError: Ollama returned an HTTP error (e.g. model not found).
+                These are NOT retried because the problem is in the request, not
+                the connection.
+        """
         last_error: ConnectionError | None = None
         for attempt in range(1 + OLLAMA_MAX_RETRIES):
             try:
@@ -30,6 +37,8 @@ class LLMService:
                 if attempt > 0:
                     logger.info("Ollama generate succeeded on attempt %d", attempt + 1)
                 return result
+            except OllamaModelError:
+                raise  # Model/API errors are not transient — don't retry
             except ConnectionError as exc:
                 last_error = exc
                 if attempt < OLLAMA_MAX_RETRIES:
@@ -71,8 +80,9 @@ class LLMService:
                 f"Ollama request timed out after 120s at {base_url}"
             ) from exc
         except httpx.HTTPStatusError as exc:
-            raise ConnectionError(
-                f"Ollama returned error {exc.response.status_code}"
+            raise OllamaModelError(
+                f"Ollama returned HTTP {exc.response.status_code} for model '{model}'",
+                status_code=exc.response.status_code,
             ) from exc
         except (json.JSONDecodeError, KeyError) as exc:
             raise ConnectionError(

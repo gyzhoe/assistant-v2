@@ -7,7 +7,12 @@ from chromadb.api import ClientAPI
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
-from app.constants import KB_COLLECTION, RATED_REPLIES_COLLECTION, distance_to_similarity
+from app.constants import (
+    KB_COLLECTION,
+    RATED_REPLIES_COLLECTION,
+    OllamaModelError,
+    distance_to_similarity,
+)
 from app.models.request_models import GenerateRequest
 from app.models.response_models import ContextDoc, GenerateResponse
 from app.services.embed_service import EmbedService
@@ -56,6 +61,14 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
                 category=body.category,
             )
             web_docs = []
+    except OllamaModelError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(exc),
+                "error_code": "MODEL_ERROR",
+            },
+        ) from exc
     except ConnectionError as exc:
         raise HTTPException(
             status_code=503,
@@ -105,6 +118,14 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     # Generate
     try:
         reply = await llm.generate(prompt=prompt, model=body.model)
+    except OllamaModelError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(exc),
+                "error_code": "MODEL_ERROR",
+            },
+        ) from exc
     except ConnectionError as exc:
         raise HTTPException(
             status_code=503,

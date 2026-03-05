@@ -63,7 +63,10 @@ Type: filesandordirs; Name: "{app}\scripts"
 Type: filesandordirs; Name: "{app}\tools"
 
 [Dirs]
-Name: "{app}\logs"
+; uninsneveruninstall: log files are created by post-install scripts (not tracked by Inno
+; Setup), so the directory must survive uninstall for diagnostic purposes.  User-initiated
+; removal is still available via the uninstall-cleanup.ps1 dialog.
+Name: "{app}\logs";              Flags: uninsneveruninstall
 Name: "{app}\backend\chroma_data"
 
 [Files]
@@ -105,6 +108,7 @@ Source: "deps\ollama-models\*";      DestDir: "{app}\deps\ollama-models"; Flags:
 #endif
 
 ; PowerShell helper scripts
+Source: "scripts\logging-utils.ps1";     DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\post-install.ps1";      DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\start-backend.ps1";     DestDir: "{app}\scripts";          Flags: ignoreversion
 Source: "scripts\pull-models.ps1";       DestDir: "{app}\scripts";          Flags: ignoreversion

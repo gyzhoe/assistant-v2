@@ -115,6 +115,8 @@ async def start_ollama(request: Request) -> dict[str, str]:
         else ["ollama", "serve"]
     )
     env = os.environ.copy()
+    env["OLLAMA_HOST"] = "127.0.0.1:11435"
+    env["OLLAMA_VULKAN"] = "1"
     if _OLLAMA_RUNNERS_DIR.is_dir():
         env["OLLAMA_RUNNERS_DIR"] = str(_OLLAMA_RUNNERS_DIR)
 

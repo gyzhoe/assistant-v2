@@ -40,12 +40,12 @@ success "All prerequisites found"
 # ── Ollama models ─────────────────────────────────────────────────────────────
 info "Pulling Ollama models (this may take a few minutes)..."
 
-if ! ollama list 2>/dev/null | grep -q "llama3.2:3b"; then
-  info "Pulling llama3.2:3b..."
-  ollama pull llama3.2:3b
-  success "llama3.2:3b pulled"
+if ! ollama list 2>/dev/null | grep -q "qwen3.5:9b"; then
+  info "Pulling qwen3.5:9b..."
+  ollama pull qwen3.5:9b
+  success "qwen3.5:9b pulled"
 else
-  success "llama3.2:3b already present"
+  success "qwen3.5:9b already present"
 fi
 
 if ! ollama list 2>/dev/null | grep -q "nomic-embed-text"; then
