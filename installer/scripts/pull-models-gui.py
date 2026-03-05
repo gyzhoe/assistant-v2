@@ -55,6 +55,7 @@ def _ollama_env(ollama_exe: str) -> dict[str, str]:
     """Build environment for Ollama with runners dir and custom port."""
     env = os.environ.copy()
     env["OLLAMA_HOST"] = "127.0.0.1:11435"
+    env["OLLAMA_VULKAN"] = "1"
     runners_dir = os.path.join(os.path.dirname(ollama_exe), "lib", "ollama")
     if os.path.isdir(runners_dir):
         env["OLLAMA_RUNNERS_DIR"] = runners_dir

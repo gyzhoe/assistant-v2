@@ -20,6 +20,8 @@ Write-Host "No bundled models found - pulling from internet..." -ForegroundColor
 
 # Bind Ollama to non-default port to avoid conflicts with system installs
 $env:OLLAMA_HOST = "127.0.0.1:11435"
+# Enable Vulkan GPU backend for AMD/Intel GPUs (silently falls back to CPU if unavailable)
+$env:OLLAMA_VULKAN = "1"
 # Point to bundled CUDA/CPU runners for GPU acceleration
 $runnersDir = Join-Path $AppDir "tools\lib\ollama"
 if (Test-Path $runnersDir) { $env:OLLAMA_RUNNERS_DIR = $runnersDir }
