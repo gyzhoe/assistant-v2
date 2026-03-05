@@ -165,6 +165,40 @@ describe('useGenerateReply', () => {
     expect(useSidebarStore.getState().generateError).toBe('Ollama is not running. Please start it and try again.')
   })
 
+  it('does not show Ollama message for 503 without OLLAMA_DOWN error_code', async () => {
+    const { ApiError } = await import('../../src/lib/api-client')
+    mockGenerate.mockRejectedValueOnce(new ApiError(503, { detail: 'Service temporarily unavailable' }))
+
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
+    const { result } = renderHook(() => useGenerateReply())
+
+    await act(async () => {
+      await result.current.generate()
+    })
+
+    const error = useSidebarStore.getState().generateError
+    expect(error).not.toContain('Ollama is not running')
+    expect(error).toBe('Service temporarily unavailable')
+  })
+
+  it('does not show Ollama message for 502 MODEL_ERROR', async () => {
+    const { ApiError } = await import('../../src/lib/api-client')
+    mockGenerate.mockRejectedValueOnce(new ApiError(502, { error_code: 'MODEL_ERROR', detail: 'model "foo" not found' }))
+
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
+    const { result } = renderHook(() => useGenerateReply())
+
+    await act(async () => {
+      await result.current.generate()
+    })
+
+    const error = useSidebarStore.getState().generateError
+    expect(error).not.toContain('Ollama is not running')
+    expect(error).toContain('model "foo" not found')
+  })
+
   it('classifies network TypeError as connection error', async () => {
     mockGenerate.mockRejectedValueOnce(new TypeError('Failed to fetch'))
 

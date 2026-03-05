@@ -116,7 +116,7 @@ export function ArticleEditor({ onBack, mode = 'create', articleId }: ArticleEdi
         setError('An article with this title already exists.')
       } else if (err instanceof ApiError && err.status === 403) {
         setError('Only manual articles can be edited.')
-      } else if (err instanceof ApiError && err.status === 503) {
+      } else if (err instanceof ApiError && (err.body as Record<string, unknown>)?.['error_code'] === 'OLLAMA_DOWN') {
         setError('Embedding service (Ollama) is unavailable. Is it running?')
       } else {
         setError(isEdit ? 'Failed to update article. Please try again.' : 'Failed to create article. Please try again.')

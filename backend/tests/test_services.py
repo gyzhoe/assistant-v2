@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
+from app.constants import OllamaModelError
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 
@@ -166,16 +167,46 @@ class TestLLMServiceGenerateAsync:
     # --- HTTP error status ---
 
     @pytest.mark.asyncio
-    async def test_http_status_error_raises_connection_error(self) -> None:
-        """An HTTP 500 from Ollama is converted to ConnectionError."""
+    async def test_http_status_error_raises_ollama_model_error(self) -> None:
+        """An HTTP 500 from Ollama is converted to OllamaModelError (not ConnectionError)."""
         svc, mock_client = self._svc()
         http_err = _make_http_status_error(500)
         mock_resp = _make_response(status_code=500)
         mock_resp.raise_for_status.side_effect = http_err
         mock_client.post.return_value = mock_resp
 
-        with pytest.raises(ConnectionError, match="500"):
+        with pytest.raises(OllamaModelError, match="500"):
             await svc.generate("prompt", "llama3.2:3b")
+
+    @pytest.mark.asyncio
+    async def test_http_status_error_contains_model_name(self) -> None:
+        """OllamaModelError message includes the model name for debugging."""
+        svc, mock_client = self._svc()
+        http_err = _make_http_status_error(404)
+        mock_resp = _make_response(status_code=404)
+        mock_resp.raise_for_status.side_effect = http_err
+        mock_client.post.return_value = mock_resp
+
+        with pytest.raises(OllamaModelError) as exc_info:
+            await svc.generate("prompt", "nonexistent-model:7b")
+
+        assert "nonexistent-model:7b" in str(exc_info.value)
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_http_status_error_not_retried(self) -> None:
+        """OllamaModelError should not trigger retries (model errors aren't transient)."""
+        svc, mock_client = self._svc()
+        http_err = _make_http_status_error(404)
+        mock_resp = _make_response(status_code=404)
+        mock_resp.raise_for_status.side_effect = http_err
+        mock_client.post.return_value = mock_resp
+
+        with pytest.raises(OllamaModelError):
+            await svc.generate("prompt", "llama3.2:3b")
+
+        # Should only be called once — no retries for model errors
+        assert mock_client.post.call_count == 1
 
     # --- JSON parse errors ---
 
@@ -281,8 +312,8 @@ class TestEmbedServiceEmbedSync:
 
     # --- HTTP error status ---
 
-    def test_http_status_error_raises_connection_error(self) -> None:
-        """An HTTP 404 from Ollama is converted to ConnectionError."""
+    def test_http_status_error_raises_ollama_model_error(self) -> None:
+        """An HTTP 404 from Ollama is converted to OllamaModelError (not ConnectionError)."""
         svc = self._svc()
         http_err = _make_http_status_error(404)
         mock_resp = _make_response(status_code=404)
@@ -290,8 +321,23 @@ class TestEmbedServiceEmbedSync:
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
-        with pytest.raises(ConnectionError, match="404"):
+        with pytest.raises(OllamaModelError, match="404"):
             svc._embed_sync("text")
+
+    def test_http_status_error_contains_model_name(self) -> None:
+        """OllamaModelError message includes the model name."""
+        svc = self._svc(model="nomic-embed-text")
+        http_err = _make_http_status_error(404)
+        mock_resp = _make_response(status_code=404)
+        mock_resp.raise_for_status.side_effect = http_err
+        assert isinstance(svc._client, httpx.Client)
+        svc._client.post.return_value = mock_resp
+
+        with pytest.raises(OllamaModelError) as exc_info:
+            svc._embed_sync("text")
+
+        assert "nomic-embed-text" in str(exc_info.value)
+        assert exc_info.value.status_code == 404
 
     # --- JSON parse errors ---
 

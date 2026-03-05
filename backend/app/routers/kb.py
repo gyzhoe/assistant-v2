@@ -15,7 +15,13 @@ from typing import Any, cast
 from chromadb.api import ClientAPI
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
-from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, parse_tags, serialize_tags
+from app.constants import (
+    COSINE_COLLECTION_META,
+    KB_COLLECTION,
+    OllamaModelError,
+    parse_tags,
+    serialize_tags,
+)
 from app.models.kb import (
     ArticleDeleteResponse,
     ArticleDetailResponse,
@@ -371,6 +377,12 @@ async def create_article(
 
         except HTTPException:
             raise
+        except OllamaModelError as exc:
+            logger.error("Ollama model error during article creation: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={"message": str(exc), "error_code": "MODEL_ERROR"},
+            ) from exc
         except ConnectionError as exc:
             logger.error("Ollama unavailable during article creation: %s", exc)
             raise HTTPException(
@@ -472,6 +484,12 @@ async def update_article(
 
         except HTTPException:
             raise
+        except OllamaModelError as exc:
+            logger.error("Ollama model error during article update: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail={"message": str(exc), "error_code": "MODEL_ERROR"},
+            ) from exc
         except ConnectionError as exc:
             logger.error("Ollama unavailable during article update: %s", exc)
             raise HTTPException(

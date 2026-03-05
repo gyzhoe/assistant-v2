@@ -50,7 +50,7 @@ function parseUploadError(err: unknown): string {
     if (body?.['error_code'] === 'PAYLOAD_TOO_LARGE' || err.status === 413) {
       return 'File is too large. Please reduce the file size and try again.'
     }
-    if (err.status === 503) return 'Backend or Ollama is not reachable'
+    if (body?.['error_code'] === 'OLLAMA_DOWN') return 'Backend or Ollama is not reachable'
     if (err.status === 409) return 'Another import is already in progress'
     const parsed = parseErrorDetail(body)
     return parsed !== 'An unexpected error occurred' ? parsed : `Upload failed (${err.status})`
