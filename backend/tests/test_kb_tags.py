@@ -36,7 +36,7 @@ def _fresh_client(
 
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     # Reset the module-level cache before each test
@@ -200,7 +200,7 @@ async def test_create_article_with_tags() -> None:
     mock_chroma.get_collection.return_value = mock_col
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     # Override sync_embed_service with deterministic embed

@@ -1,7 +1,7 @@
 """Tests for the ingestion CLI (Typer commands via CliRunner).
 
 Covers all 5 CLI commands: ingest-tickets, ingest-kb-html, ingest-kb-pdf, status, clear.
-Each test mocks _make_pipeline to avoid real ChromaDB/Ollama dependencies.
+Each test mocks _make_pipeline to avoid real ChromaDB/embed server dependencies.
 """
 
 from __future__ import annotations

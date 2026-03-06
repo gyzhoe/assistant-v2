@@ -15,19 +15,19 @@ COSINE_COLLECTION_META: dict[str, str] = {"hnsw:space": "cosine"}
 DEFAULT_CHUNK_MAX_TOKENS = 500
 DEFAULT_CHUNK_OVERLAP_TOKENS = 50
 
-# ── Ollama retry settings ────────────────────────────────────────────────────
+# ── LLM retry settings ───────────────────────────────────────────────────────
 
-OLLAMA_MAX_RETRIES = 2
-OLLAMA_RETRY_DELAY = 1.0
+LLM_MAX_RETRIES = 2
+LLM_RETRY_DELAY = 1.0
 
 
 # ── Custom exceptions ───────────────────────────────────────────────────────
 
 
-class OllamaModelError(RuntimeError):
-    """Ollama returned an HTTP error (e.g. model not found, bad request).
+class LLMModelError(RuntimeError):
+    """LLM server returned an HTTP error (e.g. model not found, bad request).
 
-    Distinct from ``ConnectionError`` which means Ollama is unreachable.
+    Distinct from ``ConnectionError`` which means the server is unreachable.
     Carries the HTTP status code for downstream error-code mapping.
     """
 

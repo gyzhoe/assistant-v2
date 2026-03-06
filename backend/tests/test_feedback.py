@@ -17,7 +17,7 @@ _EXT_HEADERS = {"X-Extension-Token": "test-bypass"}
 def _make_client() -> AsyncClient:
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
     return AsyncClient(
         transport=ASGITransport(app=app),
@@ -42,7 +42,7 @@ def _valid_payload(rating: str = "good") -> dict[str, str]:
 async def test_feedback_good_returns_200_with_id() -> None:
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
     app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
 
@@ -61,7 +61,7 @@ async def test_feedback_good_returns_200_with_id() -> None:
 async def test_feedback_bad_returns_200_with_id() -> None:
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
     app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
 
@@ -94,10 +94,10 @@ async def test_feedback_missing_required_fields_returns_422() -> None:
 
 @pytest.mark.asyncio
 async def test_feedback_connection_failure_returns_503() -> None:
-    """Connection errors (Ollama/ChromaDB down) return 503 Service Unavailable."""
+    """Connection errors (embed server/ChromaDB down) return 503 Service Unavailable."""
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
     app.state.embed_service.embed = AsyncMock(side_effect=ConnectionError("boom"))
 
@@ -116,7 +116,7 @@ async def test_feedback_stores_in_rated_replies_collection() -> None:
     mock_col = MagicMock()
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
     app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
 
@@ -154,7 +154,7 @@ async def test_delete_feedback_returns_204() -> None:
     mock_col.get.return_value = {"ids": ["rated_" + "a" * 32]}
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     valid_id = "rated_" + "a" * 32
@@ -177,7 +177,7 @@ async def test_delete_feedback_not_found_returns_404() -> None:
     mock_col.get.return_value = {"ids": []}
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     valid_id = "rated_" + "b" * 32
@@ -198,7 +198,7 @@ async def test_delete_feedback_connection_failure_returns_503() -> None:
     mock_chroma = MagicMock()
     mock_chroma.get_or_create_collection.side_effect = ConnectionError("down")
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     async with AsyncClient(
@@ -239,7 +239,7 @@ async def test_delete_feedback_valid_doc_id_pattern_passes_validation() -> None:
     mock_col.get.return_value = {"ids": []}
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
 
     valid_id = "rated_" + "a" * 32
     async with AsyncClient(

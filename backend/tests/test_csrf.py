@@ -30,7 +30,7 @@ async def _csrf_client(
     with patch("app.config.settings.api_token", api_token):
         fresh_app = create_app()
         fresh_app.state.chroma_client = MagicMock()
-        fresh_app.state.ollama_reachable = False
+        fresh_app.state.llm_reachable = False
         setup_app_state(fresh_app)
         async with AsyncClient(
             transport=ASGITransport(app=fresh_app),

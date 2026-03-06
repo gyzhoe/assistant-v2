@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
-# Derive app install directory (backend/ -> app root) for bundled Ollama path.
+# Derive app install directory (backend/ -> app root) for bundled llama-server path.
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 _APP_DIR = _BACKEND_DIR.parent
-_BUNDLED_OLLAMA = _APP_DIR / "tools" / "ollama.exe"
-_OLLAMA_RUNNERS_DIR = _APP_DIR / "tools" / "lib" / "ollama"
+_BUNDLED_LLAMA_SERVER = _APP_DIR / "tools" / "llama-server.exe"
+_MODELS_DIR = _APP_DIR / "models"
 
 _token_header = APIKeyHeader(name="X-Extension-Token", auto_error=False)
 
@@ -44,6 +44,21 @@ def _require_localhost(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Process control is only available from localhost.")
 
 
+async def _kill_legacy_ollama() -> None:
+    """Kill leftover Ollama processes to avoid port conflicts on upgrade."""
+    if sys.platform == "win32":
+        for exe in ("ollama.exe", "ollama_llama_server.exe"):
+            await asyncio.to_thread(
+                subprocess.run,
+                ["taskkill", "/IM", exe, "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+    else:
+        await asyncio.to_thread(subprocess.run, ["pkill", "-f", "ollama"], check=False)
+
+
 @router.get("/health")
 async def health_check(request: Request) -> dict[str, object]:
     """Return minimal health status. Detailed info available at /health/detail."""
@@ -52,14 +67,23 @@ async def health_check(request: Request) -> dict[str, object]:
 
 @router.get("/health/detail", dependencies=[Depends(_require_token)])
 async def health_detail(request: Request) -> dict[str, object]:
-    """Return detailed system health status including Ollama and ChromaDB state."""
-    ollama_reachable = False
+    """Return detailed system health status including LLM, embed, and ChromaDB state."""
+    llm_reachable = False
     try:
         llm_client = request.app.state.llm_service.client
-        resp = await llm_client.get("/api/tags", timeout=5.0)
-        ollama_reachable = resp.status_code == 200
+        resp = await llm_client.get("/health", timeout=5.0)
+        llm_reachable = resp.status_code == 200
     except Exception:
-        ollama_reachable = False
+        llm_reachable = False
+
+    embed_reachable = False
+    try:
+        embed_client = request.app.state.embed_service._client
+        if hasattr(embed_client, "get"):
+            resp = await embed_client.get("/health", timeout=5.0)
+            embed_reachable = resp.status_code == 200
+    except Exception:
+        embed_reachable = False
 
     chroma_ready = False
     chroma_doc_counts: dict[str, int] = {}
@@ -73,8 +97,9 @@ async def health_detail(request: Request) -> dict[str, object]:
         chroma_ready = False
 
     return {
-        "status": "ok" if ollama_reachable and chroma_ready else "degraded",
-        "ollama_reachable": ollama_reachable,
+        "status": "ok" if llm_reachable and embed_reachable and chroma_ready else "degraded",
+        "llm_reachable": llm_reachable,
+        "embed_reachable": embed_reachable,
         "chroma_ready": chroma_ready,
         "chroma_doc_counts": chroma_doc_counts,
         "version": settings.version,
@@ -96,60 +121,73 @@ async def shutdown_backend(request: Request) -> dict[str, str]:
     return {"status": "shutting_down"}
 
 
-@router.post("/ollama/start", dependencies=[Depends(_require_token), Depends(_require_localhost)])
-async def start_ollama(request: Request) -> dict[str, str]:
-    """Start the Ollama server as a detached background process."""
+@router.post("/llm/start", dependencies=[Depends(_require_token), Depends(_require_localhost)])
+async def start_llm(request: Request) -> dict[str, str]:
+    """Start the llama-server processes as detached background processes."""
 
-    # Check if already running
+    # Check if LLM server already running
     try:
         llm_client = request.app.state.llm_service.client
-        resp = await llm_client.get("/api/tags", timeout=3.0)
+        resp = await llm_client.get("/health", timeout=3.0)
         if resp.status_code == 200:
             return {"status": "already_running"}
     except Exception:
         pass
 
-    cmd: list[str] = (
-        [str(_BUNDLED_OLLAMA), "serve"]
-        if _BUNDLED_OLLAMA.exists()
-        else ["ollama", "serve"]
+    # Kill any leftover Ollama processes to avoid port conflicts on upgrade
+    await _kill_legacy_ollama()
+
+    llama_exe = (
+        str(_BUNDLED_LLAMA_SERVER)
+        if _BUNDLED_LLAMA_SERVER.exists()
+        else "llama-server"
     )
-    env = os.environ.copy()
-    env["OLLAMA_HOST"] = "127.0.0.1:11435"
-    env["OLLAMA_VULKAN"] = "1"
-    if _OLLAMA_RUNNERS_DIR.is_dir():
-        env["OLLAMA_RUNNERS_DIR"] = str(_OLLAMA_RUNNERS_DIR)
 
     creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    # Start LLM server
+    llm_model = _MODELS_DIR / "qwen3.5-9b-q4_k_m.gguf"
     subprocess.Popen(
-        cmd,
+        [
+            llama_exe, "-m", str(llm_model),
+            "--port", "11435",
+            "--n-gpu-layers", "-1",
+            "--ctx-size", "8192",
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=creation_flags,
-        env=env,
     )
+
+    # Start embed server
+    embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.Q8_0.gguf"
+    subprocess.Popen(
+        [
+            llama_exe, "-m", str(embed_model),
+            "--port", "11436",
+            "--embedding",
+            "--n-gpu-layers", "-1",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creation_flags,
+    )
+
     return {"status": "starting"}
 
 
-@router.post("/ollama/stop", dependencies=[Depends(_require_token), Depends(_require_localhost)])
-async def stop_ollama(request: Request) -> dict[str, str]:
-    """Stop the Ollama server process."""
+@router.post("/llm/stop", dependencies=[Depends(_require_token), Depends(_require_localhost)])
+async def stop_llm(request: Request) -> dict[str, str]:
+    """Stop the llama-server processes."""
 
     if sys.platform == "win32":
         await asyncio.to_thread(
             subprocess.run,
-            ["taskkill", "/IM", "ollama.exe", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        await asyncio.to_thread(
-            subprocess.run,
-            ["taskkill", "/IM", "ollama_llama_server.exe", "/F"],
+            ["taskkill", "/IM", "llama-server.exe", "/F"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
         )
     else:
-        await asyncio.to_thread(subprocess.run, ["pkill", "-f", "ollama"], check=False)
+        await asyncio.to_thread(subprocess.run, ["pkill", "-f", "llama-server"], check=False)
     return {"status": "stopping"}

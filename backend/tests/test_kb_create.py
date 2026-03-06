@@ -38,7 +38,7 @@ def _fresh_client(
 
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     # Override sync_embed_service with deterministic embed
@@ -73,7 +73,7 @@ async def test_create_article_success() -> None:
     mock_chroma.get_collection.return_value = mock_col
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     # Override sync_embed_service with deterministic embed
@@ -146,7 +146,7 @@ async def test_create_article_duplicate() -> None:
     mock_chroma = MagicMock()
     mock_chroma.get_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     kb_mod._article_cache = {}
@@ -177,7 +177,7 @@ async def test_create_article_heading_sections() -> None:
     mock_chroma.get_collection.return_value = mock_col
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     mock_sync_embed = MagicMock()
@@ -223,8 +223,8 @@ async def test_create_article_heading_sections() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_article_ollama_down() -> None:
-    """When Ollama is unreachable, should return 503."""
+async def test_create_article_embed_down() -> None:
+    """When embed server is unreachable, should return 503."""
     mock_col = MagicMock()
     mock_col.get.return_value = {"ids": [], "documents": [], "metadatas": []}
 
@@ -233,11 +233,11 @@ async def test_create_article_ollama_down() -> None:
     mock_chroma.get_collection.return_value = mock_col
     mock_chroma.get_or_create_collection.return_value = mock_col
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     def embed_raises(text: str) -> list[float]:
-        raise ConnectionError("Ollama embed service unreachable")
+        raise ConnectionError("Embed server unreachable")
 
     mock_sync_embed = MagicMock()
     mock_sync_embed.embed_fn = embed_raises
@@ -257,4 +257,4 @@ async def test_create_article_ollama_down() -> None:
         })
 
     assert resp.status_code == 503
-    assert "ollama" in resp.json()["detail"].lower()
+    assert "embedding server" in resp.json()["detail"].lower()

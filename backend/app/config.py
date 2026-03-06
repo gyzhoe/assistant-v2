@@ -1,3 +1,4 @@
+import os
 import warnings
 from typing import Self
 
@@ -12,7 +13,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    ollama_base_url: str = "http://localhost:11435"
+    llm_base_url: str = os.environ.get(
+        "OLLAMA_BASE_URL", "http://localhost:11435"
+    )
+    embed_base_url: str = "http://localhost:11436"
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
     default_model: str = "qwen3.5:9b"

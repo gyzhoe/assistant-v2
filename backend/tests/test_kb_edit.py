@@ -54,7 +54,7 @@ def _setup_app(
     mock_col.get.return_value = collection_data or default_data
 
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     # Override sync_embed_service with deterministic embed
@@ -325,7 +325,7 @@ async def test_update_article_collection_not_found() -> None:
     mock_chroma = MagicMock()
     mock_chroma.get_collection.side_effect = ValueError("Collection not found")
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
     setup_app_state(app)
 
     kb_mod._article_cache = {}

@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from app.constants import OllamaModelError
+from app.constants import LLMModelError
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 
@@ -48,7 +48,7 @@ def _make_response(
 
 def _make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
     """Build a minimal HTTPStatusError for the given status code."""
-    request = httpx.Request("POST", "http://localhost:11435/api/generate")
+    request = httpx.Request("POST", "http://localhost:11435/v1/chat/completions")
     response = httpx.Response(status_code, request=request)
     return httpx.HTTPStatusError(
         f"Server error {status_code}",
@@ -87,9 +87,11 @@ class TestLLMServiceGenerateAsync:
 
     @pytest.mark.asyncio
     async def test_successful_generation_returns_text(self) -> None:
-        """A well-formed Ollama response returns the 'response' field as a string."""
+        """A well-formed response returns the generated text."""
         svc, mock_client = self._svc()
-        mock_resp = _make_response(json_data={"response": "Here is the fix."})
+        mock_resp = _make_response(json_data={
+            "choices": [{"message": {"content": "Here is the fix."}}],
+        })
         mock_client.post.return_value = mock_resp
 
         result = await svc.generate("Describe the issue.", "llama3.2:3b")
@@ -98,9 +100,11 @@ class TestLLMServiceGenerateAsync:
 
     @pytest.mark.asyncio
     async def test_successful_generation_posts_correct_payload(self) -> None:
-        """generate sends the right JSON body to Ollama including options."""
+        """generate sends the right JSON body to the LLM server."""
         svc, mock_client = self._svc()
-        mock_resp = _make_response(json_data={"response": "ok"})
+        mock_resp = _make_response(json_data={
+            "choices": [{"message": {"content": "ok"}}],
+        })
         mock_client.post.return_value = mock_resp
 
         await svc.generate("my prompt", "qwen2.5:14b")
@@ -109,16 +113,15 @@ class TestLLMServiceGenerateAsync:
         assert call_kwargs is not None
         sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
         assert sent_json["model"] == "qwen2.5:14b"
-        assert sent_json["prompt"] == "my prompt"
+        assert sent_json["messages"] == [{"role": "user", "content": "my prompt"}]
         assert sent_json["stream"] is False
 
-        # Verify sampling options are included
-        options = sent_json["options"]
-        assert "temperature" in options
-        assert "top_p" in options
-        assert "top_k" in options
-        assert "repeat_penalty" in options
-        assert "num_predict" in options
+        # Verify sampling options are included at top level
+        assert "temperature" in sent_json
+        assert "top_p" in sent_json
+        assert "top_k" in sent_json
+        assert "repeat_penalty" in sent_json
+        assert "max_tokens" in sent_json
 
     # --- connection errors ---
 
@@ -128,7 +131,7 @@ class TestLLMServiceGenerateAsync:
         svc, mock_client = self._svc()
         mock_client.post.side_effect = httpx.ConnectError("refused")
 
-        with pytest.raises(ConnectionError, match="Ollama service unreachable"):
+        with pytest.raises(ConnectionError, match="LLM server unreachable"):
             await svc.generate("prompt", "llama3.2:3b")
 
     @pytest.mark.asyncio
@@ -142,7 +145,7 @@ class TestLLMServiceGenerateAsync:
         with pytest.raises(ConnectionError) as exc_info:
             await svc.generate("prompt", "llama3.2:3b")
 
-        assert settings.ollama_base_url in str(exc_info.value)
+        assert settings.llm_base_url in str(exc_info.value)
 
     # --- timeout ---
 
@@ -167,27 +170,27 @@ class TestLLMServiceGenerateAsync:
     # --- HTTP error status ---
 
     @pytest.mark.asyncio
-    async def test_http_status_error_raises_ollama_model_error(self) -> None:
-        """An HTTP 500 from Ollama is converted to OllamaModelError (not ConnectionError)."""
+    async def test_http_status_error_raises_llm_model_error(self) -> None:
+        """An HTTP 500 from the LLM server is converted to LLMModelError."""
         svc, mock_client = self._svc()
         http_err = _make_http_status_error(500)
         mock_resp = _make_response(status_code=500)
         mock_resp.raise_for_status.side_effect = http_err
         mock_client.post.return_value = mock_resp
 
-        with pytest.raises(OllamaModelError, match="500"):
+        with pytest.raises(LLMModelError, match="500"):
             await svc.generate("prompt", "llama3.2:3b")
 
     @pytest.mark.asyncio
     async def test_http_status_error_contains_model_name(self) -> None:
-        """OllamaModelError message includes the model name for debugging."""
+        """LLMModelError message includes the model name for debugging."""
         svc, mock_client = self._svc()
         http_err = _make_http_status_error(404)
         mock_resp = _make_response(status_code=404)
         mock_resp.raise_for_status.side_effect = http_err
         mock_client.post.return_value = mock_resp
 
-        with pytest.raises(OllamaModelError) as exc_info:
+        with pytest.raises(LLMModelError) as exc_info:
             await svc.generate("prompt", "nonexistent-model:7b")
 
         assert "nonexistent-model:7b" in str(exc_info.value)
@@ -195,14 +198,14 @@ class TestLLMServiceGenerateAsync:
 
     @pytest.mark.asyncio
     async def test_http_status_error_not_retried(self) -> None:
-        """OllamaModelError should not trigger retries (model errors aren't transient)."""
+        """LLMModelError should not trigger retries (model errors aren't transient)."""
         svc, mock_client = self._svc()
         http_err = _make_http_status_error(404)
         mock_resp = _make_response(status_code=404)
         mock_resp.raise_for_status.side_effect = http_err
         mock_client.post.return_value = mock_resp
 
-        with pytest.raises(OllamaModelError):
+        with pytest.raises(LLMModelError):
             await svc.generate("prompt", "llama3.2:3b")
 
         # Should only be called once — no retries for model errors
@@ -224,7 +227,7 @@ class TestLLMServiceGenerateAsync:
 
     @pytest.mark.asyncio
     async def test_missing_response_key_raises_connection_error(self) -> None:
-        """Valid JSON without 'response' key raises ConnectionError (KeyError caught)."""
+        """Valid JSON without 'choices' key raises ConnectionError (KeyError caught)."""
         svc, mock_client = self._svc()
         mock_resp = _make_response(json_data={"model": "llama3.2:3b", "done": True})
         mock_client.post.return_value = mock_resp
@@ -248,10 +251,12 @@ class TestEmbedServiceEmbedSync:
     # --- happy path ---
 
     def test_successful_embedding_returns_float_list(self) -> None:
-        """A well-formed Ollama response returns the embedding as list[float]."""
+        """A well-formed response returns the embedding as list[float]."""
         svc = self._svc()
         embedding = [0.1, 0.2, 0.3, 0.4]
-        mock_resp = _make_response(json_data={"embedding": embedding})
+        mock_resp = _make_response(json_data={
+            "data": [{"embedding": embedding}],
+        })
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
@@ -261,9 +266,11 @@ class TestEmbedServiceEmbedSync:
         assert all(isinstance(v, float) for v in result)
 
     def test_successful_embedding_posts_correct_payload(self) -> None:
-        """_embed_sync sends model and prompt fields to Ollama."""
+        """_embed_sync sends model and input fields to the embed server."""
         svc = self._svc(model="nomic-embed-text")
-        mock_resp = _make_response(json_data={"embedding": [0.5]})
+        mock_resp = _make_response(json_data={
+            "data": [{"embedding": [0.5]}],
+        })
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
@@ -273,7 +280,7 @@ class TestEmbedServiceEmbedSync:
         assert call_kwargs is not None
         sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
         assert sent_json["model"] == "nomic-embed-text"
-        assert sent_json["prompt"] == "hello world"
+        assert sent_json["input"] == "hello world"
 
     # --- connection errors ---
 
@@ -297,7 +304,7 @@ class TestEmbedServiceEmbedSync:
         with pytest.raises(ConnectionError) as exc_info:
             svc._embed_sync("text")
 
-        assert settings.ollama_base_url in str(exc_info.value)
+        assert settings.embed_base_url in str(exc_info.value)
 
     # --- timeout ---
 
@@ -312,8 +319,8 @@ class TestEmbedServiceEmbedSync:
 
     # --- HTTP error status ---
 
-    def test_http_status_error_raises_ollama_model_error(self) -> None:
-        """An HTTP 404 from Ollama is converted to OllamaModelError (not ConnectionError)."""
+    def test_http_status_error_raises_llm_model_error(self) -> None:
+        """An HTTP 404 from the embed server is converted to LLMModelError."""
         svc = self._svc()
         http_err = _make_http_status_error(404)
         mock_resp = _make_response(status_code=404)
@@ -321,11 +328,11 @@ class TestEmbedServiceEmbedSync:
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
-        with pytest.raises(OllamaModelError, match="404"):
+        with pytest.raises(LLMModelError, match="404"):
             svc._embed_sync("text")
 
     def test_http_status_error_contains_model_name(self) -> None:
-        """OllamaModelError message includes the model name."""
+        """LLMModelError message includes the model name."""
         svc = self._svc(model="nomic-embed-text")
         http_err = _make_http_status_error(404)
         mock_resp = _make_response(status_code=404)
@@ -333,7 +340,7 @@ class TestEmbedServiceEmbedSync:
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
-        with pytest.raises(OllamaModelError) as exc_info:
+        with pytest.raises(LLMModelError) as exc_info:
             svc._embed_sync("text")
 
         assert "nomic-embed-text" in str(exc_info.value)
@@ -354,17 +361,17 @@ class TestEmbedServiceEmbedSync:
     # --- missing embedding key ---
 
     def test_missing_embedding_key_raises_connection_error(self) -> None:
-        """Valid JSON without 'embedding' key raises ConnectionError."""
+        """Valid JSON without expected nested key raises ConnectionError."""
         svc = self._svc()
         mock_resp = _make_response(json_data={"model": "nomic-embed-text"})
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
-        with pytest.raises(ConnectionError, match="missing 'embedding' key"):
+        with pytest.raises(ConnectionError, match="missing expected key"):
             svc._embed_sync("text")
 
     def test_missing_embedding_key_error_lists_present_keys(self) -> None:
-        """The ConnectionError message lists the actual keys returned by Ollama."""
+        """The ConnectionError message lists the actual keys returned."""
         svc = self._svc()
         mock_resp = _make_response(json_data={"status": "error", "message": "model not found"})
         assert isinstance(svc._client, httpx.Client)
@@ -380,9 +387,11 @@ class TestEmbedServiceEmbedSync:
     # --- empty embedding ---
 
     def test_empty_embedding_list_is_returned_as_is(self) -> None:
-        """An empty embedding vector from Ollama is returned without error."""
+        """An empty embedding vector is returned without error."""
         svc = self._svc()
-        mock_resp = _make_response(json_data={"embedding": []})
+        mock_resp = _make_response(json_data={
+            "data": [{"embedding": []}],
+        })
         assert isinstance(svc._client, httpx.Client)
         svc._client.post.return_value = mock_resp
 
@@ -408,7 +417,9 @@ class TestEmbedServiceEmbedAsync:
     async def test_successful_embedding_returns_float_list(self) -> None:
         svc, mock_client = self._svc()
         embedding = [0.1, 0.2, 0.3, 0.4]
-        mock_resp = _make_response(json_data={"embedding": embedding})
+        mock_resp = _make_response(json_data={
+            "data": [{"embedding": embedding}],
+        })
         mock_client.post.return_value = mock_resp
 
         result = await svc.embed("some text")
@@ -436,7 +447,7 @@ class TestEmbedServiceEmbedAsync:
         mock_resp = _make_response(json_data={"model": "nomic-embed-text"})
         mock_client.post.return_value = mock_resp
 
-        with pytest.raises(ConnectionError, match="missing 'embedding' key"):
+        with pytest.raises(ConnectionError, match="missing expected key"):
             await svc.embed("text")
 
     def test_embed_fn_raises_on_async_client(self) -> None:

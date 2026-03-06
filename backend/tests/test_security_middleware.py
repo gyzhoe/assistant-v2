@@ -45,7 +45,7 @@ class _AppClientContext:
 
         fresh_app = create_app()
         fresh_app.state.chroma_client = MagicMock()
-        fresh_app.state.ollama_reachable = False
+        fresh_app.state.llm_reachable = False
         setup_app_state(fresh_app)
         self.app = fresh_app
 
@@ -104,7 +104,7 @@ async def test_rate_limit_per_ip_isolation() -> None:
     try:
         fresh_app = create_app()
         fresh_app.state.chroma_client = MagicMock()
-        fresh_app.state.ollama_reachable = False
+        fresh_app.state.llm_reachable = False
         setup_app_state(fresh_app)
 
         fresh_app.state.rag_service.retrieve = AsyncMock(return_value=[])

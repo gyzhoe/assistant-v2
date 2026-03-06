@@ -84,12 +84,12 @@ async def test_generate_returns_reply(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_ollama_down_returns_503(client: AsyncClient) -> None:
+async def test_generate_llm_down_returns_503(client: AsyncClient) -> None:
     mock_rag = MagicMock()
     mock_rag.retrieve = AsyncMock(return_value=[])
     mock_llm = MagicMock()
     mock_llm.generate = AsyncMock(
-        side_effect=ConnectionError("Ollama service unreachable at http://localhost:11435")
+        side_effect=ConnectionError("LLM server unreachable at http://localhost:11435")
     )
     mock_ms = _mock_ms_docs()
 

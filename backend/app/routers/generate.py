@@ -10,7 +10,7 @@ from app.config import settings
 from app.constants import (
     KB_COLLECTION,
     RATED_REPLIES_COLLECTION,
-    OllamaModelError,
+    LLMModelError,
     distance_to_similarity,
 )
 from app.models.request_models import GenerateRequest
@@ -27,7 +27,7 @@ router = APIRouter(tags=["generate"])
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_reply(body: GenerateRequest, request: Request) -> GenerateResponse:
-    """Retrieve RAG context and generate a helpdesk reply via Ollama."""
+    """Retrieve RAG context and generate a helpdesk reply via LLM server."""
     chroma_client = request.app.state.chroma_client
     rag: RAGService = request.app.state.rag_service
     llm: LLMService = request.app.state.llm_service
@@ -61,7 +61,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
                 category=body.category,
             )
             web_docs = []
-    except OllamaModelError as exc:
+    except LLMModelError as exc:
         raise HTTPException(
             status_code=502,
             detail={
@@ -74,7 +74,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
             status_code=503,
             detail={
                 "message": str(exc),
-                "error_code": "OLLAMA_DOWN",
+                "error_code": "LLM_DOWN",
             },
         ) from exc
 
@@ -118,7 +118,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
     # Generate
     try:
         reply = await llm.generate(prompt=prompt, model=body.model)
-    except OllamaModelError as exc:
+    except LLMModelError as exc:
         raise HTTPException(
             status_code=502,
             detail={
@@ -131,7 +131,7 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
             status_code=503,
             detail={
                 "message": str(exc),
-                "error_code": "OLLAMA_DOWN",
+                "error_code": "LLM_DOWN",
             },
         ) from exc
 

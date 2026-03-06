@@ -1,4 +1,4 @@
-"""Tests for native_host.py — get_token, stop_backend, stop_ollama actions."""
+"""Tests for native_host.py — get_token, stop_backend, stop_llm actions."""
 
 import json
 import os
@@ -33,7 +33,7 @@ def _get_token(env_dir):
 
 class TestGetToken:
     def test_reads_valid_token(self, env_dir):
-        _write_env(env_dir, "OLLAMA_BASE_URL=http://localhost:11435\nAPI_TOKEN=abc123def456\n")
+        _write_env(env_dir, "LLM_BASE_URL=http://localhost:11435\nAPI_TOKEN=abc123def456\n")
         result = _get_token(env_dir)
         assert result == {"ok": True, "token": "abc123def456"}
 
@@ -64,7 +64,7 @@ class TestGetToken:
         assert result == {"ok": True, "token": "my_secret_token"}
 
     def test_no_api_token_line(self, env_dir):
-        _write_env(env_dir, "OLLAMA_BASE_URL=http://localhost:11435\n")
+        _write_env(env_dir, "LLM_BASE_URL=http://localhost:11435\n")
         result = _get_token(env_dir)
         assert result["ok"] is False
         assert "not found" in result["error"]
@@ -118,18 +118,17 @@ class TestFindPidsOnPort:
         assert pids == []
 
 
-class TestKillOllama:
-    def test_kills_both_executables(self):
+class TestKillLlm:
+    def test_kills_llama_server(self):
         with patch("native_host.subprocess.run") as mock_run:
-            native_host._kill_ollama()
-        assert mock_run.call_count == 2
+            native_host._kill_llm()
+        assert mock_run.call_count == 1
         calls = [c[0][0] for c in mock_run.call_args_list]
-        assert ["taskkill", "/IM", "ollama.exe", "/F"] in calls
-        assert ["taskkill", "/IM", "ollama_llama_server.exe", "/F"] in calls
+        assert ["taskkill", "/IM", "llama-server.exe", "/F"] in calls
 
 
 class TestStopBackend:
-    def test_kills_found_pids_and_ollama(self):
+    def test_kills_found_pids_and_llm(self):
         with (
             patch("native_host._find_pids_on_port", return_value=[5432]),
             patch("native_host.subprocess.run") as mock_run,
@@ -138,11 +137,11 @@ class TestStopBackend:
         assert result["ok"] is True
         assert result["status"] == "stopped"
         assert result["pids"] == [5432]
-        assert result["ollama_stopped"] is True
-        # 1 taskkill for backend PID + 2 for ollama executables
-        assert mock_run.call_count == 3
+        assert result["llm_stopped"] is True
+        # 1 taskkill for backend PID + 1 for llama-server
+        assert mock_run.call_count == 2
 
-    def test_still_kills_ollama_when_no_backend_pids(self):
+    def test_still_kills_llm_when_no_backend_pids(self):
         with (
             patch("native_host._find_pids_on_port", return_value=[]),
             patch("native_host.subprocess.run") as mock_run,
@@ -151,11 +150,11 @@ class TestStopBackend:
         assert result["ok"] is True
         assert result["status"] == "stopped"
         assert result["pids"] == []
-        assert result["ollama_stopped"] is True
-        # 2 taskkill calls for ollama executables only
-        assert mock_run.call_count == 2
+        assert result["llm_stopped"] is True
+        # 1 taskkill call for llama-server only
+        assert mock_run.call_count == 1
 
-    def test_kills_multiple_pids_and_ollama(self):
+    def test_kills_multiple_pids_and_llm(self):
         with (
             patch("native_host._find_pids_on_port", return_value=[100, 200]),
             patch("native_host.subprocess.run") as mock_run,
@@ -163,20 +162,19 @@ class TestStopBackend:
             result = native_host.stop_backend()
         assert result["ok"] is True
         assert result["pids"] == [100, 200]
-        assert result["ollama_stopped"] is True
-        # 2 backend PIDs + 2 ollama executables
-        assert mock_run.call_count == 4
+        assert result["llm_stopped"] is True
+        # 2 backend PIDs + 1 llama-server
+        assert mock_run.call_count == 3
 
 
-class TestStopOllama:
-    def test_kills_both_executables(self):
+class TestStopLlm:
+    def test_kills_llama_server(self):
         with patch("native_host.subprocess.run") as mock_run:
-            result = native_host.stop_ollama()
+            result = native_host.stop_llm()
         assert result == {"ok": True, "status": "stopped"}
-        assert mock_run.call_count == 2
+        assert mock_run.call_count == 1
         calls = [c[0][0] for c in mock_run.call_args_list]
-        assert ["taskkill", "/IM", "ollama.exe", "/F"] in calls
-        assert ["taskkill", "/IM", "ollama_llama_server.exe", "/F"] in calls
+        assert ["taskkill", "/IM", "llama-server.exe", "/F"] in calls
 
 
 def _make_native_message(payload: dict) -> bytes:
@@ -201,13 +199,13 @@ class TestMainDispatch:
         assert response["ok"] is True
         assert response["status"] == "stopped"
 
-    def test_dispatch_stop_ollama(self):
-        stdin_bytes = _make_native_message({"action": "stop_ollama"})
+    def test_dispatch_stop_llm(self):
+        stdin_bytes = _make_native_message({"action": "stop_llm"})
         stdout_buf = BytesIO()
         with (
             patch("native_host.sys.stdin", MagicMock(buffer=BytesIO(stdin_bytes))),
             patch("native_host.sys.stdout", MagicMock(buffer=stdout_buf)),
-            patch("native_host.stop_ollama", return_value={"ok": True, "status": "stopped"}),
+            patch("native_host.stop_llm", return_value={"ok": True, "status": "stopped"}),
         ):
             native_host.main()
         stdout_buf.seek(0)

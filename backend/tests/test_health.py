@@ -18,7 +18,8 @@ from tests.helpers import setup_app_state
 def _make_client() -> AsyncClient:
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
+    app.state.embed_reachable = False
     setup_app_state(app)
     return AsyncClient(
         transport=ASGITransport(app=app),
@@ -45,7 +46,7 @@ async def test_health_returns_minimal_response(client: AsyncClient) -> None:
     data = response.json()
     assert set(data.keys()) == {"status"}
     assert "version" not in data
-    assert "ollama_reachable" not in data
+    assert "llm_reachable" not in data
     assert "chroma_ready" not in data
 
 
@@ -60,7 +61,7 @@ async def test_health_detail_unauthenticated_returns_200_when_no_token_configure
     response = await client.get("/health/detail")
     assert response.status_code == 200
     data = response.json()
-    required_keys = {"status", "ollama_reachable", "chroma_ready", "chroma_doc_counts", "version"}
+    required_keys = {"status", "llm_reachable", "embed_reachable", "chroma_ready", "chroma_doc_counts", "version"}
     assert required_keys.issubset(data.keys())
 
 
@@ -69,7 +70,7 @@ async def test_health_detail_with_token_configured_requires_token(client: AsyncC
     """When api_token is set, /health/detail requires valid X-Extension-Token."""
     with patch("app.routers.health.settings") as mock_settings:
         mock_settings.api_token = "secret-token"
-        mock_settings.ollama_base_url = "http://localhost:11435"
+        mock_settings.llm_base_url = "http://localhost:11435"
         response = await client.get("/health/detail")
     assert response.status_code == 401
 
@@ -78,7 +79,7 @@ async def test_health_detail_with_token_configured_requires_token(client: AsyncC
 async def test_health_detail_with_valid_token_returns_200(client: AsyncClient) -> None:
     with patch("app.routers.health.settings") as mock_settings:
         mock_settings.api_token = "secret-token"
-        mock_settings.ollama_base_url = "http://localhost:11435"
+        mock_settings.llm_base_url = "http://localhost:11435"
         mock_settings.version = "1.11.0"
         response = await client.get(
             "/health/detail",
@@ -91,12 +92,12 @@ async def test_health_detail_with_valid_token_returns_200(client: AsyncClient) -
 
 
 @pytest.mark.asyncio
-async def test_health_degraded_when_ollama_down(client: AsyncClient) -> None:
+async def test_health_degraded_when_llm_down(client: AsyncClient) -> None:
     response = await client.get("/health/detail")
     data = response.json()
-    # In test environment Ollama is not running, so should be degraded
+    # In test environment LLM server is not running, so should be degraded
     assert data["status"] in ("ok", "degraded")
-    assert isinstance(data["ollama_reachable"], bool)
+    assert isinstance(data["llm_reachable"], bool)
 
 
 # ── _require_localhost helper ───────────────────────────────────────
@@ -154,11 +155,12 @@ async def test_shutdown_returns_200_from_localhost() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ollama_start_returns_200_or_already_running() -> None:
-    """POST /ollama/start succeeds from localhost."""
+async def test_llm_start_returns_200_or_already_running() -> None:
+    """POST /llm/start succeeds from localhost."""
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
+    app.state.embed_reachable = False
     setup_app_state(app)
 
     mock_resp = MagicMock()
@@ -169,14 +171,14 @@ async def test_ollama_start_returns_200_or_already_running() -> None:
         transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as ac:
-        response = await ac.post("/ollama/start")
+        response = await ac.post("/llm/start")
     assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_ollama_stop_returns_200() -> None:
-    """POST /ollama/stop succeeds from localhost."""
+async def test_llm_stop_returns_200() -> None:
+    """POST /llm/stop succeeds from localhost."""
     async with _make_client() as ac:
         with patch("app.routers.health.subprocess.run"):
-            response = await ac.post("/ollama/stop")
+            response = await ac.post("/llm/stop")
     assert response.status_code == 200
