@@ -160,7 +160,7 @@ async def start_llm(request: Request) -> dict[str, str]:
     )
 
     # Start embed server
-    embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.Q8_0.gguf"
+    embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.F16.gguf"
     subprocess.Popen(
         [
             llama_exe, "-m", str(embed_model),

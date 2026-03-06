@@ -280,7 +280,7 @@ class TestEmbedServiceEmbedSync:
         assert call_kwargs is not None
         sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
         assert sent_json["model"] == "nomic-embed-text"
-        assert sent_json["input"] == "hello world"
+        assert sent_json["input"] == "search_document: hello world"
 
     # --- connection errors ---
 

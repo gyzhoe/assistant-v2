@@ -19,6 +19,11 @@ class EmbedService:
     Accepts both async and sync httpx clients:
     - ``httpx.AsyncClient`` for async route handlers (``embed()`` method)
     - ``httpx.Client`` for sync ingestion pipelines (``embed_fn`` property)
+
+    nomic-embed-text requires task instruction prefixes for optimal results.
+    Ollama prepended these transparently; llama.cpp does not, so we do it here:
+    - ``search_query: `` for query embeddings (RAG retrieval)
+    - ``search_document: `` for document embeddings (ingestion)
     """
 
     def __init__(
@@ -31,8 +36,9 @@ class EmbedService:
 
     @property
     def embed_fn(self) -> Callable[[str], list[float]]:
-        """Public accessor for the synchronous embed function.
+        """Synchronous embed function for document ingestion.
 
+        Automatically prepends ``search_document: `` task prefix.
         Only usable when the service was initialised with an ``httpx.Client``.
         Raises ``TypeError`` if the underlying client is async.
         """
@@ -42,10 +48,15 @@ class EmbedService:
                 "Use embed() instead, or create a separate EmbedService "
                 "with an httpx.Client for sync pipelines."
             )
-        return self._embed_sync
+        return lambda text: self._embed_sync(text, task="search_document")
 
-    async def embed(self, text: str) -> list[float]:
+    async def embed(self, text: str, task: str = "search_query") -> list[float]:
         """Return the embedding vector with retry logic (async path).
+
+        Args:
+            text: The text to embed.
+            task: Task prefix for nomic-embed-text. Use ``search_query`` for
+                RAG retrieval queries, ``search_document`` for document indexing.
 
         Raises:
             ConnectionError: Embed server is unreachable (retried).
@@ -55,9 +66,9 @@ class EmbedService:
         for attempt in range(1 + LLM_MAX_RETRIES):
             try:
                 if isinstance(self._client, httpx.AsyncClient):
-                    result = await self._embed_async(text)
+                    result = await self._embed_async(text, task)
                 else:
-                    result = await asyncio.to_thread(self._embed_sync, text)
+                    result = await asyncio.to_thread(self._embed_sync, text, task)
                 if attempt > 0:
                     logger.info("Embed succeeded on attempt %d", attempt + 1)
                 return result
@@ -107,12 +118,13 @@ class EmbedService:
             )
         return ConnectionError(str(exc))
 
-    async def _embed_async(self, text: str) -> list[float]:
+    async def _embed_async(self, text: str, task: str = "search_query") -> list[float]:
         assert isinstance(self._client, httpx.AsyncClient)
+        prefixed = f"{task}: {text}"
         try:
             resp = await self._client.post(
                 "/v1/embeddings",
-                json={"model": self.model, "input": text},
+                json={"model": self.model, "input": prefixed},
             )
             return self._parse_embed_response(resp)
         except ConnectionError:
@@ -120,12 +132,13 @@ class EmbedService:
         except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
             raise self._handle_request_error(exc) from exc
 
-    def _embed_sync(self, text: str) -> list[float]:
+    def _embed_sync(self, text: str, task: str = "search_document") -> list[float]:
         assert isinstance(self._client, httpx.Client)
+        prefixed = f"{task}: {text}"
         try:
             resp = self._client.post(
                 "/v1/embeddings",
-                json={"model": self.model, "input": text},
+                json={"model": self.model, "input": prefixed},
             )
             return self._parse_embed_response(resp)
         except ConnectionError:

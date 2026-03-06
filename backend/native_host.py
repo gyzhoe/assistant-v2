@@ -143,7 +143,7 @@ def _start_llama_servers() -> bool:
         )
 
         # Embed server
-        embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.Q8_0.gguf")
+        embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.F16.gguf")
         subprocess.Popen(
             [
                 llama_exe, "-m", embed_model,
