@@ -230,7 +230,7 @@ export default function OptionsPage(): React.ReactElement {
             ))}
           </select>
           <p className="options-hint">
-            Ollama model used for reply generation. Fetch available models by visiting the backend health endpoint.
+            LLM model used for reply generation. Fetch available models by visiting the backend health endpoint.
           </p>
         </div>
 

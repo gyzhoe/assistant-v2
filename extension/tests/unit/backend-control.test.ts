@@ -46,11 +46,11 @@ vi.mock('../../src/lib/api-client', () => ({
     health: vi.fn().mockResolvedValue({
       status: 'ok',
       version: '1.11.0',
-      ollama_reachable: true,
+      llm_reachable: true,
     }),
     shutdown: (...args: unknown[]) => mockShutdown(...args),
-    ollamaStop: (...args: unknown[]) => mockOllamaStop(...args),
-    ollamaStart: vi.fn().mockResolvedValue({ status: 'started' }),
+    llmStop: (...args: unknown[]) => mockOllamaStop(...args),
+    llmStart: vi.fn().mockResolvedValue({ status: 'started' }),
     models: vi.fn().mockResolvedValue(['qwen3.5:9b']),
   },
   sendNativeCommand: (...args: unknown[]) => mockSendNativeCommand(...args),
@@ -149,38 +149,38 @@ describe('BackendControl — native stop commands', () => {
     expect(mockShutdown).toHaveBeenCalled()
   })
 
-  it('stop Ollama calls sendNativeCommand first', async () => {
+  it('stop LLM server calls sendNativeCommand first', async () => {
     mockSendNativeCommand.mockResolvedValue({ ok: true, status: 'stopped' })
 
     const { container } = await renderBackendControl()
 
-    const stopBtn = container.querySelector('button[aria-label="Stop Ollama"]') as HTMLButtonElement
+    const stopBtn = container.querySelector('button[aria-label="Stop LLM server"]') as HTMLButtonElement
     expect(stopBtn).not.toBeNull()
 
     await act(async () => {
       stopBtn.click()
     })
 
-    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_ollama')
-    // Native succeeded — HTTP ollamaStop should NOT be called
+    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
+    // Native succeeded — HTTP llmStop should NOT be called
     expect(mockOllamaStop).not.toHaveBeenCalled()
   })
 
-  it('stop Ollama falls back to HTTP when native fails', async () => {
+  it('stop LLM server falls back to HTTP when native fails', async () => {
     mockSendNativeCommand.mockResolvedValue({ ok: false, error: 'not connected' })
     mockOllamaStop.mockResolvedValue({ status: 'stopped' })
 
     const { container } = await renderBackendControl()
 
-    const stopBtn = container.querySelector('button[aria-label="Stop Ollama"]') as HTMLButtonElement
+    const stopBtn = container.querySelector('button[aria-label="Stop LLM server"]') as HTMLButtonElement
     expect(stopBtn).not.toBeNull()
 
     await act(async () => {
       stopBtn.click()
     })
 
-    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_ollama')
-    // Native failed — HTTP ollamaStop should be called as fallback
+    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
+    // Native failed — HTTP llmStop should be called as fallback
     expect(mockOllamaStop).toHaveBeenCalled()
   })
 })

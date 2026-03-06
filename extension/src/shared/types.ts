@@ -80,7 +80,7 @@ export interface GenerateResponse {
 /** Health check response */
 export interface HealthResponse {
   status: 'ok' | 'degraded'
-  ollama_reachable: boolean
+  llm_reachable: boolean
   chroma_ready: boolean
   chroma_doc_counts: Record<string, number>
   version: string

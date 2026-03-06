@@ -58,7 +58,7 @@ describe('apiClient.generate', () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 503,
-      json: async () => ({ detail: 'Ollama down', error_code: 'OLLAMA_DOWN' }),
+      json: async () => ({ detail: 'LLM server down', error_code: 'LLM_DOWN' }),
     })
 
     const { apiClient, ApiError } = await import('../../src/lib/api-client')

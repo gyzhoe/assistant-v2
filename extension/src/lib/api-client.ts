@@ -47,7 +47,7 @@ export const apiClient = {
 
   async health(): Promise<HealthResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    // /health/detail returns full info (ollama, chroma counts) behind auth.
+    // /health/detail returns full info (LLM, chroma counts) behind auth.
     // On 401/403 (token not yet provisioned), fall back to unauthenticated /health.
     const detailResp = await fetch(`${base}/health/detail`, { headers, signal: AbortSignal.timeout(4000) })
     if (detailResp.ok) {
@@ -59,7 +59,7 @@ export const apiClient = {
         const data = await basicResp.json() as { status: string; version?: string }
         return {
           status: data.status === 'ok' ? 'ok' : 'degraded',
-          ollama_reachable: false,
+          llm_reachable: false,
           chroma_ready: false,
           chroma_doc_counts: {},
           version: data.version ?? '',
@@ -75,17 +75,17 @@ export const apiClient = {
     await fetch(`${base}/shutdown`, { method: 'POST', headers, signal: AbortSignal.timeout(2000) }).catch(() => {})
   },
 
-  async ollamaStart(): Promise<{ status: string }> {
+  async llmStart(): Promise<{ status: string }> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    const resp = await fetch(`${base}/ollama/start`, { method: 'POST', headers })
-    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to start Ollama' })
+    const resp = await fetch(`${base}/llm/start`, { method: 'POST', headers })
+    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to start LLM server' })
     return resp.json() as Promise<{ status: string }>
   },
 
-  async ollamaStop(): Promise<{ status: string }> {
+  async llmStop(): Promise<{ status: string }> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    const resp = await fetch(`${base}/ollama/stop`, { method: 'POST', headers })
-    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to stop Ollama' })
+    const resp = await fetch(`${base}/llm/stop`, { method: 'POST', headers })
+    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to stop LLM server' })
     return resp.json() as Promise<{ status: string }>
   },
 
@@ -189,7 +189,7 @@ interface NativeResponse {
   status?: string
   error?: string
   token?: string
-  ollama_started?: boolean
+  llm_started?: boolean
 }
 
 /** Send a command to the native messaging host to start a service. */

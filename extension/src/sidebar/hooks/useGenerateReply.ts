@@ -69,8 +69,8 @@ export function useGenerateReply() {
       let message = 'Failed to generate reply'
       if (err instanceof ApiError) {
         const body = err.body as Record<string, unknown>
-        if (body?.['error_code'] === 'OLLAMA_DOWN') {
-          message = 'Ollama is not running. Please start it and try again.'
+        if (body?.['error_code'] === 'LLM_DOWN') {
+          message = 'LLM server is not running. Please start it and try again.'
         } else {
           const parsed = parseErrorDetail(body)
           message = parsed !== 'An unexpected error occurred'

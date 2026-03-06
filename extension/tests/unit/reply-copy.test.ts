@@ -35,7 +35,7 @@ Object.defineProperty(navigator, 'clipboard', {
 
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
-    health: vi.fn().mockResolvedValue({ status: 'ok', version: '1.0.0', ollama_reachable: true, chroma_doc_counts: {} }),
+    health: vi.fn().mockResolvedValue({ status: 'ok', version: '1.0.0', llm_reachable: true, chroma_doc_counts: {} }),
     search: vi.fn().mockResolvedValue({ results: [] }),
     feedback: vi.fn().mockResolvedValue({}),
     models: vi.fn().mockResolvedValue(['qwen2.5:14b']),

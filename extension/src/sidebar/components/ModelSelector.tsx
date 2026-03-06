@@ -16,10 +16,10 @@ function modelTitle(name: string): string {
 export function ModelSelector(): React.ReactElement {
   const selectedModel = useSidebarStore((s) => s.selectedModel)
   const setSelectedModel = useSidebarStore((s) => s.setSelectedModel)
-  const ollamaReachable = useSidebarStore((s) => s.ollamaReachable)
+  const llmReachable = useSidebarStore((s) => s.llmReachable)
   const [models, setModels] = useState<string[]>([DEFAULT_MODEL])
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const prevOllamaRef = useRef(ollamaReachable)
+  const prevLlmRef = useRef(llmReachable)
 
   const fetchModels = useCallback(() => {
     setFetchError(null)
@@ -31,8 +31,8 @@ export function ModelSelector(): React.ReactElement {
     }).catch((err: unknown) => {
       if (err instanceof ApiError) {
         const body = err.body as Record<string, unknown>
-        if (body?.['error_code'] === 'OLLAMA_DOWN') {
-          setFetchError('Ollama is not running')
+        if (body?.['error_code'] === 'LLM_DOWN') {
+          setFetchError('LLM server is not running')
         } else {
           const parsed = parseErrorDetail(body)
           setFetchError(parsed !== 'An unexpected error occurred' ? parsed : 'Could not fetch models')
@@ -49,13 +49,13 @@ export function ModelSelector(): React.ReactElement {
     fetchModels()
   }, [fetchModels])
 
-  // Re-fetch when Ollama transitions from unreachable → reachable
+  // Re-fetch when LLM server transitions from unreachable → reachable
   useEffect(() => {
-    if (ollamaReachable && !prevOllamaRef.current) {
+    if (llmReachable && !prevLlmRef.current) {
       fetchModels()
     }
-    prevOllamaRef.current = ollamaReachable
-  }, [ollamaReachable, fetchModels])
+    prevLlmRef.current = llmReachable
+  }, [llmReachable, fetchModels])
 
   // Re-fetch models when the document becomes visible (e.g. after backend reconnect)
   useEffect(() => {

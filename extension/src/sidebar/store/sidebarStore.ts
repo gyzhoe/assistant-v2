@@ -48,7 +48,7 @@ interface SidebarState {
   pinnedArticles: KBArticlePin[]
   settings: AppSettings
   settingsLoading: boolean
-  ollamaReachable: boolean
+  llmReachable: boolean
   chromaDocCounts: Record<string, number>
 
   setTicketData: (data: TicketData | null) => void
@@ -66,7 +66,7 @@ interface SidebarState {
   pinArticle: (article: KBArticlePin) => void
   unpinArticle: (articleId: string) => void
   cancelGeneration: () => void
-  setOllamaReachable: (val: boolean) => void
+  setLlmReachable: (val: boolean) => void
   setChromaDocCounts: (counts: Record<string, number>) => void
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>
   saveReplyForTicket: (ticketUrl: string) => void
@@ -90,7 +90,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   pinnedArticles: [],
   settings: DEFAULT_SETTINGS,
   settingsLoading: true,
-  ollamaReachable: false,
+  llmReachable: false,
   chromaDocCounts: {},
 
   setTicketData: (data) => set({ ticketData: data }),
@@ -105,7 +105,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   setIsEditingReply: (val) => set({ isEditingReply: val }),
   setReplyRating: (rating) => set({ replyRating: rating }),
   setFeedbackDocId: (id) => set({ feedbackDocId: id }),
-  setOllamaReachable: (val) => set({ ollamaReachable: val }),
+  setLlmReachable: (val) => set({ llmReachable: val }),
   setChromaDocCounts: (counts) => set({ chromaDocCounts: counts }),
   pinArticle: (article) => {
     const { pinnedArticles } = get()
