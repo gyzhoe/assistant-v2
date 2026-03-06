@@ -44,8 +44,8 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 [Components]
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
-Name: "ollama";    Description: "Ollama LLM Runtime";                           Types: full custom
-Name: "models";    Description: "LLM models — qwen3.5:9b + nomic-embed-text (~6.6 GB)"; Types: full custom
+Name: "llama";     Description: "llama.cpp LLM Runtime (llama-server)";          Types: full custom
+Name: "models";    Description: "LLM models — GGUF files (~5.8 GB)";              Types: full custom
 
 [InstallDelete]
 ; Clean up stale files from previous installs before copying new ones.
@@ -68,6 +68,7 @@ Type: filesandordirs; Name: "{app}\tools"
 ; removal is still available via the uninstall-cleanup.ps1 dialog.
 Name: "{app}\logs";              Flags: uninsneveruninstall
 Name: "{app}\backend\chroma_data"
+Name: "{app}\models"
 
 [Files]
 ; Backend source
@@ -88,9 +89,9 @@ Source: "..\backend\static\manage\*"; DestDir: "{app}\backend\static\manage"; Fl
 ; uv standalone binary (downloaded by CI)
 Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
-; Ollama full distribution — exe + lib/ollama/ (CUDA/CPU runners, DLLs)
+; llama-server binary + CUDA DLLs
 ; Everything under {app}\tools\ for AppLocker compatibility
-Source: "deps\ollama\*";              DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: ollama
+Source: "deps\llama-server\*";        DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: llama
 
 ; Bundled Python 3.13 standalone (offline install)
 Source: "deps\python\*";             DestDir: "{app}\deps\python";       Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
@@ -101,10 +102,10 @@ Source: "deps\wheels\*";             DestDir: "{app}\deps\wheels";       Flags: 
 ; Requirements file for offline pip install
 Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: ignoreversion; Components: backend
 
-; Bundled Ollama models (offline install — ~2.2 GB)
+; Bundled GGUF model files (offline install — ~5.8 GB)
 ; Only included when built locally with models present; CI builds skip this.
-#ifexist "deps\ollama-models\manifest"
-Source: "deps\ollama-models\*";      DestDir: "{app}\deps\ollama-models"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: models
+#ifexist "deps\models\nomic-embed-text-v1.5.Q8_0.gguf"
+Source: "deps\models\*";             DestDir: "{app}\models";            Flags: ignoreversion; Components: models
 #endif
 
 ; PowerShell helper scripts
@@ -146,9 +147,9 @@ Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: 
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
 [UninstallRun]
-; Kill Ollama processes by name before cleanup (locks DLLs if left running)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated
-; Cleanup dialog — offer Ollama/model removal before anything is torn down
+; Kill llama-server and legacy Ollama processes before cleanup (locks DLLs if left running)
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'llama-server','ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated
+; Cleanup dialog — offer model removal before anything is torn down
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated
 ; Kill backend on port 8765
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""try {{ $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; if ($c) {{ Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue }} }} catch {{}}"""; Flags: runhidden waituntilterminated
@@ -206,10 +207,10 @@ begin
          ewWaitUntilTerminated, ResultCode);
   end;
 
-  // Kill Ollama processes by name (may run from different locations)
+  // Kill llama-server and legacy Ollama processes (may run from different locations)
   Exec('powershell.exe',
     '-ExecutionPolicy Bypass -Command "' +
-    'Get-Process -Name ''ollama'',''ollama_llama_server'' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; ' +
+    'Get-Process -Name ''llama-server'',''ollama'',''ollama_llama_server'' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; ' +
     'Start-Sleep -Seconds 2"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
@@ -252,19 +253,16 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  CudaDll: String;
 begin
   if CurStep = ssPostInstall then
   begin
     ForceDirectories(ExpandConstant('{app}\logs'));
     GenerateNativeMessagingManifest;
 
-    // Verify CUDA runners installed correctly (diagnostic log)
-    CudaDll := ExpandConstant('{app}\tools\lib\ollama\cuda_v12\ggml-cuda.dll');
-    if FileExists(CudaDll) then
-      Log('CUDA runner verified: ' + CudaDll)
+    // Verify llama-server binary installed correctly (diagnostic log)
+    if FileExists(ExpandConstant('{app}\tools\llama-server.exe')) then
+      Log('llama-server.exe verified at ' + ExpandConstant('{app}\tools\llama-server.exe'))
     else
-      Log('WARNING: CUDA runner not found at ' + CudaDll + ' — GPU acceleration may be unavailable');
+      Log('WARNING: llama-server.exe not found — LLM inference will be unavailable');
   end;
 end;
