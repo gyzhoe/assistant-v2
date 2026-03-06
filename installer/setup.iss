@@ -22,8 +22,8 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=output
 OutputBaseFilename=AIHelpdeskAssistant-Setup-{#MyAppVersion}
-Compression=lzma2/ultra64
-SolidCompression=yes
+Compression=lzma2/fast
+SolidCompression=no
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -68,7 +68,7 @@ Type: filesandordirs; Name: "{app}\tools"
 ; removal is still available via the uninstall-cleanup.ps1 dialog.
 Name: "{app}\logs";              Flags: uninsneveruninstall
 Name: "{app}\backend\chroma_data"
-Name: "{app}\models"
+Name: "{app}\models";             Flags: uninsneveruninstall
 
 [Files]
 ; Backend source

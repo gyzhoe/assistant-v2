@@ -5,6 +5,36 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — llama.cpp Migration (2026-03-06)
+
+### Changed
+
+- **Backend: Replace Ollama with llama.cpp server** — all LLM inference now goes through llama-server's OpenAI-compatible API (`/v1/chat/completions`, `/v1/embeddings`) instead of Ollama's custom endpoints
+- Backend: Two separate llama-server instances — LLM on port 11435, embeddings on port 11436
+- Backend: `ollama_base_url` config → `llm_base_url` + `embed_base_url` (separate endpoints)
+- Backend: `OllamaModelError` → `LLMModelError`, `OLLAMA_DOWN` → `LLM_DOWN` error codes
+- Backend: `/ollama/start` and `/ollama/stop` → `/llm/start` and `/llm/stop` endpoints
+- Backend: `/models` returns configured `default_model` instead of querying model registry
+- Backend: Health detail returns `llm_reachable` + `embed_reachable` instead of `ollama_reachable`
+- Backend: EmbedService adds nomic-embed-text task prefixes (`search_query:` / `search_document:`) — required since llama-server doesn't inject them like Ollama's Modelfile did
+- Backend: `--n-gpu-layers -1` for auto GPU detection (NVIDIA, AMD, Intel, CPU fallback)
+- Installer: Bundles llama-server (Vulkan build, ~142 MB) instead of Ollama (~3.3 GB) — **~9x smaller**
+- Installer: GGUF model downloads from HuggingFace instead of `ollama pull`
+- Installer: Models stored in `{app}/models/` as GGUF files (no Ollama registry)
+- Installer: Kills legacy Ollama processes on upgrade for clean transition
+- Extension: All Ollama references renamed to LLM server (UI labels, state, API calls)
+- Extension: Native messaging commands `start_ollama`/`stop_ollama` → `start_llm`/`stop_llm`
+
+### Added
+
+- Backend: Embedding vector verification script (`backend/scripts/verify_embeddings.py`)
+
+### Removed
+
+- Ollama dependency — no longer needed for any part of the stack
+- Ollama model registry integration (`/api/tags`, `/api/pull`)
+- CUDA/Vulkan runner directory management (`OLLAMA_RUNNERS_DIR`)
+
 ## [1.14.2] — Installer Fix (2026-03-04)
 
 ### Fixed

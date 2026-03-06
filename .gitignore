@@ -62,8 +62,12 @@ installer/output/
 installer/extension.pem
 installer/extension-id.txt
 
-# Local dev tools
+# Local dev tools & binaries
 tools/
+
+# GGUF model files (large, downloaded at install/dev time)
+models/
+*.gguf
 
 # Temporary
 *.tmp
