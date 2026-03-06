@@ -104,7 +104,7 @@ Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: 
 
 ; Bundled GGUF model files (offline install — ~5.8 GB)
 ; Only included when built locally with models present; CI builds skip this.
-#ifexist "deps\models\nomic-embed-text-v1.5.Q8_0.gguf"
+#ifexist "deps\models\nomic-embed-text-v1.5.F16.gguf"
 Source: "deps\models\*";             DestDir: "{app}\models";            Flags: ignoreversion; Components: models
 #endif
 

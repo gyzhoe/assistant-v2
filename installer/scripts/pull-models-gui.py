@@ -21,7 +21,7 @@ except ImportError:
     HAS_TKINTER = False
 
 MODELS = [
-    {"name": "nomic-embed-text-v1.5.Q8_0.gguf", "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q8_0.gguf", "desc": "~260 MB"},
+    {"name": "nomic-embed-text-v1.5.F16.gguf", "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.F16.gguf", "desc": "~262 MB"},
     {"name": "qwen3.5-9b-q4_k_m.gguf", "url": "https://huggingface.co/Qwen/Qwen3.5-9B-GGUF/resolve/main/qwen3.5-9b-q4_k_m.gguf", "desc": "~5.5 GB"},
 ]
 AUTO_CLOSE_DELAY = 3000  # ms to wait before closing after success
