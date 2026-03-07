@@ -175,3 +175,7 @@ class FeedbackRequest(BaseModel):
 
 class SwitchModelRequest(BaseModel):
     model: str = Field(..., min_length=1, max_length=100)
+
+
+class DownloadModelsRequest(BaseModel):
+    models: list[str] = Field(default_factory=list, description="GGUF filenames to download (empty = all missing)")

@@ -46,7 +46,7 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
 Name: "llama";     Description: "llama.cpp LLM Runtime (llama-server)";          Types: full custom
-Name: "models";    Description: "LLM models — GGUF files (~15 GB)";               Types: full custom
+Name: "models";    Description: "Download LLM models (~6 GB, requires internet)";   Types: full custom
 
 [InstallDelete]
 ; Clean up stale files from previous installs before copying new ones.
@@ -127,7 +127,6 @@ Source: "scripts\pull-models-gui.py";    DestDir: "{app}\scripts";          Flag
 
 [Icons]
 ; Interactive tools — uses compiled Rust binary
-Name: "{group}\Setup LLM Models";    Filename: "{app}\tools\assistant-tools.exe"; Parameters: "pull-models --app-dir ""{app}"""
 Name: "{group}\Health Check";        Filename: "{app}\tools\assistant-tools.exe"; Parameters: "health-check --app-dir ""{app}"""
 Name: "{group}\Check for Updates";   Filename: "{app}\tools\assistant-tools.exe"; Parameters: "update --app-dir ""{app}"""
 Name: "{group}\Extension Folder";    Filename: "{app}\extension"
@@ -145,8 +144,8 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\s
 ; Import bundled LLM models (copies pre-downloaded model files)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\scripts\import-models.ps1"" -AppDir ""{app}"" -NonInteractive"; StatusMsg: "Importing LLM models..."; Components: models; Flags: waituntilterminated runhidden
 
-; Pull LLM models — tkinter GUI with console fallback (python.exe so errors are visible)
-Filename: "{app}\backend\.venv\Scripts\python.exe"; Parameters: """{app}\scripts\pull-models-gui.py"" --app-dir ""{app}"""; StatusMsg: "Downloading LLM models..."; Flags: waituntilterminated; Components: models
+; Pull LLM models — tkinter GUI (pythonw.exe hides console, logs go to file)
+Filename: "{app}\backend\.venv\Scripts\pythonw.exe"; Parameters: """{app}\scripts\pull-models-gui.py"" --app-dir ""{app}"""; StatusMsg: "Downloading LLM models..."; Flags: waituntilterminated; Components: models
 
 ; Post-install: open extension folder and Edge extensions page
 Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: "Open extension folder (load in Edge manually)"; Flags: postinstall nowait skipifsilent
@@ -154,13 +153,13 @@ Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "O
 
 [UninstallRun]
 ; Kill llama-server and legacy Ollama processes before cleanup (locks DLLs if left running)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'llama-server','ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'llama-server','ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated; RunOnceId: "KillLlamaOllama"
 ; Cleanup dialog — offer model removal before anything is torn down
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "UninstallCleanup"
 ; Kill backend on port 8765
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""try {{ $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; if ($c) {{ Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue }} }} catch {{}}"""; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""try {{ $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; if ($c) {{ Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue }} }} catch {{}}"""; Flags: runhidden waituntilterminated; RunOnceId: "KillBackendPort"
 ; Kill Python processes from install directory
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith('{app}', [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith('{app}', [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated; RunOnceId: "KillAppPython"
 
 [Code]
 function GetEdgePath(Param: String): String;

@@ -70,15 +70,13 @@ describe('ArticleEditor — edit mode', () => {
       createElement(ArticleEditor, { onBack: vi.fn(), mode: 'edit', articleId: 'art1' }),
     )
 
-    // Wait for skeleton to resolve and form fields to appear
+    // Wait for article data to load and populate the form
     await waitFor(() => {
-      expect(screen.getByLabelText('Title')).toBeTruthy()
+      const input = screen.getByLabelText('Title') as HTMLInputElement
+      expect(input.value).toBe('VPN Setup Guide')
     })
 
     expect(screen.getByText('Edit Article')).toBeTruthy()
-
-    const titleInput = screen.getByLabelText('Title') as HTMLInputElement
-    expect(titleInput.value).toBe('VPN Setup Guide')
 
     const contentArea = screen.getByLabelText('Content') as HTMLTextAreaElement
     expect(contentArea.value).toContain('Introduction text about VPN.')

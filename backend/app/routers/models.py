@@ -5,7 +5,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import settings
-from app.constants import EMBED_MODEL_PREFIXES, MODEL_DISPLAY_NAMES
+from app.constants import EMBED_MODEL_PREFIXES, GGUF_MODELS, MODEL_DISPLAY_NAMES
+from app.models.request_models import DownloadModelsRequest
+from app.services.model_download_service import ModelDownloadService
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,24 @@ def scan_models() -> list[str]:
             continue
         names.append(_gguf_display_name(path.name))
     return names
+
+
+def _build_model_info() -> dict[str, dict[str, object]]:
+    """Build model_info dict for non-embed GGUF models."""
+    info: dict[str, dict[str, object]] = {}
+    for model in GGUF_MODELS:
+        if model.is_embed:
+            continue
+        dest = _MODELS_DIR / model.name
+        downloaded = dest.is_file() and dest.stat().st_size > 0
+        size_bytes: int | None = dest.stat().st_size if downloaded else None
+        info[model.display_name] = {
+            "downloaded": downloaded,
+            "size_bytes": size_bytes,
+            "description": model.description,
+            "gguf_name": model.name,
+        }
+    return info
 
 
 @router.get("/models")
@@ -60,4 +80,55 @@ async def list_models(request: Request) -> dict[str, object]:
 
     current: str = getattr(request.app.state, "current_llm_model", settings.default_model)
 
-    return {"models": available, "current": current}
+    return {
+        "models": available,
+        "current": current,
+        "model_info": _build_model_info(),
+    }
+
+
+def _get_download_service(request: Request) -> ModelDownloadService:
+    svc: ModelDownloadService | None = getattr(
+        request.app.state, "model_download_service", None
+    )
+    if svc is None:
+        raise HTTPException(status_code=503, detail="Download service not initialized")
+    return svc
+
+
+@router.post("/models/download")
+async def start_download(
+    request: Request,
+    body: DownloadModelsRequest,
+) -> dict[str, object]:
+    """Start downloading GGUF models. Empty list = all missing non-embed models."""
+    svc = _get_download_service(request)
+
+    model_names = body.models
+    if not model_names:
+        # Download all missing non-embed models
+        model_names = [
+            m.name
+            for m in GGUF_MODELS
+            if not m.is_embed
+            and not (_MODELS_DIR / m.name).is_file()
+        ]
+        if not model_names:
+            return {"status": "all_downloaded", "models": []}
+
+    result = svc.start_download(model_names, _MODELS_DIR)
+    return result
+
+
+@router.get("/models/download/status")
+async def download_status(request: Request) -> dict[str, object]:
+    """Return current download progress."""
+    svc = _get_download_service(request)
+    return svc.get_status()
+
+
+@router.post("/models/download/cancel")
+async def cancel_download(request: Request) -> dict[str, str]:
+    """Cancel the current download."""
+    svc = _get_download_service(request)
+    return svc.cancel()

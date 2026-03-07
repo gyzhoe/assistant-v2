@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { storage, DEFAULT_SETTINGS } from '../lib/storage'
 import { apiClient, sendNativeCommand } from '../lib/api-client'
-import type { AppSettings, SelectorConfig } from '../shared/types'
+import type { AppSettings, ModelDownloadStatus, ModelInfo, SelectorConfig } from '../shared/types'
 import { STORAGE_KEY_SECRETS, DEFAULT_SELECTORS } from '../shared/constants'
 
 const SELECTOR_FIELDS: { key: keyof SelectorConfig; label: string }[] = [
@@ -23,8 +23,12 @@ export default function OptionsPage(): React.ReactElement {
   const [autoDetectMsg, setAutoDetectMsg] = useState('')
   const [isDetecting, setIsDetecting] = useState(false)
   const [onboardingResetMsg, setOnboardingResetMsg] = useState('')
+  const [modelInfo, setModelInfo] = useState<Record<string, ModelInfo>>({})
+  const [downloadStatus, setDownloadStatus] = useState<ModelDownloadStatus | null>(null)
+  const [downloadError, setDownloadError] = useState('')
   const initialSettingsRef = useRef('')
   const initialTokenRef = useRef('')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isDirty =
     JSON.stringify(settings) !== initialSettingsRef.current ||
@@ -35,7 +39,10 @@ export default function OptionsPage(): React.ReactElement {
       setSettings(s)
       initialSettingsRef.current = JSON.stringify(s)
     })
-    apiClient.models().then((data) => setModels(data.models)).catch(() => {})
+    apiClient.models().then((data) => {
+      setModels(data.models)
+      if (data.model_info) setModelInfo(data.model_info)
+    }).catch(() => {})
     chrome.storage.local.get(STORAGE_KEY_SECRETS, (result) => {
       const secrets = result[STORAGE_KEY_SECRETS] as { apiToken?: string } | undefined
       const token = secrets?.apiToken ?? ''
@@ -132,6 +139,82 @@ export default function OptionsPage(): React.ReactElement {
       setTimeout(() => setAutoDetectMsg(''), 5000)
     }
   }
+
+  const refreshModels = () => {
+    apiClient.models().then((data) => {
+      setModels(data.models)
+      if (data.model_info) setModelInfo(data.model_info)
+    }).catch(() => {})
+  }
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  const startPolling = () => {
+    stopPolling()
+    pollRef.current = setInterval(() => {
+      apiClient.downloadStatus().then((status) => {
+        setDownloadStatus(status)
+        if (!status.downloading) {
+          stopPolling()
+          setDownloadError(status.error || '')
+          refreshModels()
+        }
+      }).catch(() => {
+        stopPolling()
+        setDownloadStatus(null)
+        setDownloadError('Lost connection to backend.')
+      })
+    }, 2000)
+  }
+
+  const handleDownload = (ggufNames?: string[]) => {
+    setDownloadError('')
+    apiClient.downloadModels(ggufNames).then((resp) => {
+      if (resp.status === 'started' || resp.status === 'already_downloading') {
+        setDownloadStatus({
+          downloading: true,
+          current_model: null,
+          bytes_downloaded: 0,
+          bytes_total: 0,
+          models_completed: 0,
+          models_total: resp.models.length,
+          error: '',
+        })
+        startPolling()
+      } else if (resp.status === 'all_downloaded') {
+        refreshModels()
+      } else if (resp.status === 'error') {
+        setDownloadError(String((resp as Record<string, unknown>).error ?? 'Unknown model'))
+      }
+    }).catch(() => {
+      setDownloadError('Failed to start download. Is the backend running?')
+    })
+  }
+
+  const handleCancelDownload = () => {
+    apiClient.cancelDownload().then(() => {
+      stopPolling()
+      setDownloadStatus(null)
+      refreshModels()
+    }).catch(() => {})
+  }
+
+  const ggufToDisplayName = (gguf: string): string => {
+    for (const [displayName, info] of Object.entries(modelInfo)) {
+      if (info.gguf_name === gguf) return displayName
+    }
+    return gguf
+  }
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => stopPolling()
+  }, [])
 
   const handleOnboardingReset = () => {
     chrome.storage.local.remove('onboardingDismissed', () => {
@@ -252,6 +335,104 @@ export default function OptionsPage(): React.ReactElement {
           </p>
         </div>
       </div>
+
+      {/* ── Section: LLM Models ── */}
+      {Object.keys(modelInfo).length > 0 && (
+        <div className="options-section">
+          <div className="options-section-header">
+            <span className="options-section-label">LLM Models</span>
+          </div>
+
+          <div className="model-list">
+            {Object.entries(modelInfo).map(([name, info]) => (
+              <div key={name} className="model-card">
+                <span className="model-card-name">{name}</span>
+                <span className="model-card-size">{info.description}</span>
+                {info.downloaded ? (
+                  <span className="model-status-badge model-status-badge--downloaded">
+                    Downloaded
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="model-status-badge model-status-badge--download"
+                    onClick={() => handleDownload([info.gguf_name])}
+                    disabled={downloadStatus?.downloading === true}
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Download progress */}
+          {downloadStatus?.downloading && (
+            <div className="model-progress">
+              <p className="model-progress-label">
+                {downloadStatus.current_model
+                  ? `Downloading ${ggufToDisplayName(downloadStatus.current_model)}\u2026`
+                  : 'Starting download\u2026'}
+              </p>
+              <div className="model-progress-bar-track">
+                <div
+                  className="model-progress-bar-fill"
+                  style={{
+                    width: downloadStatus.bytes_total > 0
+                      ? `${Math.round((downloadStatus.bytes_downloaded / downloadStatus.bytes_total) * 100)}%`
+                      : '0%',
+                  }}
+                />
+              </div>
+              <div className="model-progress-details">
+                <span>
+                  {downloadStatus.bytes_total > 0
+                    ? `${(downloadStatus.bytes_downloaded / 1e9).toFixed(1)} / ${(downloadStatus.bytes_total / 1e9).toFixed(1)} GB`
+                    : 'Calculating\u2026'}
+                </span>
+                <span>
+                  {downloadStatus.models_completed} of {downloadStatus.models_total} model{downloadStatus.models_total !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="options-btn-secondary"
+                onClick={handleCancelDownload}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* Error */}
+          {downloadError && (
+            <div className="model-error">
+              <p className="model-error-text">{downloadError}</p>
+              <button
+                type="button"
+                className="options-btn-secondary"
+                onClick={() => {
+                  setDownloadError('')
+                  handleDownload()
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* Download All Missing button */}
+          {!downloadStatus?.downloading && Object.values(modelInfo).some((m) => !m.downloaded) && (
+            <button
+              type="button"
+              className="options-btn-secondary"
+              onClick={() => handleDownload()}
+            >
+              Download All Missing
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Section: Appearance ── */}
       <div className="options-section">

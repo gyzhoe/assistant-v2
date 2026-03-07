@@ -162,10 +162,30 @@ export interface ToastMessage {
   }
 }
 
+/** Per-model metadata from GET /models */
+export interface ModelInfo {
+  downloaded: boolean
+  size_bytes: number | null
+  description: string
+  gguf_name: string
+}
+
+/** Model download progress from GET /models/download/status */
+export interface ModelDownloadStatus {
+  downloading: boolean
+  current_model: string | null
+  bytes_downloaded: number
+  bytes_total: number
+  models_completed: number
+  models_total: number
+  error: string
+}
+
 /** Models endpoint response */
 export interface ModelsResponse {
   models: string[]
   current: string
+  model_info: Record<string, ModelInfo>
 }
 
 /** KB article list response */

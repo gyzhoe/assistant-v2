@@ -28,7 +28,7 @@ MODELS = [
 AUTO_CLOSE_DELAY = 3000  # ms to wait before closing after success
 DOWNLOAD_MAX_RETRIES = 3  # retry up to 3 times on failure (4 total attempts)
 DOWNLOAD_RETRY_DELAY = 3  # seconds to wait before retrying
-RETRY_SHORTCUT_NAME = "Setup LLM Models"  # Start Menu shortcut for manual retry
+RETRY_SHORTCUT_NAME = "Health Check"  # Start Menu shortcut for diagnostics
 
 # Module-level logger; configured by setup_logging() after app_dir is resolved.
 log = logging.getLogger("pull-models-gui")
@@ -62,12 +62,14 @@ def setup_logging(app_dir: str) -> None:
     fh = logging.FileHandler(log_path, encoding="utf-8")
     fh.setFormatter(fmt)
 
-    sh = logging.StreamHandler(sys.stdout)
-    sh.setFormatter(fmt)
-
     log.setLevel(logging.DEBUG)
     log.addHandler(fh)
-    log.addHandler(sh)
+
+    # Only add console handler when running with a visible console (python.exe, not pythonw.exe)
+    if sys.stdout is not None:
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setFormatter(fmt)
+        log.addHandler(sh)
     log.info("pull-models-gui started. Log: %s", log_path)
 
 
@@ -97,6 +99,14 @@ class DownloadError(Exception):
     """Raised when a model file download fails."""
 
 
+class DownloadCancelled(Exception):
+    """Raised when the user cancels a download."""
+
+
+# Global cancel event — set by the GUI Cancel button or window close.
+_cancel_event = threading.Event()
+
+
 def download_model(
     name: str,
     url: str,
@@ -106,7 +116,7 @@ def download_model(
     """Download a GGUF model file with streaming progress.
 
     Calls on_progress(status, pct) periodically during download.
-    Raises DownloadError on failure.
+    Raises DownloadError on failure, DownloadCancelled if user cancels.
     """
     dest_path = os.path.join(dest_dir, name)
     tmp_path = dest_path + ".tmp"
@@ -120,6 +130,8 @@ def download_model(
 
             with open(tmp_path, "wb") as f:
                 while True:
+                    if _cancel_event.is_set():
+                        raise DownloadCancelled("Download cancelled by user")
                     chunk = resp.read(chunk_size)
                     if not chunk:
                         break
@@ -138,7 +150,7 @@ def download_model(
             os.remove(dest_path)
         os.rename(tmp_path, dest_path)
 
-    except DownloadError:
+    except (DownloadError, DownloadCancelled):
         raise
     except Exception as exc:
         # Clean up partial download
@@ -148,6 +160,13 @@ def download_model(
             except OSError:
                 pass
         raise DownloadError(f"Failed to download {name}: {exc}") from exc
+    finally:
+        # Clean up partial download on cancel
+        if _cancel_event.is_set() and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def download_model_with_retry(
@@ -179,13 +198,19 @@ def download_model_with_retry(
                 attempt + 1, total_attempts, name, type(exc).__name__, exc,
             )
             if attempt < DOWNLOAD_MAX_RETRIES:
+                if _cancel_event.is_set():
+                    raise DownloadCancelled("Download cancelled by user") from exc
                 log.info(
                     "Sleeping %ds before attempt %d of %d for %s...",
                     DOWNLOAD_RETRY_DELAY, attempt + 2, total_attempts, name,
                 )
                 if on_retry is not None:
                     on_retry(attempt + 1, exc)
-                time.sleep(DOWNLOAD_RETRY_DELAY)
+                # Interruptible sleep — check cancel every 0.5s
+                for _ in range(DOWNLOAD_RETRY_DELAY * 2):
+                    if _cancel_event.is_set():
+                        raise DownloadCancelled("Download cancelled by user") from exc
+                    time.sleep(0.5)
     log.error(
         "All %d attempts exhausted for %s. Last error [%s]: %s",
         total_attempts, name, type(last_exc).__name__, last_exc,
@@ -205,16 +230,17 @@ class PullWindow:
         root.resizable(False, False)
         root.attributes("-topmost", True)
 
-        root.protocol("WM_DELETE_WINDOW", lambda: None)
+        root.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
         W = 460
-        root.geometry(f"{W}x170")
+        H = 200
+        root.geometry(f"{W}x{H}")
         root.update_idletasks()
         sw = root.winfo_screenwidth()
         sh = root.winfo_screenheight()
         x = (sw - W) // 2
-        y = (sh - 170) // 2
-        root.geometry(f"{W}x170+{x}+{y}")
+        y = (sh - H) // 2
+        root.geometry(f"{W}x{H}+{x}+{y}")
 
         pad = {"padx": 16, "pady": 4}
 
@@ -230,6 +256,17 @@ class PullWindow:
 
         self.overall_label = ttk.Label(root, text=f"0 of {len(MODELS)} models", font=("Segoe UI", 8))
         self.overall_label.pack(anchor="w", padx=16, pady=(8, 2))
+
+        self.cancel_btn = ttk.Button(root, text="Skip Downloads", command=self._on_cancel)
+        self.cancel_btn.pack(pady=(8, 4))
+
+    def _on_cancel(self) -> None:
+        """Handle Cancel button or window close — signal worker to stop."""
+        _cancel_event.set()
+        self.cancel_btn.config(state="disabled", text="Cancelling\u2026")
+        self.model_label.config(text="Cancelling\u2026")
+        self.status_label.config(text="Download will stop after the current chunk.")
+        log.info("User requested cancel")
 
     def _update(self, model_text: str, status_text: str, pct: "float | None", overall: str) -> None:
         self.model_label.config(text=model_text)
@@ -304,6 +341,10 @@ def worker(win: PullWindow, app_dir: str) -> None:
     log.info("worker: starting model download for %d model(s)", len(MODELS))
 
     for idx, model in enumerate(MODELS):
+        if _cancel_event.is_set():
+            log.info("Download cancelled by user before model %s", model["name"])
+            break
+
         name = model["name"]
         url = model["url"]
         dest_path = os.path.join(models_dir, name)
@@ -330,15 +371,35 @@ def worker(win: PullWindow, app_dir: str) -> None:
 
             download_model_with_retry(name, url, models_dir, on_progress, on_retry)
             log.info("Download complete for model: %s", name)
+        except DownloadCancelled:
+            log.info("Download of %s cancelled by user", name)
+            break
         except Exception as exc:
             log.error(
-                "All %d attempts exhausted for %s: %s — user directed to '%s' shortcut",
-                1 + DOWNLOAD_MAX_RETRIES, name, exc, RETRY_SHORTCUT_NAME,
+                "All %d attempts exhausted for %s: %s",
+                1 + DOWNLOAD_MAX_RETRIES, name, exc,
             )
             write_chain_log(app_dir, f"FAILED - {name} download exhausted {1 + DOWNLOAD_MAX_RETRIES} attempts: {exc}")
             write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
             win.post_fatal_error(name, exc)
             return
+
+    # If cancelled, close cleanly
+    if _cancel_event.is_set():
+        log.info("Model download skipped by user — installation continues without models")
+        write_chain_log(app_dir, "SKIPPED - user cancelled model download")
+
+        def _cancelled() -> None:
+            win.model_label.config(text="Downloads Skipped")
+            win.bar.stop()
+            win.bar.config(mode="determinate")
+            win.bar["value"] = 0
+            win.status_label.config(text="Models can be downloaded later via the extension sidebar.")
+            win.cancel_btn.config(state="disabled")
+            win.root.after(2000, win.root.destroy)
+
+        win.root.after(0, _cancelled)
+        return
 
     # Verify all models are present
     log.info("Verifying downloaded models")
@@ -348,7 +409,7 @@ def worker(win: PullWindow, app_dir: str) -> None:
     if missing:
         missing_str = ", ".join(missing)
         msg = f"Verification failed \u2014 missing models: {missing_str}"
-        log.error("%s — user directed to '%s' shortcut", msg, RETRY_SHORTCUT_NAME)
+        log.error("%s", msg)
         write_chain_log(app_dir, f"FAILED - verification: missing models: {missing_str}")
         write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
 
@@ -365,8 +426,8 @@ def worker(win: PullWindow, app_dir: str) -> None:
                 message=(
                     f"The following model(s) could not be verified after download:\n"
                     f"  {missing_str}\n\n"
-                    f"To retry, open the Start Menu and run:\n"
-                    f"  \u2192 AI Helpdesk Assistant \u2192 {RETRY_SHORTCUT_NAME}"
+                    f"Models can be downloaded later via the extension sidebar\n"
+                    f"or by re-running the installer."
                 ),
                 parent=win.root,
             )

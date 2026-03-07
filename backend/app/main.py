@@ -22,6 +22,7 @@ from app.routers import auth, feedback, generate, health, ingest, kb, models
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 from app.services.microsoft_docs import MicrosoftDocsService
+from app.services.model_download_service import ModelDownloadService
 from app.services.rag_service import RAGService
 
 setup_logging()
@@ -69,6 +70,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # --- Current LLM model tracking ---
     app.state.current_llm_model = settings.default_model
+
+    # --- Model download service ---
+    app.state.model_download_service = ModelDownloadService()
 
     # --- LLM health probe ---
     app.state.llm_reachable = False
