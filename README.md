@@ -1,8 +1,8 @@
 # AI Helpdesk Assistant
 
-> **Proof of Concept** — This project is a working PoC. The current architecture runs the AI backend locally on the technician's machine via [Ollama](https://ollama.com). The intended end goal is to move AI inference to a shared server or cloud instance (e.g. Azure OpenAI, a self-hosted GPU server), with the Edge extension connecting to that remote backend instead. The local-Ollama setup exists to validate the concept without infrastructure costs.
+> **Proof of Concept** — This project is a working PoC. The current architecture runs the AI backend locally on the technician's machine via [llama.cpp](https://github.com/ggml-org/llama.cpp). The intended end goal is to move AI inference to a shared server or cloud instance (e.g. Azure OpenAI, a self-hosted GPU server), with the Edge extension connecting to that remote backend instead. The local llama.cpp setup exists to validate the concept without infrastructure costs.
 
-A local AI assistant for [SolarWinds Web Help Desk](https://www.solarwinds.com/web-help-desk) (on-premises), delivered as a Microsoft Edge browser extension with a Python backend. All AI inference runs locally via Ollama — no data leaves your network.
+A local AI assistant for [SolarWinds Web Help Desk](https://www.solarwinds.com/web-help-desk) (on-premises), delivered as a Microsoft Edge browser extension with a Python backend. All AI inference runs locally via llama.cpp — no data leaves your network.
 
 ## Installation
 
@@ -13,7 +13,7 @@ irm https://raw.githubusercontent.com/gyzhoe/assistant-v2/main/scripts/install.p
 
 **Manual:** Download the latest `.exe` from [GitHub Releases](https://github.com/gyzhoe/assistant-v2/releases/latest) and run it.
 
-The installer bundles everything needed to run: Python 3.13, Ollama (with CUDA, Vulkan, and CPU runners), backend dependencies, and the Edge extension. No prerequisites required.
+The installer bundles everything needed to run: Python 3.13, llama-server (with CUDA and CPU support), backend dependencies, and the Edge extension. No prerequisites required.
 
 After install:
 1. Load the extension in Edge: `edge://extensions` → Developer mode → Load unpacked → select the extension folder
@@ -54,10 +54,11 @@ FastAPI Backend (async, pure ASGI middleware)
 ├── /kb ─────────── article CRUD, tagging, management
 ├── /auth ───────── HttpOnly cookie sessions
 ├── /health ─────── readiness + startup phase reporting
-├── /models ─────── Ollama model listing
+├── /models ─────── available GGUF model listing + runtime switching
+├── /llm/switch ─── hot-swap LLM model (kills + restarts llama-server)
 └── /feedback ───── reply rating storage
         ↕                      ↕
-   Ollama (LLM + embed)   ChromaDB (vector store)
+   llama-server (LLM + embed)  ChromaDB (vector store)
 ```
 
 The extension uses a three-layer message relay: content script ↔ background service worker ↔ sidebar. Messages are typed via discriminated unions in `src/shared/messages.ts`. The backend runs pure ASGI middleware (no `BaseHTTPMiddleware`) for streaming-safe request handling.
@@ -73,7 +74,7 @@ Only needed for development — the installer handles everything for end users.
 | [Node.js](https://nodejs.org) | ≥ 20 | Extension build |
 | [Python](https://python.org) | 3.13 | Backend runtime (3.14 breaks chromadb) |
 | [uv](https://docs.astral.sh/uv/) | latest | Python package manager |
-| [Ollama](https://ollama.com) | latest | Local LLM inference |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) | latest | Local LLM inference (`llama-server`) |
 | Microsoft Edge | latest | Extension host |
 
 ## Quick Start
@@ -84,10 +85,11 @@ git clone https://github.com/gyzhoe/assistant-v2.git
 cd assistant-v2
 npm install
 
-# Terminal 1: Ollama
-ollama serve
-ollama pull qwen3.5:9b
-ollama pull nomic-embed-text
+# Terminal 1: LLM server (download llama-server from llama.cpp releases)
+# Start chat model on port 11435:
+llama-server -m models/Qwen3.5-9B-Q4_K_M.gguf --port 11435 --n-gpu-layers 99
+# Start embedding model on port 11436 (separate terminal):
+llama-server -m models/nomic-embed-text-v1.5.f16.gguf --port 11436 --embedding --n-gpu-layers 99
 
 # Terminal 2: Backend
 cd backend
@@ -197,7 +199,7 @@ assistant/
 
 Right-click the extension icon → **Options**:
 - Backend URL (default: `http://localhost:8765`)
-- LLM model selection (auto-populated from Ollama)
+- LLM model selection (auto-populated from available GGUF models)
 - DOM selector overrides for custom WHD installations
 - Prompt suffix customization
 - Theme (light / dark / system)
@@ -206,7 +208,8 @@ Right-click the extension icon → **Options**:
 
 Create `backend/.env`:
 ```env
-OLLAMA_BASE_URL=http://localhost:11435
+LLM_BASE_URL=http://localhost:11435
+EMBED_BASE_URL=http://localhost:11436
 CHROMA_PATH=./chroma_data
 CORS_ORIGIN=chrome-extension://<your-extension-id>
 DEFAULT_MODEL=qwen3.5:9b
@@ -235,7 +238,7 @@ MIT — See [LICENSE](installer/assets/license.txt)
 
 This project is built on excellent open-source software. Key dependencies include:
 
-- **[Ollama](https://ollama.com)** — local LLM inference engine
+- **[llama.cpp](https://github.com/ggml-org/llama.cpp)** — local LLM inference engine
 - **[ChromaDB](https://github.com/chroma-core/chroma)** — vector store for RAG
 - **[FastAPI](https://fastapi.tiangolo.com)** — Python web framework
 - **[React](https://react.dev)** — UI library
