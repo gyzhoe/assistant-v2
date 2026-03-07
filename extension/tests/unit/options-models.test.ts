@@ -89,7 +89,7 @@ describe('OptionsPage LLM Models section', () => {
     vi.clearAllMocks()
     document.body.innerHTML = ''
     mockModels.mockResolvedValue(MODEL_INFO_RESPONSE)
-    mockDownloadModels.mockResolvedValue({ status: 'started', models: ['qwen3:14b'] })
+    mockDownloadModels.mockResolvedValue({ status: 'started', models: ['Qwen3-14B-Q4_K_M.gguf'] })
   })
 
   afterEach(() => {
@@ -147,7 +147,7 @@ describe('OptionsPage LLM Models section', () => {
     expect(downloadAllBtn).not.toBeUndefined()
   })
 
-  it('calls downloadModels with model name when per-model Download is clicked', async () => {
+  it('calls downloadModels with gguf_name when per-model Download is clicked', async () => {
     const container = await renderOptions()
     const { act } = await import('@testing-library/react')
 
@@ -158,6 +158,6 @@ describe('OptionsPage LLM Models section', () => {
       downloadBtn.click()
     })
 
-    expect(mockDownloadModels).toHaveBeenCalledWith(['qwen3:14b'])
+    expect(mockDownloadModels).toHaveBeenCalledWith(['Qwen3-14B-Q4_K_M.gguf'])
   })
 })
