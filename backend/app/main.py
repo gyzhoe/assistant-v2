@@ -5,11 +5,13 @@ from pathlib import Path
 
 import chromadb
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.constants import KB_COLLECTION, TICKET_COLLECTION, LLMModelError
 from app.logging_config import setup_logging
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.security import (
@@ -17,7 +19,9 @@ from app.middleware.security import (
     RateLimitMiddleware,
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
+    UnhandledExceptionMiddleware,
 )
+from app.models.response_models import ErrorCode, ErrorResponse
 from app.routers import auth, feedback, generate, health, ingest, kb, models
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
@@ -27,6 +31,20 @@ from app.services.rag_service import RAGService
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+def warmup_chromadb(chroma_client: "chromadb.api.ClientAPI") -> None:
+    """Warm up ChromaDB collections to avoid cold-start latency on first query."""
+    for col_name in (KB_COLLECTION, TICKET_COLLECTION):
+        try:
+            col = chroma_client.get_collection(col_name)
+            count = col.count()
+            logger.info("ChromaDB warm-up: %s has %d documents", col_name, count)
+        except Exception:
+            logger.debug(
+                "ChromaDB warm-up: %s not found (will be created on first ingest)",
+                col_name,
+            )
 
 
 @asynccontextmanager
@@ -100,6 +118,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     else:
         logger.warning("Embed server not reachable at %s", settings.embed_base_url)
 
+    # --- ChromaDB cold-start warm-up ---
+    warmup_chromadb(app.state.chroma_client)
+
     yield
 
     # --- Cleanup: close httpx clients ---
@@ -146,6 +167,38 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Catch-all for unhandled exceptions — outermost ASGI middleware
+    # so it catches anything that slips past all other layers.
+    app.add_middleware(UnhandledExceptionMiddleware)
+
+    # --- Global exception handlers ---
+
+    @app.exception_handler(ConnectionError)
+    async def connection_error_handler(
+        request: Request, exc: ConnectionError,
+    ) -> JSONResponse:
+        logger.error("LLM connection error on %s: %s", request.url.path, exc)
+        return JSONResponse(
+            status_code=503,
+            content=ErrorResponse(
+                message=str(exc),
+                error_code=ErrorCode.LLM_DOWN,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(LLMModelError)
+    async def llm_model_error_handler(
+        request: Request, exc: LLMModelError,
+    ) -> JSONResponse:
+        logger.error("LLM model error on %s: %s", request.url.path, exc)
+        return JSONResponse(
+            status_code=502,
+            content=ErrorResponse(
+                message=str(exc),
+                error_code=ErrorCode.MODEL_ERROR,
+            ).model_dump(),
+        )
 
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(health.router)
