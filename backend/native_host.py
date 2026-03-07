@@ -122,11 +122,171 @@ def start_backend() -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _get_system_ram_gb() -> float:
+    """Get total system RAM in GB using Windows kernel32 API."""
+    try:
+        import ctypes
+
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        return stat.ullTotalPhys / (1024 ** 3)
+    except Exception:
+        return 0.0
+
+
+def _get_dedicated_vram_gb() -> float:
+    """Get dedicated GPU VRAM in GB.
+
+    Uses Get-CimInstance (the modern CIM replacement for deprecated WMI).
+    Get-CimInstance is fully supported on Windows 11 25H2+ — only the old
+    Get-WmiObject cmdlet was deprecated, not the underlying CIM infrastructure.
+    Falls back to 0 if detection fails.
+
+    Note: CIM's AdapterRAM is a uint32 that overflows at 4 GB. For GPUs with
+    ≥4 GB VRAM, we detect the overflow and use qwMemorySize from the registry.
+    """
+    try:
+        # Try registry first — accurate for all VRAM sizes (no uint32 overflow)
+        output = subprocess.check_output(
+            [
+                "powershell.exe", "-NoProfile", "-Command",
+                "$adapters = Get-ItemProperty 'HKLM:\\SYSTEM\\ControlSet001\\Control\\Class\\"
+                "{4d36e968-e325-11ce-bfc1-08002be10318}\\0*' -EA SilentlyContinue; "
+                "$best = $adapters | Sort-Object { "
+                "  if ($_.HardwareInformation.qwMemorySize) { $_.HardwareInformation.qwMemorySize } "
+                "  elseif ($_.'HardwareInformation.qwMemorySize') { $_.'HardwareInformation.qwMemorySize' } "
+                "  else { 0 } "
+                "} -Descending | Select-Object -First 1; "
+                "$v = $best.'HardwareInformation.qwMemorySize'; "
+                "if ($v) { $v } else { 0 }",
+            ],
+            text=True,
+            creationflags=_CREATION_FLAGS,
+            timeout=5,
+        ).strip()
+        if output and output.isdigit() and int(output) > 0:
+            vram_bytes = int(output)
+            return vram_bytes / (1024 ** 3)
+    except Exception as e:
+        log(f"VRAM detection (registry) failed: {e}")
+
+    # Fallback: Get-CimInstance (works but capped at 4 GB due to uint32)
+    try:
+        output = subprocess.check_output(
+            [
+                "powershell.exe", "-NoProfile", "-Command",
+                "(Get-CimInstance Win32_VideoController | "
+                "Sort-Object AdapterRAM -Descending | "
+                "Select-Object -First 1).AdapterRAM",
+            ],
+            text=True,
+            creationflags=_CREATION_FLAGS,
+            timeout=5,
+        ).strip()
+        if output and output.isdigit():
+            return int(output) / (1024 ** 3)
+    except Exception as e:
+        log(f"VRAM detection (CIM fallback) failed: {e}")
+
+    return 0.0
+
+
+def _detect_gpu_config() -> tuple[str, str]:
+    """Auto-detect system specs and calculate optimal llama-server settings.
+
+    Reads version.json (GPU type from installer) + live system specs (RAM, VRAM).
+    Returns (n_gpu_layers, ctx_size) as strings for command-line args.
+
+    Strategy:
+      - Discrete GPU with ≥6 GB VRAM: full offload, large context
+      - Discrete GPU with <6 GB VRAM: partial offload
+      - Integrated GPU (AMD APU, Intel UHD): partial offload using iGPU compute
+      - CPU-only or <12 GB RAM: no GPU offload, conservative context
+    """
+    version_file = os.path.join(APP_DIR, "version.json")
+    backend = "cpu"
+    gpu_name = ""
+    try:
+        with open(version_file, encoding="utf-8") as f:
+            data = json.loads(f.read())
+        backend = data.get("llama_backend", "cpu")
+        gpu_name = data.get("gpu_detected", "")
+    except Exception as e:
+        log(f"Auto-tune: could not read version.json: {e}")
+
+    gpu_lower = gpu_name.lower()
+    total_ram = _get_system_ram_gb()
+    dedicated_vram = _get_dedicated_vram_gb()
+
+    # Detect integrated GPUs (shared system RAM, no dedicated VRAM)
+    is_integrated = (
+        "radeon graphics" in gpu_lower
+        or "radeon(tm) graphics" in gpu_lower
+        or "radeon vega" in gpu_lower
+        or ("intel" in gpu_lower and "arc" not in gpu_lower)
+    )
+
+    log(
+        f"Auto-tune: ram={total_ram:.1f}GB, vram={dedicated_vram:.1f}GB, "
+        f"backend={backend}, gpu={gpu_name}, integrated={is_integrated}"
+    )
+
+    # CPU-only build — no GPU offload possible
+    if backend == "cpu":
+        ctx = "4096" if total_ram >= 16 else "2048"
+        log(f"Auto-tune result: ngl=0, ctx={ctx} (CPU-only build)")
+        return ("0", ctx)
+
+    # Low RAM systems — be conservative
+    if total_ram < 12:
+        log(f"Auto-tune result: ngl=0, ctx=2048 (low RAM: {total_ram:.0f}GB)")
+        return ("0", "2048")
+
+    # Discrete GPU with dedicated VRAM
+    if not is_integrated:
+        if dedicated_vram >= 8:
+            ctx = "8192" if total_ram >= 24 else "4096"
+            log(f"Auto-tune result: ngl=-1, ctx={ctx} (discrete GPU, {dedicated_vram:.0f}GB VRAM)")
+            return ("-1", ctx)
+        elif dedicated_vram >= 4:
+            log(f"Auto-tune result: ngl=20, ctx=4096 (discrete GPU, {dedicated_vram:.0f}GB VRAM)")
+            return ("20", "4096")
+        else:
+            log(f"Auto-tune result: ngl=10, ctx=4096 (discrete GPU, low VRAM: {dedicated_vram:.0f}GB)")
+            return ("10", "4096")
+
+    # Integrated GPU — use partial offload to leverage iGPU compute
+    if total_ram >= 24:
+        log(f"Auto-tune result: ngl=15, ctx=4096 (iGPU, {total_ram:.0f}GB RAM)")
+        return ("15", "4096")
+    elif total_ram >= 16:
+        log(f"Auto-tune result: ngl=10, ctx=4096 (iGPU, {total_ram:.0f}GB RAM)")
+        return ("10", "4096")
+    else:
+        log(f"Auto-tune result: ngl=0, ctx=2048 (iGPU, limited RAM: {total_ram:.0f}GB)")
+        return ("0", "2048")
+
+
 def _start_llama_servers() -> bool:
     """Start both LLM and embed llama-server instances."""
     llama_exe = LLAMA_SERVER_EXE if os.path.exists(LLAMA_SERVER_EXE) else "llama-server"
     log(f"Starting llama-server instances: {llama_exe}")
 
+    n_gpu_layers, ctx_size = _detect_gpu_config()
     logs_dir = os.path.join(APP_DIR, "logs")
     os.makedirs(logs_dir, exist_ok=True)
 
@@ -138,15 +298,15 @@ def _start_llama_servers() -> bool:
             [
                 llama_exe, "-m", llm_model,
                 "--port", "11435",
-                "--n-gpu-layers", "-1",
-                "--ctx-size", "8192",
+                "--n-gpu-layers", n_gpu_layers,
+                "--ctx-size", ctx_size,
             ],
             stdout=llm_log,
             stderr=llm_log,
             creationflags=_CREATION_FLAGS,
         )
 
-        # Embed server
+        # Embed server (small model — always offload same as LLM)
         embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.f16.gguf")
         embed_log = open(os.path.join(logs_dir, "embed_server.log"), "w")  # noqa: SIM115
         subprocess.Popen(
@@ -154,7 +314,7 @@ def _start_llama_servers() -> bool:
                 llama_exe, "-m", embed_model,
                 "--port", "11436",
                 "--embedding",
-                "--n-gpu-layers", "-1",
+                "--n-gpu-layers", n_gpu_layers,
             ],
             stdout=embed_log,
             stderr=embed_log,
