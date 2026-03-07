@@ -61,7 +61,7 @@ $venvSizeMB = Get-DirSizeMB $venvDir
 $appDataExist = $chromaExist -or $logsExist -or $envExist -or $auditExist
 
 # If nothing to clean up, exit silently
-if (-not $modelsExist -and -not $appDataExist -and -not $venvExist) {
+if (-not $modelsExist -and -not $appDataExist -and -not $venvExist -and -not $pythonExist) {
     exit 0
 }
 

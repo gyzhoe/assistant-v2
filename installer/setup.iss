@@ -334,7 +334,10 @@ begin
       VerStart := Pos('"version"', String(Content));
       if VerStart > 0 then
       begin
-        VerStart := Pos(':', String(Content));
+        // Skip past '"version"' to find the colon after it
+        VerStart := VerStart + Length('"version"');
+        while (VerStart <= Length(String(Content))) and (String(Content)[VerStart] <> ':') do
+          VerStart := VerStart + 1;
         // Find the opening quote after the colon
         while (VerStart <= Length(String(Content))) and (String(Content)[VerStart] <> '"') do
           VerStart := VerStart + 1;
@@ -364,6 +367,7 @@ procedure InitializeWizard;
 var
   GPULabel: String;
   WelcomeLabel: TNewStaticText;
+  I: Integer;
 begin
   // Update the llama component description to show the detected GPU
   case DetectedGPUType of
@@ -374,8 +378,15 @@ begin
     GPULabel := 'llama.cpp LLM Runtime — CPU only (no GPU detected)';
   end;
 
-  // Update component description in the wizard
-  WizardForm.ComponentsList.ItemCaption[2] := GPULabel;
+  // Update component description in the wizard (find by name, not hardcoded index)
+  for I := 0 to WizardForm.ComponentsList.Items.Count - 1 do
+  begin
+    if Pos('llama', Lowercase(WizardForm.ComponentsList.ItemCaption[I])) > 0 then
+    begin
+      WizardForm.ComponentsList.ItemCaption[I] := GPULabel;
+      Break;
+    end;
+  end;
 
   // Show upgrade notice on the welcome page if an existing install is detected
   if ExistingVersion <> '' then

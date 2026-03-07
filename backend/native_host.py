@@ -290,6 +290,8 @@ def _start_llama_servers() -> bool:
     logs_dir = os.path.join(APP_DIR, "logs")
     os.makedirs(logs_dir, exist_ok=True)
 
+    llm_log = None
+    embed_log = None
     try:
         # LLM server
         llm_model = os.path.join(MODELS_DIR, "Qwen3.5-9B-Q4_K_M.gguf")
@@ -323,6 +325,10 @@ def _start_llama_servers() -> bool:
         return True
     except Exception as e:
         log(f"Warning: could not start llama-server: {e}")
+        if llm_log is not None:
+            llm_log.close()
+        if embed_log is not None:
+            embed_log.close()
         return False
 
 
