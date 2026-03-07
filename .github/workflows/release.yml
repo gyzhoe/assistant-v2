@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -94,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+          ref: main
 
       - uses: actions/setup-node@v6
         with:
@@ -120,14 +117,13 @@ jobs:
     strategy:
       matrix:
         type: ${{ fromJson(
-          github.event_name == 'push' && '["online"]' ||
           inputs.installer_type == 'both' && '["online", "offline"]' ||
           format('["{0}"]', inputs.installer_type)
           ) }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+          ref: main
 
       - name: Download extension dist
         uses: actions/download-artifact@v8
@@ -421,7 +417,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path installer/deps/models | Out-Null
 
           # Qwen3.5-9B Q4_K_M (~5.5 GB)
-          $qwenUrl = "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf"
+          $qwenUrl = "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"
           Write-Host "Downloading Qwen3.5-9B-Q4_K_M.gguf (~5.5 GB)..."
           Invoke-WebRequest -Uri $qwenUrl -OutFile "installer/deps/models/Qwen3.5-9B-Q4_K_M.gguf"
           $size = [math]::Round((Get-Item "installer/deps/models/Qwen3.5-9B-Q4_K_M.gguf").Length / 1GB, 2)
@@ -446,13 +442,6 @@ jobs:
           name: installer-${{ matrix.type }}
           path: installer/output/AIHelpdeskAssistant-*-Setup-*.exe
 
-      - name: Upload offline .bin files
-        if: matrix.type == 'offline'
-        uses: actions/upload-artifact@v7
-        with:
-          name: installer-offline-bins
-          path: installer/output/AIHelpdeskAssistant-*-Setup-*.bin
-
   # Job 3: Create GitHub Release with all artifacts
   create-release:
     name: Create GitHub Release
@@ -461,7 +450,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+          ref: main
 
       - name: Download all installer artifacts
         uses: actions/download-artifact@v8
@@ -494,12 +483,7 @@ jobs:
           ls -lh assistant-extension-*.zip
 
       - name: Resolve tag name
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "TAG_NAME=v${{ inputs.version }}" >> $GITHUB_ENV
-          else
-            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
-          fi
+        run: echo "TAG_NAME=v${{ inputs.version }}" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -516,7 +500,7 @@ jobs:
             | File | Description |
             |------|-------------|
             | `AIHelpdeskAssistant-Online-Setup-*.exe` | Online installer (~680 MB) — downloads models via Options page |
-            | `AIHelpdeskAssistant-Full-Setup-*.exe` | Offline installer (~6.5 GB) — models bundled (+ `.bin` split files) |
+            | `AIHelpdeskAssistant-Full-Setup-*.exe` | Offline installer (~6.5 GB) — models bundled |
             | `assistant-extension-*.zip` | Standalone Edge extension only |
 
             ### GPU Auto-Detection
