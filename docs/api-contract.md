@@ -38,7 +38,7 @@ Missing or invalid tokens return `401 Unauthorized`:
 }
 ```
 
-Some destructive endpoints (`/shutdown`, `/ollama/start`, `/ollama/stop`) additionally enforce token auth via a per-route dependency, even if the global middleware would allow them.
+Some destructive endpoints (`/shutdown`, `/llm/start`, `/llm/stop`) additionally enforce token auth via a per-route dependency, even if the global middleware would allow them.
 
 ---
 
@@ -109,7 +109,7 @@ Returns the current status of all backend dependencies.
 ```json
 {
   "status": "ok",
-  "ollama_reachable": true,
+  "llm_reachable": true,
   "chroma_ready": true,
   "chroma_doc_counts": {
     "whd_tickets": 1432,
@@ -123,8 +123,8 @@ Returns the current status of all backend dependencies.
 
 | Field | Type | Description |
 |---|---|---|
-| `status` | `"ok" \| "degraded"` | `"ok"` when both Ollama and ChromaDB are healthy |
-| `ollama_reachable` | boolean | Whether Ollama responds at `/api/tags` |
+| `status` | `"ok" \| "degraded"` | `"ok"` when both llama-server and ChromaDB are healthy |
+| `llm_reachable` | boolean | Whether llama-server responds at `/health` |
 | `chroma_ready` | boolean | Whether ChromaDB is initialized |
 | `chroma_doc_counts` | object | Document counts per collection (key = collection name) |
 | `version` | string | Backend version from config |
@@ -155,9 +155,9 @@ Gracefully shuts down the backend server after a 0.5-second delay.
 
 ---
 
-### `POST /ollama/start`
+### `POST /llm/start`
 
-Starts the Ollama server as a detached background process. Returns immediately without waiting for Ollama to be fully ready.
+Starts the llama-server process(es) as detached background processes. Returns immediately without waiting for llama-server to be fully ready.
 
 **Authentication:** Required (`X-Extension-Token` header).
 
@@ -187,9 +187,9 @@ Starts the Ollama server as a detached background process. Returns immediately w
 
 ---
 
-### `POST /ollama/stop`
+### `POST /llm/stop`
 
-Stops the Ollama server process (uses `taskkill` on Windows, `pkill` on other platforms).
+Stops the llama-server process(es) (uses `taskkill` on Windows, `pkill` on other platforms).
 
 **Authentication:** Required (`X-Extension-Token` header).
 
@@ -249,7 +249,7 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 | `requester_name` | string | no | `""` | Requester's name (max 200 chars) |
 | `category` | string | no | `""` | Ticket category (max 200 chars) |
 | `status` | string | no | `""` | Ticket status (max 200 chars) |
-| `model` | string | no | `"qwen3.5:9b"` | Ollama model to use (max 100 chars) |
+| `model` | string | no | `"qwen3.5:9b"` | GGUF model to use (max 100 chars) |
 | `max_context_docs` | integer | no | `5` | Max RAG documents to include (1-20) |
 | `stream` | boolean | no | `false` | Reserved for future streaming support |
 | `include_web_context` | boolean | no | `true` | Include Microsoft Learn search results as additional context |
@@ -303,7 +303,7 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 | `401 Unauthorized` | Missing/invalid token | `{"detail": "Unauthorized..."}` |
 | `422 Unprocessable Entity` | Validation error | Pydantic validation detail array |
 | `429 Too Many Requests` | Rate limit exceeded | `{"detail": "Rate limit exceeded...", "error_code": "RATE_LIMITED"}` |
-| `503 Service Unavailable` | Ollama unreachable | `{"detail": {"message": "...", "error_code": "OLLAMA_DOWN"}}` |
+| `503 Service Unavailable` | LLM server unreachable | `{"detail": {"message": "...", "error_code": "LLM_DOWN"}}` |
 
 ---
 
@@ -427,7 +427,7 @@ Create a new KB article from markdown content. The article is chunked by markdow
 | `422 Unprocessable Entity` | Validation error (empty title/content, invalid tags) |
 | `422 Unprocessable Entity` | No content to ingest after processing |
 | `500 Internal Server Error` | Unexpected error during creation |
-| `503 Service Unavailable` | Ollama unreachable for embedding |
+| `503 Service Unavailable` | LLM server unreachable for embedding |
 
 ---
 
@@ -565,7 +565,7 @@ Update the title, content, and tags of a manual KB article. The article is re-ch
 | `409 Conflict` | Another ingestion is already in progress |
 | `422 Unprocessable Entity` | Validation error or no content after processing |
 | `500 Internal Server Error` | Unexpected error |
-| `503 Service Unavailable` | Ollama unreachable for embedding |
+| `503 Service Unavailable` | LLM server unreachable for embedding |
 
 ---
 
@@ -711,7 +711,7 @@ Upload a single file for ingestion into ChromaDB. Accepts `multipart/form-data`.
 | `413 Payload Too Large` | File exceeds `MAX_UPLOAD_BYTES` (50 MB default) |
 | `422 Unprocessable Entity` | Unsupported extension, no filename, empty file, or corrupt content |
 | `500 Internal Server Error` | Unexpected error during ingestion |
-| `503 Service Unavailable` | Ollama unreachable for embedding |
+| `503 Service Unavailable` | LLM server unreachable for embedding |
 
 ---
 
@@ -769,7 +769,7 @@ Fetch a URL server-side, extract text content, chunk it, and ingest into ChromaD
 | `413 Payload Too Large` | Response exceeds 5 MB |
 | `422 Unprocessable Entity` | SSRF violation, unsupported Content-Type, invalid URL, or fetch failure |
 | `500 Internal Server Error` | Unexpected error during URL ingestion |
-| `503 Service Unavailable` | Ollama unreachable for embedding |
+| `503 Service Unavailable` | LLM server unreachable for embedding |
 
 #### SSRF prevention
 
@@ -913,7 +913,7 @@ Empty body on success.
 | Status | Condition |
 |---|---|
 | `422 Unprocessable Entity` | Validation error (missing required field, invalid rating value) |
-| `503 Service Unavailable` | Ollama/ChromaDB unavailable for embedding |
+| `503 Service Unavailable` | LLM server/ChromaDB unavailable for embedding |
 
 ---
 
@@ -921,7 +921,7 @@ Empty body on success.
 
 ### `GET /models`
 
-List available Ollama models. Proxies Ollama's `/api/tags` endpoint.
+List available GGUF models by scanning the `models/` directory.
 
 **Authentication:** Required when `API_TOKEN` is configured.
 
@@ -931,7 +931,8 @@ List available Ollama models. Proxies Ollama's `/api/tags` endpoint.
 
 ```json
 {
-  "models": ["qwen3.5:9b", "llama3.2:3b", "nomic-embed-text"]
+  "models": ["qwen3.5:9b", "llama3.2:3b"],
+  "current": "qwen3.5:9b"
 }
 ```
 
@@ -939,13 +940,54 @@ List available Ollama models. Proxies Ollama's `/api/tags` endpoint.
 
 | Field | Type | Description |
 |---|---|---|
-| `models` | string[] | List of available Ollama model names |
+| `models` | string[] | List of available GGUF model names |
+| `current` | string | Currently loaded model name |
 
 #### Error responses
 
 | Status | Condition | Body |
 |---|---|---|
-| `503 Service Unavailable` | Cannot reach Ollama | `{"detail": {"message": "Cannot reach Ollama to list models.", "error_code": "OLLAMA_DOWN"}}` |
+| `503 Service Unavailable` | Cannot scan models directory | `{"detail": {"message": "Cannot list models.", "error_code": "LLM_DOWN"}}` |
+
+---
+
+### `POST /llm/switch`
+
+Switch the currently loaded GGUF model. Stops the running llama-server chat instance and restarts it with the specified model.
+
+**Authentication:** Required (`X-Extension-Token` header).
+
+**Rate limit:** None.
+
+#### Request Body
+
+```json
+{
+  "model": "llama3.2:3b"
+}
+```
+
+#### Request fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `model` | string | yes | Name of the GGUF model to load |
+
+#### Response `200 OK`
+
+```json
+{
+  "status": "switching",
+  "model": "llama3.2:3b"
+}
+```
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `401 Unauthorized` | Missing or invalid token |
+| `404 Not Found` | Model GGUF file not found in models directory |
 
 ---
 
