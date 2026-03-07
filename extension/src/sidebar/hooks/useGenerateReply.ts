@@ -46,6 +46,14 @@ export function useGenerateReply() {
         prompt_suffix: settings.promptSuffix,
         custom_fields: ticketData.customFields,
         pinned_article_ids: pinnedArticles.map((a) => a.article_id),
+        notes: ticketData.notes.slice(0, 20).map((n) => ({
+          author: n.author,
+          text: n.text,
+          type: n.type,
+          date: n.date,
+          note_id: n.noteId,
+          time_spent: n.timeSpent,
+        })),
       }, ctrl.signal)
       setReply(response.reply)
       setLastResponse(response)

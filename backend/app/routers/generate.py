@@ -356,6 +356,41 @@ def _build_examples_section(examples: list[dict[str, str]] | None) -> str:
     return "\n".join(parts)
 
 
+_NOTE_TYPE_LABELS: dict[str, str] = {
+    "client": "client",
+    "tech_visible": "technician",
+    "tech_internal": "internal note",
+}
+
+_MAX_PROMPT_NOTES = 10
+
+
+def _format_notes_section(body: GenerateRequest) -> str:
+    """Build the ticket conversation history section from notes.
+
+    Returns an empty string if no notes are present.
+    Notes are reversed to chronological order (oldest first) and capped at 10.
+    """
+    if not body.notes:
+        return ""
+
+    # Reverse to oldest-first, then take last 10 (most recent)
+    chronological = list(reversed(body.notes))
+    recent = chronological[-_MAX_PROMPT_NOTES:]
+
+    lines: list[str] = []
+    for note in recent:
+        type_label = _NOTE_TYPE_LABELS.get(note.type, note.type)
+        lines.append(f"[{note.date}] {note.author} ({type_label}):\n{note.text}")
+
+    return (
+        "\n\n## Ticket Conversation History\n"
+        "The following notes are from the ticket conversation (oldest first):\n\n"
+        + "\n\n".join(lines)
+        + "\n"
+    )
+
+
 def _build_prompt(
     body: GenerateRequest,
     context_text: str,
@@ -367,16 +402,17 @@ def _build_prompt(
     examples_section = _build_examples_section(few_shot_examples)
     env_ctx = settings.environment_context.strip()
     environment_section = f"ENVIRONMENT\n{env_ctx}\n\n" if env_ctx else ""
+    notes_section = _format_notes_section(body)
     return f"""You are a first-line IT helpdesk technician drafting a reply to a user's ticket.
 
 TICKET
 <user_ticket_subject>{subject}</user_ticket_subject>
-Requester: {body.requester_name} | Category: {body.category} | Status: {body.status}
+Requester: {body.requester_name or "(unknown)"} | Category: {body.category} | Status: {body.status}
 <user_ticket_description>{description}</user_ticket_description>
 <user_custom_fields>
 {custom}
 </user_custom_fields>
-
+{notes_section}
 KNOWLEDGE BASE
 {context_text if context_text else "(no matching articles found)"}
 
@@ -394,6 +430,8 @@ FORMAT RULES
 3. Numbered troubleshooting steps. Only ask questions about things NOT already in the ticket.
 4. Write for non-technical end users — include exact click paths (e.g., "Open Settings > Network > ...") instead of jargon.
 5. Keep it 60-120 words. Greeting by first name, steps, sign-off with just your name.
+6. Reply in the SAME LANGUAGE as the ticket description. If the ticket is in Dutch, reply in Dutch. If in English, reply in English. Match the user's language exactly.
+7. When replying in a non-English language, keep Windows/Office UI click-paths and menu names in English (e.g., "Settings > System > Display", "Control Panel", "Device Manager"). The machines run English Windows. Only the click-paths and product names stay in English — write everything else (greeting, explanation, sign-off) in the ticket's language.
 
 {examples_section}
 

@@ -5,8 +5,8 @@ import pytest
 from httpx import AsyncClient
 
 from app.main import app
-from app.models.request_models import GenerateRequest
-from app.routers.generate import _build_prompt, _relevance_label
+from app.models.request_models import GenerateRequest, NoteItem
+from app.routers.generate import _build_prompt, _format_notes_section, _relevance_label
 from app.services.microsoft_docs import WebContextDoc
 
 
@@ -358,3 +358,170 @@ class TestCustomFieldsValidation:
             custom_fields={"key": "line1\nline2\ttab"},
         )
         assert req.custom_fields["key"] == "line1\nline2\ttab"
+
+
+# ---------------------------------------------------------------------------
+# Notes feature tests
+# ---------------------------------------------------------------------------
+
+_SAMPLE_NOTES = [
+    {"author": "Jane Doe", "text": "VPN keeps dropping", "type": "client", "date": "2026-03-01"},
+    {"author": "Tech A", "text": "Checked VPN config", "type": "tech_visible", "date": "2026-03-02"},
+]
+
+
+@pytest.mark.asyncio
+async def test_generate_with_notes(client: AsyncClient) -> None:
+    """POST /generate with valid notes returns 200."""
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_llm.generate = AsyncMock(return_value="Fix applied.")
+    mock_ms = _mock_ms_docs()
+
+    app.state.rag_service = mock_rag
+    app.state.llm_service = mock_llm
+    app.state.ms_docs_service = mock_ms
+
+    response = await client.post("/generate", json={
+        "ticket_subject": "VPN Issue",
+        "ticket_description": "VPN dropping",
+        "notes": _SAMPLE_NOTES,
+    })
+    assert response.status_code == 200
+    assert response.json()["reply"] == "Fix applied."
+
+
+@pytest.mark.asyncio
+async def test_generate_notes_in_prompt(client: AsyncClient) -> None:
+    """Note text should appear in the prompt sent to the LLM."""
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_llm.generate = AsyncMock(return_value="Reply.")
+    mock_ms = _mock_ms_docs()
+
+    app.state.rag_service = mock_rag
+    app.state.llm_service = mock_llm
+    app.state.ms_docs_service = mock_ms
+
+    response = await client.post("/generate", json={
+        "ticket_subject": "VPN Issue",
+        "ticket_description": "VPN dropping",
+        "notes": _SAMPLE_NOTES,
+    })
+    assert response.status_code == 200
+
+    prompt_arg = mock_llm.generate.call_args.kwargs["prompt"]
+    assert "Ticket Conversation History" in prompt_arg
+    assert "VPN keeps dropping" in prompt_arg
+    assert "Checked VPN config" in prompt_arg
+    assert "(client)" in prompt_arg
+    assert "(technician)" in prompt_arg
+
+
+@pytest.mark.asyncio
+async def test_generate_empty_notes(client: AsyncClient) -> None:
+    """POST /generate with empty notes list is backward-compatible (200)."""
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+    mock_llm.generate = AsyncMock(return_value="Reply.")
+    mock_ms = _mock_ms_docs()
+
+    app.state.rag_service = mock_rag
+    app.state.llm_service = mock_llm
+    app.state.ms_docs_service = mock_ms
+
+    response = await client.post("/generate", json={
+        "ticket_subject": "Test",
+        "ticket_description": "Test",
+        "notes": [],
+    })
+    assert response.status_code == 200
+
+    prompt_arg = mock_llm.generate.call_args.kwargs["prompt"]
+    assert "Ticket Conversation History" not in prompt_arg
+
+
+@pytest.mark.asyncio
+async def test_generate_notes_validation_max_length(client: AsyncClient) -> None:
+    """Note text exceeding 4000 chars returns 422."""
+    response = await client.post("/generate", json={
+        "ticket_subject": "Test",
+        "notes": [{"text": "x" * 4001}],
+    })
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_notes_validation_max_count(client: AsyncClient) -> None:
+    """More than 50 notes returns 422."""
+    notes = [{"text": f"Note {i}"} for i in range(51)]
+    response = await client.post("/generate", json={
+        "ticket_subject": "Test",
+        "notes": notes,
+    })
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_notes_type_validation(client: AsyncClient) -> None:
+    """Invalid note type value returns 422."""
+    response = await client.post("/generate", json={
+        "ticket_subject": "Test",
+        "notes": [{"text": "Hello", "type": "invalid_type"}],
+    })
+    assert response.status_code == 422
+
+
+class TestFormatNotesSection:
+    """Unit tests for _format_notes_section()."""
+
+    def _request(self, notes: list[dict[str, str]] | None = None) -> GenerateRequest:
+        return GenerateRequest(
+            ticket_subject="Test",
+            notes=[NoteItem(**n) for n in (notes or [])],
+        )
+
+    def test_empty_notes_returns_empty(self) -> None:
+        assert _format_notes_section(self._request()) == ""
+
+    def test_notes_in_chronological_order(self) -> None:
+        """Notes should be reversed to oldest-first."""
+        notes = [
+            {"author": "B", "text": "Second", "date": "2026-03-02"},
+            {"author": "A", "text": "First", "date": "2026-03-01"},
+        ]
+        result = _format_notes_section(self._request(notes))
+        # "First" (originally last) should come before "Second" after reversal
+        assert result.index("First") < result.index("Second")
+
+    def test_caps_at_10_notes(self) -> None:
+        """Only the 10 most recent notes should be included.
+
+        Input is newest-first (as sent by the extension). After reversal
+        to chronological order and taking the last 10, the 5 oldest
+        notes (indices 10-14 in the original newest-first list) are dropped.
+        """
+        # Newest-first: Note 0 is most recent, Note 14 is oldest
+        notes = [{"author": f"Author {i}", "text": f"Note {i}"} for i in range(15)]
+        result = _format_notes_section(self._request(notes))
+        # After reversal: [Note 14, Note 13, ..., Note 0] (oldest first)
+        # Last 10: [Note 9, Note 8, ..., Note 0]
+        # So Note 14 (oldest) should be excluded, Note 0 (newest) included
+        assert "Note 14" not in result
+        assert "Note 0" in result
+        # Verify exactly 10 notes present (count "(client):" patterns)
+        assert result.count("(client):\n") == 10
+
+    def test_type_labels(self) -> None:
+        notes = [
+            {"text": "a", "type": "client"},
+            {"text": "b", "type": "tech_visible"},
+            {"text": "c", "type": "tech_internal"},
+        ]
+        result = _format_notes_section(self._request(notes))
+        assert "(client)" in result
+        assert "(technician)" in result
+        assert "(internal note)" in result

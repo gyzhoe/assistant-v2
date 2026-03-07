@@ -127,9 +127,13 @@ def _start_llama_servers() -> bool:
     llama_exe = LLAMA_SERVER_EXE if os.path.exists(LLAMA_SERVER_EXE) else "llama-server"
     log(f"Starting llama-server instances: {llama_exe}")
 
+    logs_dir = os.path.join(APP_DIR, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
     try:
         # LLM server
-        llm_model = os.path.join(MODELS_DIR, "qwen3.5-9b-q4_k_m.gguf")
+        llm_model = os.path.join(MODELS_DIR, "Qwen3.5-9B-Q4_K_M.gguf")
+        llm_log = open(os.path.join(logs_dir, "llm_server.log"), "w")  # noqa: SIM115
         subprocess.Popen(
             [
                 llama_exe, "-m", llm_model,
@@ -137,13 +141,14 @@ def _start_llama_servers() -> bool:
                 "--n-gpu-layers", "-1",
                 "--ctx-size", "8192",
             ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=llm_log,
+            stderr=llm_log,
             creationflags=_CREATION_FLAGS,
         )
 
         # Embed server
-        embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.F16.gguf")
+        embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.f16.gguf")
+        embed_log = open(os.path.join(logs_dir, "embed_server.log"), "w")  # noqa: SIM115
         subprocess.Popen(
             [
                 llama_exe, "-m", embed_model,
@@ -151,8 +156,8 @@ def _start_llama_servers() -> bool:
                 "--embedding",
                 "--n-gpu-layers", "-1",
             ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=embed_log,
+            stderr=embed_log,
             creationflags=_CREATION_FLAGS,
         )
         return True

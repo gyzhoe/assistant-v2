@@ -1,4 +1,4 @@
-import type { TicketData, SelectorConfig, AppSettings } from '../shared/types'
+import type { TicketData, NoteData, SelectorConfig, AppSettings } from '../shared/types'
 import {
   DEFAULT_SELECTORS,
   TICKET_URL_PATTERNS,
@@ -74,6 +74,7 @@ export class DOMReader {
       status: this.readField('status', DEFAULT_SELECTORS.status, DEFAULT_SELECTORS.statusFallbacks),
       ticketUrl: window.location.href,
       customFields: this.readCustomFields(),
+      notes: this.readNotes(),
     }
   }
 
@@ -158,8 +159,35 @@ export class DOMReader {
     const textarea = cell.querySelector('textarea')
     if (textarea) return this.extractText(textarea)
 
-    const input = cell.querySelector('input:not([type="hidden"]):not([type="submit"])')
+    // Radio button group: return the label of the checked radio
+    const radios = cell.querySelectorAll('input[type="radio"]')
+    if (radios.length > 0) {
+      const checked = Array.from(radios).find((r) => (r as HTMLInputElement).checked) as HTMLInputElement | undefined
+      if (checked) {
+        // Try <label for="id">, then adjacent text node
+        const label = checked.id ? cell.querySelector(`label[for="${checked.id}"]`) : null
+        if (label) return label.textContent?.trim() ?? ''
+        let next: ChildNode | null = checked.nextSibling
+        while (next) {
+          if (next.nodeType === Node.TEXT_NODE && next.textContent?.trim()) return next.textContent.trim()
+          next = next.nextSibling
+        }
+      }
+      return ''
+    }
+
+    const input = cell.querySelector('input:not([type="hidden"]):not([type="submit"]):not([type="radio"])')
     if (input) return this.extractText(input)
+
+    // WHD pattern: td.dataStandard cells contain the value in the first <div>
+    // and a help-text description in subsequent <div>s. Read only the first
+    // child <div> to avoid including the description paragraph.
+    const childDivs = cell.querySelectorAll(':scope > div')
+    if (childDivs.length > 1) {
+      const firstDiv = childDivs[0]
+      const text = firstDiv.textContent?.trim() ?? ''
+      if (text) return text
+    }
 
     // Fall back to the cell's own text, ignoring label-like cells
     const clone = cell.cloneNode(true) as Element
@@ -181,23 +209,44 @@ export class DOMReader {
 
   /**
    * Extract all custom fields from the WHD "Custom Fields" section.
-   * Scans for label/value pairs in the table layout.
+   * WHD renders custom fields inside `div#CustomFieldsPanelDiv` with
+   * standard label/value table rows. Falls back to scanning all
+   * `td.labelStandard` cells after the "Custom Fields" header.
    */
   private readCustomFields(): Record<string, string> {
     const fields: Record<string, string> = {}
-    const allLabels = document.querySelectorAll('td.labelStandard')
 
+    // Primary: use the dedicated custom fields container
+    const cfPanel = document.getElementById('CustomFieldsPanelDiv')
+    if (cfPanel) {
+      const labels = cfPanel.querySelectorAll('td.labelStandard')
+      for (const labelCell of labels) {
+        const name = labelCell.textContent?.trim() ?? ''
+        if (!name) continue
+        const row = labelCell.closest('tr')
+        if (!row) continue
+        const cells = row.querySelectorAll('td:not(.labelStandard)')
+        for (const cell of cells) {
+          const val = this.extractValueFromCell(cell)
+          if (val) {
+            fields[name] = val
+            break
+          }
+        }
+      }
+      return fields
+    }
+
+    // Fallback: scan all td.labelStandard after a "Custom Fields" marker
+    const allLabels = document.querySelectorAll('td.labelStandard')
     let inCustomSection = false
     for (const labelCell of allLabels) {
       const cellText = labelCell.textContent?.trim() ?? ''
-
       if (cellText === 'Custom Fields') {
         inCustomSection = true
         continue
       }
-
       if (!inCustomSection || !cellText) continue
-
       const row = labelCell.closest('tr')
       if (!row) continue
       const cells = row.querySelectorAll('td:not(.labelStandard)')
@@ -211,6 +260,60 @@ export class DOMReader {
     }
 
     return fields
+  }
+
+  /**
+   * Extract notes from the WHD Notes section.
+   * Each note spans 3 <tr> rows; the main row has class 'white' or 'shaded'.
+   */
+  private readNotes(): NoteData[] {
+    const notes: NoteData[] = []
+    const container = document.querySelector('div#NotesPanelDiv table.alternatingRowColor.contextArea')
+    if (!container) return notes
+
+    const rows = container.querySelectorAll('tr.white, tr.shaded')
+    for (const row of rows) {
+      const cells = row.querySelectorAll('td')
+      if (cells.length < 8) continue
+
+      // Date+time from cell[0]
+      const dateRaw = cells[0].textContent?.trim().replace(/\s+/g, ' ') ?? ''
+
+      // Author from cell[1]
+      const author = cells[1].textContent?.trim() ?? ''
+
+      // Note text from cell[2] (noteListCell)
+      const noteCell = row.querySelector('td.noteListCell')
+      let noteText = ''
+      let noteId = ''
+      if (noteCell) {
+        const noteDiv = noteCell.querySelector('div')
+        if (noteDiv) {
+          const clone = noteDiv.cloneNode(true) as Element
+          clone.querySelectorAll('a, script, style, noscript, abbr').forEach((el) => el.remove())
+          noteText = clone.textContent?.trim().replace(/\s+/g, ' ').replace(/\d+\s+\w+\s+ago\s*/gi, '').trim() ?? ''
+        }
+        const noteAnchor = noteCell.querySelector('a[href*="#"]')
+        noteId = noteAnchor ? noteAnchor.getAttribute('href')?.split('#').pop() ?? '' : ''
+      }
+
+      // Type detection via decoration cells
+      let type: NoteData['type'] = 'client'
+      if (row.querySelector('td.noteBodyBlue, td.noteTopBlue, td.noteCornerBlue')) {
+        type = 'tech_visible'
+      } else if (row.querySelector('td.noteBodyGray, td.noteTopGray, td.noteCornerGray')) {
+        type = 'tech_internal'
+      }
+
+      // Time spent from cell[6]
+      const timeSpent = cells[6]?.textContent?.trim() ?? ''
+
+      if (noteText || author) {
+        notes.push({ author, text: noteText, type, date: dateRaw, noteId, timeSpent })
+      }
+    }
+
+    return notes
   }
 
   private extractText(el: Element): string {

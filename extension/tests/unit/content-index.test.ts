@@ -131,6 +131,7 @@ describe('content/index.ts message handler', () => {
       status: 'Open',
       ticketUrl: 'http://helpdesk.local/ticket/2',
       customFields: {},
+      notes: [],
     })
 
     const listener = onMessageListeners[0]

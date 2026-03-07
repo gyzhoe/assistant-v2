@@ -24,6 +24,7 @@ OutputDir=output
 OutputBaseFilename=AIHelpdeskAssistant-Setup-{#MyAppVersion}
 Compression=lzma2/fast
 SolidCompression=no
+DiskSpanning=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -75,6 +76,7 @@ Name: "{app}\models";             Flags: uninsneveruninstall
 Source: "..\backend\app\*";           DestDir: "{app}\backend\app";       Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
 Source: "..\backend\ingestion\*";     DestDir: "{app}\backend\ingestion"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
 Source: "..\backend\pyproject.toml";  DestDir: "{app}\backend";           Flags: ignoreversion; Components: backend
+Source: "..\backend\.env.example";   DestDir: "{app}\backend";           Flags: ignoreversion; Components: backend
 
 ; Native messaging host scripts (backend manages its own lifecycle via extension messages)
 Source: "..\backend\native_host.py";  DestDir: "{app}\backend";           Flags: ignoreversion; Components: backend
@@ -88,6 +90,9 @@ Source: "..\backend\static\manage\*"; DestDir: "{app}\backend\static\manage"; Fl
 
 ; uv standalone binary (downloaded by CI)
 Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
+
+; Rust assistant-tools binary (replaces PowerShell scripts)
+Source: "deps\assistant-tools.exe";  DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
 ; llama-server binary + CUDA DLLs
 ; Everything under {app}\tools\ for AppLocker compatibility
@@ -104,7 +109,7 @@ Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: 
 
 ; Bundled GGUF model files (offline install — ~5.8 GB)
 ; Only included when built locally with models present; CI builds skip this.
-#ifexist "deps\models\nomic-embed-text-v1.5.F16.gguf"
+#ifexist "deps\models\nomic-embed-text-v1.5.f16.gguf"
 Source: "deps\models\*";             DestDir: "{app}\models";            Flags: ignoreversion; Components: models
 #endif
 
@@ -121,9 +126,10 @@ Source: "scripts\uninstall-cleanup.ps1"; DestDir: "{app}\scripts";          Flag
 Source: "scripts\pull-models-gui.py";    DestDir: "{app}\scripts";          Flags: ignoreversion
 
 [Icons]
-; Interactive diagnostic tools — keep visible PowerShell
-Name: "{group}\Setup LLM Models";    Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\pull-models.ps1"""
-Name: "{group}\Health Check";        Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\check-health.ps1"""
+; Interactive tools — uses compiled Rust binary
+Name: "{group}\Setup LLM Models";    Filename: "{app}\tools\assistant-tools.exe"; Parameters: "pull-models --app-dir ""{app}"""
+Name: "{group}\Health Check";        Filename: "{app}\tools\assistant-tools.exe"; Parameters: "health-check --app-dir ""{app}"""
+Name: "{group}\Check for Updates";   Filename: "{app}\tools\assistant-tools.exe"; Parameters: "update --app-dir ""{app}"""
 Name: "{group}\Extension Folder";    Filename: "{app}\extension"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
@@ -252,12 +258,29 @@ begin
   SaveStringToFile(ManifestPath, JsonContent, False);
 end;
 
+procedure GenerateVersionJson;
+var
+  VersionPath: String;
+  JsonContent: String;
+begin
+  VersionPath := ExpandConstant('{app}\version.json');
+  JsonContent :=
+    '{' + #13#10 +
+    '  "version": "{#MyAppVersion}",' + #13#10 +
+    '  "deps_version": "1.0.0",' + #13#10 +
+    '  "llama_version": "b8215",' + #13#10 +
+    '  "python_version": "3.13.2"' + #13#10 +
+    '}';
+  SaveStringToFile(VersionPath, JsonContent, False);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
     ForceDirectories(ExpandConstant('{app}\logs'));
     GenerateNativeMessagingManifest;
+    GenerateVersionJson;
 
     // Verify llama-server binary installed correctly (diagnostic log)
     if FileExists(ExpandConstant('{app}\tools\llama-server.exe')) then

@@ -51,46 +51,62 @@ jobs:
         uses: actions/cache@v4
         with:
           path: installer/deps
-          key: installer-deps-llama-b5604-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
+          key: installer-deps-llama-b8215-cuda124-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
 
-      - name: Download llama-server (llama.cpp)
+      - name: Download llama-server (llama.cpp CUDA 12.4)
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # llama.cpp b5604 Vulkan Windows x64 — supports NVIDIA, AMD, and Intel GPUs
-          # Pin version after benchmarking; SHA256 verification will be added then.
-          $llamaTag = "b5604"
-          $llamaUrl = "https://github.com/ggml-org/llama.cpp/releases/download/${llamaTag}/llama-${llamaTag}-bin-win-vulkan-x64.zip"
+          # llama.cpp b8215 CUDA 12.4 Windows x64 — optimised for NVIDIA GPUs
+          # CUDA 12.4 supports Pascal (GTX 10xx) through current-gen GPUs.
+          # CUDA 13 drops Pascal, so we pin to 12.4.
+          $llamaTag = "b8215"
+          $llamaUrl = "https://github.com/ggml-org/llama.cpp/releases/download/${llamaTag}/llama-${llamaTag}-bin-win-cuda-12.4-x64.zip"
+          $cudartUrl = "https://github.com/ggml-org/llama.cpp/releases/download/${llamaTag}/cudart-llama-bin-win-cuda-12.4-x64.zip"
 
           New-Item -ItemType Directory -Force -Path installer/deps | Out-Null
-          Write-Host "Downloading llama-server ${llamaTag}..."
+
+          # Download llama-server CUDA build
+          Write-Host "Downloading llama-server ${llamaTag} CUDA 12.4..."
           Invoke-WebRequest -Uri $llamaUrl -OutFile "installer/deps/llama.zip"
 
-          Write-Host "llama-server download complete"
+          # Download CUDA runtime DLLs (cublas, cudart)
+          Write-Host "Downloading CUDA 12.4 runtime..."
+          Invoke-WebRequest -Uri $cudartUrl -OutFile "installer/deps/cudart.zip"
 
-          # Extract llama-server.exe and Vulkan/shared DLLs
-          New-Item -ItemType Directory -Force -Path installer/deps/llama-extract | Out-Null
+          Write-Host "Extracting..."
           Expand-Archive -Path "installer/deps/llama.zip" -DestinationPath "installer/deps/llama-extract" -Force
+          Expand-Archive -Path "installer/deps/cudart.zip" -DestinationPath "installer/deps/cudart-extract" -Force
 
           New-Item -ItemType Directory -Force -Path installer/deps/llama-server | Out-Null
-          # Find llama-server.exe (may be nested under build/bin/)
+
+          # Copy llama-server.exe and its DLLs
           $serverExe = Get-ChildItem -Path "installer/deps/llama-extract" -Recurse -Filter "llama-server.exe" | Select-Object -First 1
           if (-not $serverExe) {
             Write-Error "llama-server.exe not found in archive"
             exit 1
           }
           Copy-Item $serverExe.FullName "installer/deps/llama-server/llama-server.exe"
-
-          # Copy DLLs from the same directory as llama-server.exe
           $binDir = $serverExe.DirectoryName
           Get-ChildItem -Path $binDir -Filter "*.dll" | ForEach-Object {
             Copy-Item $_.FullName "installer/deps/llama-server/$($_.Name)"
           }
 
-          Remove-Item "installer/deps/llama.zip", "installer/deps/llama-extract" -Recurse -Force
+          # Copy CUDA runtime DLLs (cublas64_12.dll, cublasLt64_12.dll, cudart64_12.dll)
+          $cudartDll = Get-ChildItem -Path "installer/deps/cudart-extract" -Recurse -Filter "cublas64_12.dll" | Select-Object -First 1
+          if ($cudartDll) {
+            Get-ChildItem -Path $cudartDll.DirectoryName -Filter "*.dll" | ForEach-Object {
+              Copy-Item $_.FullName "installer/deps/llama-server/$($_.Name)" -Force
+            }
+          } else {
+            Write-Error "CUDA runtime DLLs not found in cudart archive"
+            exit 1
+          }
+
+          Remove-Item "installer/deps/llama.zip", "installer/deps/cudart.zip", "installer/deps/llama-extract", "installer/deps/cudart-extract" -Recurse -Force
           $fileCount = (Get-ChildItem -Path "installer/deps/llama-server" -Recurse -File).Count
           $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/llama-server" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
-          Write-Host "llama-server distribution: $fileCount files, $totalSize MB total"
+          Write-Host "llama-server CUDA 12.4 distribution: $fileCount files, $totalSize MB total"
       - name: Download uv standalone
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh

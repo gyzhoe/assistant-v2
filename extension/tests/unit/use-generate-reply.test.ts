@@ -57,6 +57,7 @@ const ticketData = {
   status: 'Open',
   ticketUrl: 'http://helpdesk.local/ticket/1',
   customFields: {},
+  notes: [],
 }
 
 describe('useGenerateReply', () => {

@@ -83,6 +83,7 @@ describe('BackendControl — native stop commands', () => {
         status: 'Open',
         ticketUrl: 'http://test/1',
         customFields: {},
+        notes: [],
       },
       isTicketPage: true,
       selectedModel: 'qwen3.5:9b',

@@ -47,6 +47,7 @@ const defaultState = {
     status: 'Open',
     ticketUrl: 'http://helpdesk.local/ticket/1',
     customFields: {},
+    notes: [],
   },
   isTicketPage: true,
   reply: 'Hi Alice, try clearing your credentials.',

@@ -1,3 +1,13 @@
+/** A single note from the WHD ticket Notes section */
+export interface NoteData {
+  author: string
+  text: string
+  type: 'client' | 'tech_visible' | 'tech_internal'
+  date: string
+  noteId: string
+  timeSpent: string
+}
+
 /** Ticket data extracted from the WHD DOM */
 export interface TicketData {
   subject: string
@@ -7,6 +17,7 @@ export interface TicketData {
   status: string
   ticketUrl: string
   customFields: Record<string, string>
+  notes: NoteData[]
 }
 
 /** Settings persisted to chrome.storage.sync */
@@ -59,6 +70,14 @@ export interface GenerateRequest {
   prompt_suffix: string
   custom_fields: Record<string, string>
   pinned_article_ids?: string[]
+  notes?: Array<{
+    author: string
+    text: string
+    type: 'client' | 'tech_visible' | 'tech_internal'
+    date: string
+    note_id: string
+    time_spent: string
+  }>
 }
 
 /** Single retrieved context document */

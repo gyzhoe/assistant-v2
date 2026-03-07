@@ -42,7 +42,7 @@ class APITokenMiddleware:
     """
 
     EXEMPT_PATHS = {"/health", "/docs", "/openapi.json"}
-    EXEMPT_PREFIXES = ("/auth/",)
+    EXEMPT_PREFIXES = ("/auth/", "/manage")
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

@@ -146,7 +146,7 @@ async def start_llm(request: Request) -> dict[str, str]:
     creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
     # Start LLM server
-    llm_model = _MODELS_DIR / "qwen3.5-9b-q4_k_m.gguf"
+    llm_model = _MODELS_DIR / "Qwen3.5-9B-Q4_K_M.gguf"
     subprocess.Popen(
         [
             llama_exe, "-m", str(llm_model),
@@ -160,7 +160,7 @@ async def start_llm(request: Request) -> dict[str, str]:
     )
 
     # Start embed server
-    embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.F16.gguf"
+    embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.f16.gguf"
     subprocess.Popen(
         [
             llama_exe, "-m", str(embed_model),

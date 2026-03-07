@@ -56,7 +56,7 @@ if (Test-Path $bundledModels) {
     Write-Log "Verifying imported models..." "INFO"
     Write-Host "Verifying imported models..." -ForegroundColor Yellow
     $verifyMissing = @()
-    foreach ($m in @("nomic-embed-text-v1.5.F16.gguf", "qwen3.5-9b-q4_k_m.gguf")) {
+    foreach ($m in @("nomic-embed-text-v1.5.f16.gguf", "Qwen3.5-9B-Q4_K_M.gguf")) {
         if (-not (Test-Path (Join-Path $modelsDir $m))) { $verifyMissing += $m }
     }
 
@@ -85,8 +85,8 @@ if (-not (Test-Path $modelsDir)) {
 }
 
 $models = @(
-    @{ name = "nomic-embed-text-v1.5.F16.gguf"; url = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.F16.gguf"; desc = "~262 MB" }
-    @{ name = "qwen3.5-9b-q4_k_m.gguf"; url = "https://huggingface.co/Qwen/Qwen3.5-9B-GGUF/resolve/main/qwen3.5-9b-q4_k_m.gguf"; desc = "~5.5 GB" }
+    @{ name = "nomic-embed-text-v1.5.f16.gguf"; url = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf"; desc = "~262 MB" }
+    @{ name = "Qwen3.5-9B-Q4_K_M.gguf"; url = "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"; desc = "~5.5 GB" }
 )
 $maxPullRetries = 4
 $pullRetryDelay = 5
