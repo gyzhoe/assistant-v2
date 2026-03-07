@@ -94,9 +94,14 @@ Source: "deps\uv.exe";               DestDir: "{app}\tools";             Flags: 
 ; Rust assistant-tools binary (replaces PowerShell scripts)
 Source: "deps\assistant-tools.exe";  DestDir: "{app}\tools";             Flags: ignoreversion; Components: backend
 
-; llama-server binary + CUDA DLLs
-; Everything under {app}\tools\ for AppLocker compatibility
-Source: "deps\llama-server\*";        DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: llama
+; llama-server GPU-specific builds — auto-detected at install time.
+; Only one variant is installed based on the detected GPU.
+; NVIDIA CUDA 12.4 (best performance for NVIDIA GPUs, Pascal and newer)
+Source: "deps\llama-cuda\*";         DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: llama; Check: IsNvidiaGPU
+; Vulkan (universal GPU support — AMD, Intel Arc, NVIDIA fallback)
+Source: "deps\llama-vulkan\*";       DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: llama; Check: IsVulkanGPU
+; CPU only (no GPU acceleration — fallback for systems without a supported GPU)
+Source: "deps\llama-cpu\*";          DestDir: "{app}\tools";             Flags: ignoreversion recursesubdirs createallsubdirs; Components: llama; Check: IsCPUOnly
 
 ; Bundled Python 3.13 standalone (offline install)
 Source: "deps\python\*";             DestDir: "{app}\deps\python";       Flags: ignoreversion recursesubdirs createallsubdirs; Components: backend
@@ -162,6 +167,11 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""try 
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith('{app}', [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated; RunOnceId: "KillAppPython"
 
 [Code]
+var
+  DetectedGPUType: String;   // 'nvidia', 'amd', 'intel', 'cpu'
+  DetectedGPUName: String;   // e.g. 'NVIDIA GeForce GTX 1070 Ti'
+  ExistingVersion: String;   // e.g. '1.14.1' or '' if fresh install
+
 function GetEdgePath(Param: String): String;
 var
   EdgePath: String;
@@ -186,6 +196,179 @@ end;
 function EdgeExists: Boolean;
 begin
   Result := GetEdgePath('') <> 'msedge.exe';
+end;
+
+// Detect GPU via WMI (Win32_VideoController).
+// Prioritises discrete GPUs: NVIDIA > AMD > Intel Arc > CPU fallback.
+procedure DetectGPU;
+var
+  ResultCode: Integer;
+  TmpFile: String;
+  Output: AnsiString;
+  Lines: TArrayOfString;
+begin
+  DetectedGPUType := 'cpu';
+  DetectedGPUName := 'No supported GPU detected';
+  TmpFile := ExpandConstant('{tmp}\gpu_detect.txt');
+
+  // PowerShell one-liner: query all GPUs, prioritise discrete, output "type|name"
+  Exec('powershell.exe',
+    '-ExecutionPolicy Bypass -NoProfile -Command "' +
+    '$gpus = Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name; ' +
+    '$type = ''cpu''; $name = ''No supported GPU detected''; ' +
+    'foreach ($g in $gpus) { ' +
+    '  if ($g -match ''NVIDIA'') { $type = ''nvidia''; $name = $g; break } ' +
+    '  elseif ($g -match ''AMD|Radeon'') { $type = ''amd''; $name = $g; break } ' +
+    '  elseif ($g -match ''Intel.*Arc'') { $type = ''intel''; $name = $g; break } ' +
+    '}; ' +
+    '\"$type|$name\" | Out-File -FilePath ''' + TmpFile + ''' -Encoding ASCII -NoNewline"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  if LoadStringFromFile(TmpFile, Output) then
+  begin
+    // Parse "type|name" format
+    if LoadStringsFromFile(TmpFile, Lines) and (GetArrayLength(Lines) > 0) then
+    begin
+      Output := Lines[0];
+    end;
+
+    if Pos('nvidia|', String(Output)) = 1 then
+    begin
+      DetectedGPUType := 'nvidia';
+      DetectedGPUName := Copy(String(Output), 8, Length(String(Output)) - 7);
+    end
+    else if Pos('amd|', String(Output)) = 1 then
+    begin
+      DetectedGPUType := 'amd';
+      DetectedGPUName := Copy(String(Output), 5, Length(String(Output)) - 4);
+    end
+    else if Pos('intel|', String(Output)) = 1 then
+    begin
+      DetectedGPUType := 'intel';
+      DetectedGPUName := Copy(String(Output), 7, Length(String(Output)) - 6);
+    end
+    else
+    begin
+      DetectedGPUType := 'cpu';
+      DetectedGPUName := 'No supported GPU detected';
+    end;
+  end;
+
+  DeleteFile(TmpFile);
+
+  // Map GPU type to backend label for logging
+  case DetectedGPUType of
+    'nvidia': Log('GPU detected: NVIDIA — will install CUDA 12.4 build (' + DetectedGPUName + ')');
+    'amd':    Log('GPU detected: AMD — will install Vulkan build (' + DetectedGPUName + ')');
+    'intel':  Log('GPU detected: Intel Arc — will install Vulkan build (' + DetectedGPUName + ')');
+  else
+    Log('GPU detection: no supported GPU found — will install CPU-only build');
+  end;
+end;
+
+// Check functions used by [Files] entries to conditionally install GPU-specific builds
+function IsNvidiaGPU: Boolean;
+begin
+  Result := DetectedGPUType = 'nvidia';
+end;
+
+function IsVulkanGPU: Boolean;
+begin
+  Result := (DetectedGPUType = 'amd') or (DetectedGPUType = 'intel');
+end;
+
+function IsCPUOnly: Boolean;
+begin
+  Result := DetectedGPUType = 'cpu';
+end;
+
+function GPUBackendName: String;
+begin
+  case DetectedGPUType of
+    'nvidia': Result := 'cuda';
+    'amd':    Result := 'vulkan';
+    'intel':  Result := 'vulkan';
+  else
+    Result := 'cpu';
+  end;
+end;
+
+// Detect existing installation by reading version.json from the default install dir.
+procedure DetectExistingInstall;
+var
+  VersionFile: String;
+  Content: AnsiString;
+  VerStart, VerEnd: Integer;
+  VerStr: String;
+begin
+  ExistingVersion := '';
+  VersionFile := ExpandConstant('{localappdata}\AIHelpdeskAssistant\version.json');
+  if FileExists(VersionFile) then
+  begin
+    if LoadStringFromFile(VersionFile, Content) then
+    begin
+      // Parse "version": "X.Y.Z" from JSON
+      VerStart := Pos('"version"', String(Content));
+      if VerStart > 0 then
+      begin
+        VerStart := Pos(':', String(Content));
+        // Find the opening quote after the colon
+        while (VerStart <= Length(String(Content))) and (String(Content)[VerStart] <> '"') do
+          VerStart := VerStart + 1;
+        VerStart := VerStart + 1; // skip the quote
+        VerEnd := VerStart;
+        while (VerEnd <= Length(String(Content))) and (String(Content)[VerEnd] <> '"') do
+          VerEnd := VerEnd + 1;
+        VerStr := Copy(String(Content), VerStart, VerEnd - VerStart);
+        if Length(VerStr) > 0 then
+        begin
+          ExistingVersion := VerStr;
+          Log('Existing installation detected: v' + ExistingVersion);
+        end;
+      end;
+    end;
+  end;
+end;
+
+function InitializeSetup: Boolean;
+begin
+  DetectGPU;
+  DetectExistingInstall;
+  Result := True;
+end;
+
+procedure InitializeWizard;
+var
+  GPULabel: String;
+  WelcomeLabel: TNewStaticText;
+begin
+  // Update the llama component description to show the detected GPU
+  case DetectedGPUType of
+    'nvidia': GPULabel := 'llama.cpp LLM Runtime — NVIDIA CUDA 12.4 (' + DetectedGPUName + ')';
+    'amd':    GPULabel := 'llama.cpp LLM Runtime — Vulkan (' + DetectedGPUName + ')';
+    'intel':  GPULabel := 'llama.cpp LLM Runtime — Vulkan (' + DetectedGPUName + ')';
+  else
+    GPULabel := 'llama.cpp LLM Runtime — CPU only (no GPU detected)';
+  end;
+
+  // Update component description in the wizard
+  WizardForm.ComponentsList.ItemCaption[2] := GPULabel;
+
+  // Show upgrade notice on the welcome page if an existing install is detected
+  if ExistingVersion <> '' then
+  begin
+    WelcomeLabel := TNewStaticText.Create(WizardForm);
+    WelcomeLabel.Parent := WizardForm.WelcomePage;
+    WelcomeLabel.Left := WizardForm.WelcomeLabel2.Left;
+    WelcomeLabel.Top := WizardForm.WelcomeLabel2.Top + WizardForm.WelcomeLabel2.Height + 16;
+    WelcomeLabel.Width := WizardForm.WelcomeLabel2.Width;
+    WelcomeLabel.AutoSize := False;
+    WelcomeLabel.WordWrap := True;
+    WelcomeLabel.Height := 40;
+    WelcomeLabel.Caption := 'Existing installation detected: v' + ExistingVersion +
+      ' will be upgraded to v{#MyAppVersion}. Your data (knowledge base, models, settings) will be preserved.';
+    WelcomeLabel.Font.Style := [fsBold];
+  end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -261,13 +444,20 @@ procedure GenerateVersionJson;
 var
   VersionPath: String;
   JsonContent: String;
+  GPUName: String;
 begin
   VersionPath := ExpandConstant('{app}\version.json');
+  // Escape backslashes and quotes in GPU name for JSON
+  GPUName := DetectedGPUName;
+  StringChangeEx(GPUName, '\', '\\', True);
+  StringChangeEx(GPUName, '"', '\"', True);
   JsonContent :=
     '{' + #13#10 +
     '  "version": "{#MyAppVersion}",' + #13#10 +
     '  "deps_version": "1.0.0",' + #13#10 +
     '  "llama_version": "b8215",' + #13#10 +
+    '  "llama_backend": "' + GPUBackendName + '",' + #13#10 +
+    '  "gpu_detected": "' + GPUName + '",' + #13#10 +
     '  "python_version": "3.13.2"' + #13#10 +
     '}';
   SaveStringToFile(VersionPath, JsonContent, False);
@@ -283,7 +473,7 @@ begin
 
     // Verify llama-server binary installed correctly (diagnostic log)
     if FileExists(ExpandConstant('{app}\tools\llama-server.exe')) then
-      Log('llama-server.exe verified at ' + ExpandConstant('{app}\tools\llama-server.exe'))
+      Log('llama-server.exe verified at ' + ExpandConstant('{app}\tools\llama-server.exe') + ' (backend: ' + GPUBackendName + ')')
     else
       Log('WARNING: llama-server.exe not found — LLM inference will be unavailable');
   end;
