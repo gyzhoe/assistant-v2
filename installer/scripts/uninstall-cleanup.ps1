@@ -35,6 +35,8 @@ $chromaDir = Join-Path $AppDir "backend\chroma_data"
 $chromaExist = Test-Path $chromaDir
 $venvDir = Join-Path $AppDir "backend\.venv"
 $venvExist = Test-Path $venvDir
+$pythonDir = Join-Path $AppDir "python"
+$pythonExist = Test-Path $pythonDir
 $logsDir = Join-Path $AppDir "logs"
 $logsExist = Test-Path $logsDir
 $envFile = Join-Path $AppDir "backend\.env"
@@ -147,9 +149,12 @@ $chkAppData = Add-CleanupOption "Remove application data (KB, logs, config)" $ap
 )
 
 # --- Python venv ---
-$venvNote = if ($venvSizeMB -gt 0) { "Python virtual environment (~$venvSizeMB MB)" } else { $null }
-$chkVenv = Add-CleanupOption "Remove Python environment (.venv)" $venvExist $venvExist $(
-    if (-not $venvExist) { "No Python environment found" } else { $venvNote }
+$pythonSizeMB = Get-DirSizeMB $pythonDir
+$totalPySizeMB = $venvSizeMB + $pythonSizeMB
+$pyExist = $venvExist -or $pythonExist
+$pyNote = if ($totalPySizeMB -gt 0) { "Python environment + bundled runtime (~$totalPySizeMB MB)" } else { $null }
+$chkVenv = Add-CleanupOption "Remove Python environment" $pyExist $pyExist $(
+    if (-not $pyExist) { "No Python environment found" } else { $pyNote }
 )
 
 # --- Models ---
@@ -227,9 +232,12 @@ if ($chkAppData.Checked -and $appDataExist) {
     }
 }
 
-# Remove Python venv
+# Remove Python venv and bundled Python
 if ($chkVenv.Checked -and $venvExist) {
     try { Remove-Item -Path $venvDir -Recurse -Force -ErrorAction Stop } catch {}
+}
+if ($chkVenv.Checked -and $pythonExist) {
+    try { Remove-Item -Path $pythonDir -Recurse -Force -ErrorAction Stop } catch {}
 }
 
 # Remove LLM model data

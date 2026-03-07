@@ -176,14 +176,17 @@ Filename: "{win}\explorer.exe"; Parameters: """{app}\extension"""; Description: 
 Filename: "{code:GetEdgePath}"; Parameters: "edge://extensions"; Description: "Open Edge Extensions page"; Flags: postinstall nowait skipifsilent unchecked; Check: EdgeExists
 
 [UninstallRun]
-; Kill llama-server and legacy Ollama processes before cleanup (locks DLLs if left running)
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'llama-server','ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated; RunOnceId: "KillLlamaOllama"
-; Cleanup dialog — offer model removal before anything is torn down
+; Step 1: Kill ALL app processes FIRST — must happen before cleanup dialog
+; so files aren't locked when the user tries to delete them.
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-Process -Name 'llama-server','ollama','ollama_llama_server' -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue"""; Flags: runhidden waituntilterminated; RunOnceId: "KillLlama"
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""foreach ($port in @(8765, 11435, 11436)) {{ try {{ Get-NetTCPConnection -LocalPort $port -State Listen -EA SilentlyContinue | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force -EA SilentlyContinue }} }} catch {{}} }}"""; Flags: runhidden waituntilterminated; RunOnceId: "KillAppPorts"
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith('{app}', [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }}; Start-Sleep -Seconds 2"""; Flags: runhidden waituntilterminated; RunOnceId: "KillAppProcesses"
+
+; Step 2: Cleanup dialog — now safe to delete files (processes are dead)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "UninstallCleanup"
-; Kill backend on port 8765
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""try {{ $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; if ($c) {{ Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue }} }} catch {{}}"""; Flags: runhidden waituntilterminated; RunOnceId: "KillBackendPort"
-; Kill Python processes from install directory
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith('{app}', [System.StringComparison]::OrdinalIgnoreCase) }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated; RunOnceId: "KillAppPython"
+
+; Step 3: Remove the install directory if it's empty or nearly empty after Inno cleanup
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Start-Sleep -Seconds 1; $d = '{app}'; if (Test-Path $d) {{ Remove-Item -Path $d -Recurse -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveInstallDir"
 
 [Code]
 var
