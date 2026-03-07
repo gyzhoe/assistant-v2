@@ -15,7 +15,8 @@ Base URL: `http://localhost:8765`
 9. [Search / Tag Endpoints](#5-search--tag-endpoints)
 10. [Feedback Endpoints](#6-feedback-endpoints)
 11. [Settings / Config Endpoints](#7-settings--config-endpoints)
-12. [Chrome Runtime Message Types](#chrome-runtime-message-types)
+12. [Model Download Endpoints](#8-model-download-endpoints)
+13. [Chrome Runtime Message Types](#chrome-runtime-message-types)
 
 ---
 
@@ -988,6 +989,110 @@ Switch the currently loaded GGUF model. Stops the running llama-server chat inst
 |---|---|
 | `401 Unauthorized` | Missing or invalid token |
 | `404 Not Found` | Model GGUF file not found in models directory |
+
+---
+
+## 8. Model Download Endpoints
+
+### `POST /models/download`
+
+Start a background download of one or all GGUF models from HuggingFace.
+
+**Authentication:** Required (`X-Extension-Token` header).
+
+**Rate limit:** None.
+
+#### Request Body
+
+```json
+{
+  "models": ["Qwen3.5-9B-Q4_K_M.gguf"]
+}
+```
+
+#### Request fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `models` | string[] | no | List of GGUF filenames to download. Empty list downloads all missing non-embed models. |
+
+#### Response `200 OK`
+
+```json
+{
+  "status": "started",
+  "models": ["Qwen3.5-9B-Q4_K_M.gguf"]
+}
+```
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `401 Unauthorized` | Missing or invalid token |
+| `409 Conflict` | A download is already in progress (`{"status": "already_downloading"}`) |
+
+---
+
+### `GET /models/download/status`
+
+Poll the progress of an active model download.
+
+**Authentication:** Required (`X-Extension-Token` header).
+
+**Rate limit:** None.
+
+#### Response `200 OK`
+
+```json
+{
+  "downloading": true,
+  "current_model": "Qwen3.5-9B-Q4_K_M.gguf",
+  "bytes_downloaded": 1800000000,
+  "bytes_total": 4300000000,
+  "models_completed": 0,
+  "models_total": 1,
+  "error": ""
+}
+```
+
+#### Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `downloading` | boolean | Whether a download is currently active |
+| `current_model` | string | GGUF filename being downloaded (empty when idle) |
+| `bytes_downloaded` | integer | Bytes downloaded for the current file |
+| `bytes_total` | integer | Total size of the current file in bytes |
+| `models_completed` | integer | Number of models finished so far |
+| `models_total` | integer | Total number of models in this download batch |
+| `error` | string | Error message if the download failed (empty on success) |
+
+---
+
+### `POST /models/download/cancel`
+
+Cancel an in-flight model download.
+
+**Authentication:** Required (`X-Extension-Token` header).
+
+**Rate limit:** None.
+
+#### Response `200 OK`
+
+```json
+{
+  "status": "cancelling"
+}
+```
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `401 Unauthorized` | Missing or invalid token |
+
+Returns `{"status": "not_downloading"}` if no download is active (not an error, HTTP 200).
 
 ---
 

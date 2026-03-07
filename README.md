@@ -13,11 +13,21 @@ irm https://raw.githubusercontent.com/gyzhoe/assistant-v2/main/scripts/install.p
 
 **Manual:** Download the latest `.exe` from [GitHub Releases](https://github.com/gyzhoe/assistant-v2/releases/latest) and run it.
 
-The installer bundles everything needed to run: Python 3.13, llama-server (with CUDA and CPU support), backend dependencies, and the Edge extension. No prerequisites required.
+The installer bundles everything needed to run: Python 3.13, llama-server (with GPU auto-detection), backend dependencies, and the Edge extension. No prerequisites required.
+
+### GPU Auto-Detection
+
+The installer automatically detects your GPU and installs the optimal llama-server build:
+
+| GPU | Build | Notes |
+|---|---|---|
+| NVIDIA (Pascal / GTX 10xx and newer) | CUDA 12.4 | Best performance |
+| AMD Radeon / Intel Arc | Vulkan | Universal GPU support |
+| No supported GPU | CPU | Fallback, slower but functional |
 
 After install:
 1. Load the extension in Edge: `edge://extensions` → Developer mode → Load unpacked → select the extension folder
-2. Pull the AI models: Start Menu → **Setup LLM Models**
+2. Download the AI models: right-click the extension icon → **Options** → **LLM Models** section
 3. Open a WHD ticket and press `Alt+Shift+H` to open the sidebar
 
 ## What It Does
