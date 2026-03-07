@@ -51,7 +51,7 @@ vi.mock('../../src/lib/api-client', () => ({
     shutdown: (...args: unknown[]) => mockShutdown(...args),
     llmStop: (...args: unknown[]) => mockOllamaStop(...args),
     llmStart: vi.fn().mockResolvedValue({ status: 'started' }),
-    models: vi.fn().mockResolvedValue(['qwen3.5:9b']),
+    models: vi.fn().mockResolvedValue({ models: ['qwen3.5:9b'], current: 'qwen3.5:9b' }),
   },
   sendNativeCommand: (...args: unknown[]) => mockSendNativeCommand(...args),
   ApiError: class ApiError extends Error {

@@ -23,6 +23,7 @@ except ImportError:
 MODELS = [
     {"name": "nomic-embed-text-v1.5.f16.gguf", "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf", "desc": "~262 MB"},
     {"name": "Qwen3.5-9B-Q4_K_M.gguf", "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf", "desc": "~5.3 GB"},
+    {"name": "Qwen3-14B-Q4_K_M.gguf", "url": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf", "desc": "~9 GB (optional, better language control)"},
 ]
 AUTO_CLOSE_DELAY = 3000  # ms to wait before closing after success
 DOWNLOAD_MAX_RETRIES = 3  # retry up to 3 times on failure (4 total attempts)

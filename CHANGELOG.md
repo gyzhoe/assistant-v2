@@ -5,7 +5,17 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] — llama.cpp Migration (2026-03-06)
+## [2.0.0] — llama.cpp Migration + Multi-Model + Notes (2026-03-07)
+
+### Added
+
+- **Multi-model support** — dropdown to switch between qwen3.5:9b (fast) and qwen3:14b (quality) at runtime. `POST /llm/switch` restarts llama-server with selected GGUF. `GET /models` scans models directory. Extension shows switching state and polls until ready.
+- **Ticket notes extraction** — reads client/tech/internal notes from WHD Notes section, displays in sidebar with color-coded type indicators, feeds chronological history to LLM (capped at 10 most recent)
+- **Custom fields extraction** — reads fields from WHD CustomFieldsPanelDiv (Computer Name, Campus radio buttons, etc.), displays in sidebar, included in LLM prompt
+- **Prompt: language matching** — replies in same language as ticket (FORMAT RULE 6)
+- **Prompt: English UI paths** — keeps Windows click-paths in English when replying in Dutch (FORMAT RULE 7)
+- **Prompt: requester fallback** — shows "(unknown)" instead of LLM hallucinating a name
+- 7 new extension tests (ModelSelector), 13 new backend tests (models endpoint), 3 new backend tests (switch endpoint), 10 new backend tests (notes feature)
 
 ### Changed
 

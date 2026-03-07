@@ -182,3 +182,63 @@ async def test_llm_stop_returns_200() -> None:
         with patch("app.routers.health.subprocess.run"):
             response = await ac.post("/llm/stop")
     assert response.status_code == 200
+
+
+# ── POST /llm/switch ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_llm_switch_valid_model() -> None:
+    """POST /llm/switch with a valid model starts switching."""
+    app = create_app()
+    setup_app_state(app)
+    app.state.current_llm_model = "qwen3.5:9b"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        with (
+            patch("app.routers.health.subprocess.run"),
+            patch("app.routers.health.subprocess.Popen"),
+            patch("app.routers.health._MODELS_DIR") as mock_dir,
+            patch("app.routers.health._BUNDLED_LLAMA_SERVER") as mock_exe,
+            patch("app.routers.health.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_exe.exists.return_value = False
+            mock_gguf = MagicMock()
+            mock_gguf.is_file.return_value = True
+            mock_dir.__truediv__ = MagicMock(return_value=mock_gguf)
+            response = await ac.post("/llm/switch", json={"model": "qwen3:14b"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "switching"
+    assert data["model"] == "qwen3:14b"
+
+
+@pytest.mark.asyncio
+async def test_llm_switch_unknown_model_returns_404() -> None:
+    """POST /llm/switch with an unknown model returns 404."""
+    async with _make_client() as ac:
+        response = await ac.post("/llm/switch", json={"model": "nonexistent:7b"})
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_llm_switch_already_loaded() -> None:
+    """POST /llm/switch with the currently loaded model returns already_loaded."""
+    app = create_app()
+    setup_app_state(app)
+    app.state.current_llm_model = "qwen3.5:9b"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as ac:
+        response = await ac.post("/llm/switch", json={"model": "qwen3.5:9b"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "already_loaded"
+    assert data["model"] == "qwen3.5:9b"

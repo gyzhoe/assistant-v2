@@ -171,3 +171,7 @@ class FeedbackRequest(BaseModel):
     category: str = Field("", max_length=200)
     reply: str = Field(..., max_length=4000)
     rating: Literal["good", "bad"]
+
+
+class SwitchModelRequest(BaseModel):
+    model: str = Field(..., min_length=1, max_length=100)

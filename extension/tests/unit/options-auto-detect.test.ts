@@ -24,7 +24,7 @@ vi.stubGlobal('chrome', {
 const mockSendNativeCommand = vi.fn()
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
-    models: vi.fn().mockResolvedValue([]),
+    models: vi.fn().mockResolvedValue({ models: [], current: '' }),
   },
   sendNativeCommand: (...args: unknown[]) => mockSendNativeCommand(...args),
 }))

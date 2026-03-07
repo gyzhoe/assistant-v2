@@ -1,9 +1,9 @@
 ; setup.iss — AI Helpdesk Assistant Inno Setup Script
 ; Builds a per-user installer for Windows 10/11 x64.
-; Compile with: iscc /DMyAppVersion=1.13.0 setup.iss
+; Compile with: iscc /DMyAppVersion=2.0.0 setup.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.13.0"
+  #define MyAppVersion "2.0.0"
 #endif
 
 #define MyAppName     "AI Helpdesk Assistant"
@@ -46,7 +46,7 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
 Name: "llama";     Description: "llama.cpp LLM Runtime (llama-server)";          Types: full custom
-Name: "models";    Description: "LLM models — GGUF files (~5.8 GB)";              Types: full custom
+Name: "models";    Description: "LLM models — GGUF files (~15 GB)";               Types: full custom
 
 [InstallDelete]
 ; Clean up stale files from previous installs before copying new ones.
@@ -107,7 +107,7 @@ Source: "deps\wheels\*";             DestDir: "{app}\deps\wheels";       Flags: 
 ; Requirements file for offline pip install
 Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: ignoreversion; Components: backend
 
-; Bundled GGUF model files (offline install — ~5.8 GB)
+; Bundled GGUF model files (offline install — ~15 GB)
 ; Only included when built locally with models present; CI builds skip this.
 #ifexist "deps\models\nomic-embed-text-v1.5.f16.gguf"
 Source: "deps\models\*";             DestDir: "{app}\models";            Flags: ignoreversion; Components: models

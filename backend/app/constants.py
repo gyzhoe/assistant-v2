@@ -1,5 +1,20 @@
 """Shared constants for the AI Helpdesk Assistant backend."""
 
+# ── GGUF model mapping ──────────────────────────────────────────────────────
+# Display name <-> GGUF filename for bundled llama-server models.
+
+MODEL_DISPLAY_NAMES: dict[str, str] = {
+    "Qwen3.5-9B-Q4_K_M.gguf": "qwen3.5:9b",
+    "Qwen3-14B-Q4_K_M.gguf": "qwen3:14b",
+}
+"""Map GGUF filename → display name."""
+
+MODEL_GGUF_FILES: dict[str, str] = {v: k for k, v in MODEL_DISPLAY_NAMES.items()}
+"""Map display name → GGUF filename (reverse of MODEL_DISPLAY_NAMES)."""
+
+# Embed model filenames to exclude from LLM model listings.
+EMBED_MODEL_PREFIXES: tuple[str, ...] = ("nomic-embed-text",)
+
 # ── ChromaDB collection names ────────────────────────────────────────────────
 
 TICKET_COLLECTION = "whd_tickets"

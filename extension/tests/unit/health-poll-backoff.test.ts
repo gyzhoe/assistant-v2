@@ -45,7 +45,7 @@ vi.mock('../../src/lib/api-client', () => ({
     shutdown: vi.fn().mockResolvedValue(undefined),
     llmStop: vi.fn().mockResolvedValue({}),
     llmStart: vi.fn().mockResolvedValue({}),
-    models: vi.fn().mockResolvedValue([]),
+    models: vi.fn().mockResolvedValue({ models: [], current: '' }),
   },
   sendNativeCommand: vi.fn().mockResolvedValue({ ok: false }),
 }))

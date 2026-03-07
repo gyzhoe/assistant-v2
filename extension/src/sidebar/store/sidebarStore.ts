@@ -48,9 +48,11 @@ interface SidebarState {
   pinnedArticles: KBArticlePin[]
   settings: AppSettings
   settingsLoading: boolean
+  isModelSwitching: boolean
   llmReachable: boolean
   chromaDocCounts: Record<string, number>
 
+  setIsModelSwitching: (val: boolean) => void
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
   setReply: (reply: string) => void
@@ -90,9 +92,11 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   pinnedArticles: [],
   settings: DEFAULT_SETTINGS,
   settingsLoading: true,
+  isModelSwitching: false,
   llmReachable: false,
   chromaDocCounts: {},
 
+  setIsModelSwitching: (val) => set({ isModelSwitching: val }),
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
   setReply: (reply) => set({ reply }),

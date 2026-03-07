@@ -31,6 +31,7 @@ export function ReplyPanel(): React.ReactElement {
   const setIsEditingReply = useSidebarStore((s) => s.setIsEditingReply)
   const setReply = useSidebarStore((s) => s.setReply)
   const replyRating = useSidebarStore((s) => s.replyRating)
+  const isModelSwitching = useSidebarStore((s) => s.isModelSwitching)
   const autoInsert = useSidebarStore((s) => s.settings.autoInsert)
   const updateSettings = useSidebarStore((s) => s.updateSettings)
 
@@ -81,12 +82,12 @@ export function ReplyPanel(): React.ReactElement {
         <ModelSelector />
         <button
           onClick={generate}
-          disabled={isGenerating || !ticketData}
+          disabled={isGenerating || isModelSwitching || !ticketData}
           className="primary-btn"
-          aria-label={autoInsert ? 'Generate and auto-insert AI reply' : 'Generate AI reply for this ticket'}
+          aria-label={isModelSwitching ? 'Model is switching' : autoInsert ? 'Generate and auto-insert AI reply' : 'Generate AI reply for this ticket'}
           aria-busy={isGenerating}
         >
-          {isGenerating ? 'Generating\u2026' : autoInsert ? 'Generate & Insert' : 'Generate Reply'}
+          {isModelSwitching ? 'Model switching\u2026' : isGenerating ? 'Generating\u2026' : autoInsert ? 'Generate & Insert' : 'Generate Reply'}
         </button>
         <label className="auto-insert-toggle">
           <input

@@ -162,6 +162,12 @@ export interface ToastMessage {
   }
 }
 
+/** Models endpoint response */
+export interface ModelsResponse {
+  models: string[]
+  current: string
+}
+
 /** KB article list response */
 export interface KBArticleListResponse {
   articles: KBArticleListItem[]

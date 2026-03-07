@@ -67,6 +67,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         embed_svc=app.state.embed_service,
     )
 
+    # --- Current LLM model tracking ---
+    app.state.current_llm_model = settings.default_model
+
     # --- LLM health probe ---
     app.state.llm_reachable = False
     try:

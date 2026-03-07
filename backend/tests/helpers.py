@@ -27,6 +27,8 @@ def setup_app_state(app: Any) -> None:
         app.state.llm_reachable = False
     if not hasattr(app.state, "embed_reachable"):
         app.state.embed_reachable = False
+    if not hasattr(app.state, "current_llm_model"):
+        app.state.current_llm_model = "qwen3.5:9b"
 
     app.state.llm_service = LLMService(client=mock_llm_client)
     app.state.embed_service = EmbedService(client=mock_embed_client)

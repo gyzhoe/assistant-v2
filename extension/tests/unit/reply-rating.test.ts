@@ -30,7 +30,7 @@ vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     submitFeedback: mockSubmitFeedback,
     deleteFeedback: mockDeleteFeedback,
-    models: vi.fn().mockResolvedValue(['qwen2.5:14b']),
+    models: vi.fn().mockResolvedValue({ models: ['qwen2.5:14b'], current: 'qwen2.5:14b' }),
     generate: vi.fn().mockResolvedValue({ reply: 'test', model: 'qwen2.5:14b' }),
     health: vi.fn().mockResolvedValue({ status: 'ok', llm_reachable: true, chroma_ready: true, chroma_doc_counts: {}, version: '1.0.0' }),
   },

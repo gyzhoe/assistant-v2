@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
 from app.config import settings
+from app.constants import MODEL_GGUF_FILES
+from app.models.request_models import SwitchModelRequest
 from app.services.audit import audit_log
 
 logger = logging.getLogger(__name__)
@@ -145,8 +147,10 @@ async def start_llm(request: Request) -> dict[str, str]:
 
     creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-    # Start LLM server
-    llm_model = _MODELS_DIR / "Qwen3.5-9B-Q4_K_M.gguf"
+    # Start LLM server — resolve GGUF from current model or default
+    current_display: str = getattr(request.app.state, "current_llm_model", settings.default_model)
+    gguf_name = MODEL_GGUF_FILES.get(current_display, MODEL_GGUF_FILES.get(settings.default_model, ""))
+    llm_model = _MODELS_DIR / gguf_name if gguf_name else _MODELS_DIR / "Qwen3.5-9B-Q4_K_M.gguf"
     subprocess.Popen(
         [
             llama_exe, "-m", str(llm_model),
@@ -191,3 +195,73 @@ async def stop_llm(request: Request) -> dict[str, str]:
     else:
         await asyncio.to_thread(subprocess.run, ["pkill", "-f", "llama-server"], check=False)
     return {"status": "stopping"}
+
+
+@router.post("/llm/switch", dependencies=[Depends(_require_token), Depends(_require_localhost)])
+async def switch_llm(request: Request, body: SwitchModelRequest) -> dict[str, str]:
+    """Switch the LLM model by restarting llama-server with a different GGUF."""
+    display_name = body.model
+
+    # Check if already loaded
+    current: str = getattr(request.app.state, "current_llm_model", settings.default_model)
+    if display_name == current:
+        return {"status": "already_loaded", "model": current}
+
+    # Resolve GGUF filename
+    gguf_name = MODEL_GGUF_FILES.get(display_name)
+    if not gguf_name:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {display_name}")
+    gguf_path = _MODELS_DIR / gguf_name
+    if not gguf_path.is_file():
+        raise HTTPException(status_code=404, detail=f"Model file not found: {gguf_name}")
+
+    # Kill current llama-server (LLM only — leave embed server running)
+    if sys.platform == "win32":
+        await asyncio.to_thread(
+            subprocess.run,
+            ["taskkill", "/IM", "llama-server.exe", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    else:
+        await asyncio.to_thread(subprocess.run, ["pkill", "-f", "llama-server"], check=False)
+
+    # Brief pause to let the port free up
+    await asyncio.sleep(0.5)
+
+    # Start llama-server with the new model
+    llama_exe = str(_BUNDLED_LLAMA_SERVER) if _BUNDLED_LLAMA_SERVER.exists() else "llama-server"
+    creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    subprocess.Popen(
+        [
+            llama_exe, "-m", str(gguf_path),
+            "--port", "11435",
+            "--n-gpu-layers", "-1",
+            "--ctx-size", "8192",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creation_flags,
+    )
+
+    # Also restart embed server (it was killed too on Windows taskkill)
+    embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.f16.gguf"
+    if embed_model.is_file():
+        subprocess.Popen(
+            [
+                llama_exe, "-m", str(embed_model),
+                "--port", "11436",
+                "--embedding",
+                "--n-gpu-layers", "-1",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creation_flags,
+        )
+
+    request.app.state.current_llm_model = display_name
+    logger.info("Switched LLM model to %s (%s)", display_name, gguf_name)
+
+    return {"status": "switching", "model": display_name}

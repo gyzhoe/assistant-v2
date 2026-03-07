@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     chroma_path: str = "./chroma_data"
     cors_origin: str = "chrome-extension://placeholder"
     default_model: str = "qwen3.5:9b"
-    version: str = "1.14.2"
+    version: str = "2.0.0"
     prompt_template_path: str | None = None
 
     # Enterprise security
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     llm_top_p: float = 0.9
     llm_top_k: int = 40
     llm_repeat_penalty: float = 1.1
-    llm_num_predict: int = 300
+    llm_num_predict: int = 450
 
     # RAG minimum similarity threshold — docs below this score are noise
     rag_min_similarity: float = 0.35

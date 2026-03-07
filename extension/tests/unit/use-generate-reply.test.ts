@@ -32,7 +32,7 @@ const mockGenerate = vi.fn()
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     generate: (...args: unknown[]) => mockGenerate(...args),
-    models: vi.fn().mockResolvedValue(['qwen3.5:9b']),
+    models: vi.fn().mockResolvedValue({ models: ['qwen3.5:9b'], current: 'qwen3.5:9b' }),
     health: vi.fn().mockResolvedValue({ status: 'ok' }),
   },
   ApiError: class ApiError extends Error {
