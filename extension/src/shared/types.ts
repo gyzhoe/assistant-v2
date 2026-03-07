@@ -195,3 +195,31 @@ export interface KBArticleListResponse {
   page: number
   page_size: number
 }
+
+/** SSE event: RAG context documents (first event) */
+export interface SSEMetaEvent {
+  type: 'meta'
+  context_docs: ContextDoc[]
+}
+
+/** SSE event: single token */
+export interface SSETokenEvent {
+  type: 'token'
+  content: string
+}
+
+/** SSE event: stream complete */
+export interface SSEDoneEvent {
+  type: 'done'
+  latency_ms: number
+}
+
+/** SSE event: error mid-stream */
+export interface SSEErrorEvent {
+  type: 'error'
+  error_code: string
+  message: string
+}
+
+/** Discriminated union of all SSE events */
+export type SSEEvent = SSEMetaEvent | SSETokenEvent | SSEDoneEvent | SSEErrorEvent

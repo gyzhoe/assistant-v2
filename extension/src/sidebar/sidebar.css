@@ -1105,6 +1105,39 @@ body {
   background: var(--error);
 }
 
+/* ── Streaming cursor ─────────────────────────────────────────────── */
+/* 0.8s blink matches standard text cursor rate, intentionally slower than the 120ms UI transition standard */
+
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-cursor {
+    animation: none;
+  }
+}
+
+/* ── Stream error inline ──────────────────────────────────────────── */
+
+.stream-error-inline {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--error);
+  border: 1px solid color-mix(in srgb, var(--error-text) 30%, transparent);
+}
+
 /* ── Draft panel (editable reply) ──────────────────────────────────── */
 
 .draft-panel {
