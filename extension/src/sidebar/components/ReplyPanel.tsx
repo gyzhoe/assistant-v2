@@ -150,24 +150,19 @@ export function ReplyPanel(): React.ReactElement {
             >
               {reply}<span className="streaming-cursor" aria-hidden="true" />
             </div>
+            {/* InsertButton self-disables via its own isGenerating check */}
             <InsertButton />
           </div>
         )}
 
-        {!isGenerating && !reply && !generateError && (
+        {!isGenerating && !reply && (
           <div className="reply-box">
             <span className="reply-placeholder">
               Your generated reply will appear here.
             </span>
-            <span className="reply-hint">Press Alt+Shift+H to toggle sidebar</span>
-          </div>
-        )}
-
-        {!isGenerating && !reply && generateError && (
-          <div className="reply-box">
-            <span className="reply-placeholder">
-              Your generated reply will appear here.
-            </span>
+            {!generateError && (
+              <span className="reply-hint">Press Alt+Shift+H to toggle sidebar</span>
+            )}
           </div>
         )}
 

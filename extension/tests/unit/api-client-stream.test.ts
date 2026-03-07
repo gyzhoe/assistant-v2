@@ -40,7 +40,7 @@ const baseRequest = {
   status: 'Open',
   model: 'qwen3.5:9b',
   max_context_docs: 5,
-  stream: false,
+  stream: true,
   include_web_context: true,
   prompt_suffix: '',
   custom_fields: {},

@@ -21,8 +21,9 @@ export function useGenerateReply() {
   const saveReplyForTicket = useSidebarStore((s) => s.saveReplyForTicket)
   const { settings } = useSettings()
 
-  // Ref-based token accumulation for performance (no setState per token)
+  // Ref-based token accumulation — React state synced via RAF throttle (not per token)
   const replyRef = useRef('')
+  const rafRef = useRef(0)
 
   const generate = useCallback(async () => {
     if (!ticketData) return
@@ -36,6 +37,7 @@ export function useGenerateReply() {
     setIsEditingReply(false)
     setReplyRating(null)
     replyRef.current = ''
+    cancelAnimationFrame(rafRef.current)
 
     let contextDocs: ContextDoc[] = []
     let latencyMs = 0
@@ -74,10 +76,22 @@ export function useGenerateReply() {
             break
           case 'token':
             replyRef.current += event.content
-            setReply(replyRef.current)
+            // RAF throttle: batch token updates to display refresh rate (~16ms)
+            cancelAnimationFrame(rafRef.current)
+            rafRef.current = requestAnimationFrame(() => {
+              setReply(replyRef.current)
+            })
             break
           case 'error':
-            // Preserve partial text and show inline error
+            // Flush pending RAF, preserve partial text, and show inline error
+            cancelAnimationFrame(rafRef.current)
+            setReply(replyRef.current)
+            setLastResponse({
+              reply: replyRef.current,
+              model_used: selectedModel,
+              context_docs: contextDocs,
+              latency_ms: 0,
+            })
             setGenerateError(event.message)
             debugError('SSE error:', event.error_code, event.message)
             return
@@ -88,7 +102,10 @@ export function useGenerateReply() {
         }
       }
 
+      // Flush any pending RAF to ensure final state is synced
+      cancelAnimationFrame(rafRef.current)
       const finalReply = replyRef.current
+      setReply(finalReply)
       setLastResponse({
         reply: finalReply,
         model_used: selectedModel,

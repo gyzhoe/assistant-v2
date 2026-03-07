@@ -1106,6 +1106,7 @@ body {
 }
 
 /* ── Streaming cursor ─────────────────────────────────────────────── */
+/* 0.8s blink matches standard text cursor rate, intentionally slower than the 120ms UI transition standard */
 
 .streaming-cursor {
   display: inline-block;
