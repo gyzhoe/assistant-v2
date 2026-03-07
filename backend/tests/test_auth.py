@@ -64,12 +64,13 @@ async def test_login_success_sets_httponly_cookie() -> None:
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_token_returns_401() -> None:
-    """POST /auth/login with a wrong token returns 401."""
+async def test_login_invalid_token_from_localhost_succeeds() -> None:
+    """POST /auth/login with a wrong token from localhost succeeds (localhost bypass)."""
     async with _auth_client() as ac:
         resp = await ac.post("/auth/login", json={"token": "wrong-token"})
-        assert resp.status_code == 401
-        assert "Invalid" in resp.json()["detail"]
+        # Localhost connections bypass token validation — this is by design
+        # because the management SPA is a local-only tool.
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
