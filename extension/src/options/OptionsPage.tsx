@@ -4,6 +4,28 @@ import { apiClient, sendNativeCommand } from '../lib/api-client'
 import type { AppSettings, ModelDownloadStatus, ModelInfo, SelectorConfig } from '../shared/types'
 import { STORAGE_KEY_SECRETS, DEFAULT_SELECTORS } from '../shared/constants'
 
+/** Fallback model list shown when the backend is unreachable (e.g. fresh install). */
+const FALLBACK_MODEL_INFO: Record<string, ModelInfo> = {
+  'Qwen3.5 9B (Q4)': {
+    downloaded: false,
+    size_bytes: null,
+    description: '~5.3 GB — fast general-purpose LLM',
+    gguf_name: 'Qwen3.5-9B-Q4_K_M.gguf',
+  },
+  'Nomic Embed Text v1.5': {
+    downloaded: false,
+    size_bytes: null,
+    description: '~262 MB — text embedding model (required)',
+    gguf_name: 'nomic-embed-text-v1.5.f16.gguf',
+  },
+  'Qwen3 14B (Q4)': {
+    downloaded: false,
+    size_bytes: null,
+    description: '~9 GB — larger model, better language control (optional)',
+    gguf_name: 'Qwen3-14B-Q4_K_M.gguf',
+  },
+}
+
 const SELECTOR_FIELDS: { key: keyof SelectorConfig; label: string }[] = [
   { key: 'subject', label: 'Subject' },
   { key: 'description', label: 'Description' },
@@ -19,6 +41,7 @@ export default function OptionsPage(): React.ReactElement {
   const [isSaving, setIsSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const [models, setModels] = useState<string[]>([])
+  const [backendReachable, setBackendReachable] = useState(true)
   const [selectorsExpanded, setSelectorsExpanded] = useState(false)
   const [autoDetectMsg, setAutoDetectMsg] = useState('')
   const [isDetecting, setIsDetecting] = useState(false)
@@ -42,7 +65,12 @@ export default function OptionsPage(): React.ReactElement {
     apiClient.models().then((data) => {
       setModels(data.models)
       if (data.model_info) setModelInfo(data.model_info)
-    }).catch(() => {})
+    }).catch(() => {
+      // Backend unreachable — show fallback model list so users can see
+      // what models are available even before starting the backend.
+      setBackendReachable(false)
+      setModelInfo(FALLBACK_MODEL_INFO)
+    })
     chrome.storage.local.get(STORAGE_KEY_SECRETS, (result) => {
       const secrets = result[STORAGE_KEY_SECRETS] as { apiToken?: string } | undefined
       const token = secrets?.apiToken ?? ''
@@ -343,6 +371,12 @@ export default function OptionsPage(): React.ReactElement {
             <span className="options-section-label">LLM Models</span>
           </div>
 
+          {!backendReachable && (
+            <p className="options-hint" style={{ color: '#c57600', fontWeight: 500, marginBottom: '0.5rem' }}>
+              Backend is not running. Start the backend from the sidebar, then refresh this page to download models.
+            </p>
+          )}
+
           <div className="model-list">
             {Object.entries(modelInfo).map(([name, info]) => (
               <div key={name} className="model-card">
@@ -357,7 +391,7 @@ export default function OptionsPage(): React.ReactElement {
                     type="button"
                     className="model-status-badge model-status-badge--download"
                     onClick={() => handleDownload([info.gguf_name])}
-                    disabled={downloadStatus?.downloading === true}
+                    disabled={downloadStatus?.downloading === true || !backendReachable}
                   >
                     Download
                   </button>

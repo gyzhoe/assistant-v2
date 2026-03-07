@@ -285,14 +285,17 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
         schedulePoll()
         return
       }
-      if (attempts >= maxAttempts) {
+      // Keep 'starting' status during startup polling — checkHealth sets 'offline'
+      // on failure which would briefly flash the Start button before the next attempt.
+      if (attempts < maxAttempts) {
+        setStatus('starting')
+        setStartingDetail(attempts >= 3 ? 'Waiting for backend to respond\u2026' : 'Starting backend server\u2026')
+        setTimeout(pollStartup, POLL_FAST_MS)
+      } else {
         setStartingDetail('')
         actionInFlightRef.current = false
         schedulePoll()
-        return
       }
-      setStartingDetail(attempts >= 3 ? 'Waiting for backend to respond\u2026' : 'Starting backend server\u2026')
-      setTimeout(pollStartup, POLL_FAST_MS)
     }
     setTimeout(pollStartup, 2000)
   }

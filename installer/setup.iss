@@ -35,6 +35,8 @@ OutputBaseFilename=AIHelpdeskAssistant-Online-Setup-{#MyAppVersion}
 Compression=lzma2/fast
 SolidCompression=no
 DiskSpanning=no
+CloseApplications=force
+CloseApplicationsFilter=*.exe,*.dll
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -419,14 +421,24 @@ begin
     'Start-Sleep -Seconds 2"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Kill backend process listening on port 8765 (covers manual starts)
+  // Kill processes on all ports used by the app (backend + llama-server instances)
+  // This catches processes regardless of where they were started from
   Exec('powershell.exe',
     '-ExecutionPolicy Bypass -Command "' +
-    'try { $c = Get-NetTCPConnection -LocalPort 8765 -State Listen -EA SilentlyContinue | Select -First 1; ' +
-    'if ($c) { Stop-Process -Id $c.OwningProcess -Force -EA SilentlyContinue } } catch {}"',
+    'foreach ($port in @(8765, 11435, 11436)) { ' +
+    '  try { ' +
+    '    $conns = Get-NetTCPConnection -LocalPort $port -State Listen -EA SilentlyContinue; ' +
+    '    foreach ($c in $conns) { ' +
+    '      $p = Get-Process -Id $c.OwningProcess -EA SilentlyContinue; ' +
+    '      if ($p) { Stop-Process -Id $p.Id -Force -EA SilentlyContinue } ' +
+    '    } ' +
+    '  } catch {} ' +
+    '}; ' +
+    'Start-Sleep -Seconds 2"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  // Kill any Python processes running from the install directory
+  // Kill any Python/pythonw processes running from the install directory
+  // (catches venv processes, model download scripts, etc.)
   Exec('powershell.exe',
     '-ExecutionPolicy Bypass -Command "' +
     'Get-CimInstance Win32_Process | ' +
