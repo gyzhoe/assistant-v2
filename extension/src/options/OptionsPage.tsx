@@ -6,22 +6,16 @@ import { STORAGE_KEY_SECRETS, DEFAULT_SELECTORS } from '../shared/constants'
 
 /** Fallback model list shown when the backend is unreachable (e.g. fresh install). */
 const FALLBACK_MODEL_INFO: Record<string, ModelInfo> = {
-  'Qwen3.5 9B (Q4)': {
+  'qwen3.5:9b': {
     downloaded: false,
     size_bytes: null,
-    description: '~5.3 GB — fast general-purpose LLM',
+    description: '~5.3 GB',
     gguf_name: 'Qwen3.5-9B-Q4_K_M.gguf',
   },
-  'Nomic Embed Text v1.5': {
+  'qwen3:14b': {
     downloaded: false,
     size_bytes: null,
-    description: '~262 MB — text embedding model (required)',
-    gguf_name: 'nomic-embed-text-v1.5.f16.gguf',
-  },
-  'Qwen3 14B (Q4)': {
-    downloaded: false,
-    size_bytes: null,
-    description: '~9 GB — larger model, better language control (optional)',
+    description: '~9 GB (optional, better language control)',
     gguf_name: 'Qwen3-14B-Q4_K_M.gguf',
   },
 }
@@ -172,6 +166,7 @@ export default function OptionsPage(): React.ReactElement {
     apiClient.models().then((data) => {
       setModels(data.models)
       if (data.model_info) setModelInfo(data.model_info)
+      setBackendReachable(true)
     }).catch(() => {})
   }
 
