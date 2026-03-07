@@ -35,7 +35,7 @@ export default function OptionsPage(): React.ReactElement {
       setSettings(s)
       initialSettingsRef.current = JSON.stringify(s)
     })
-    apiClient.models().then(setModels).catch(() => {})
+    apiClient.models().then((data) => setModels(data.models)).catch(() => {})
     chrome.storage.local.get(STORAGE_KEY_SECRETS, (result) => {
       const secrets = result[STORAGE_KEY_SECRETS] as { apiToken?: string } | undefined
       const token = secrets?.apiToken ?? ''
@@ -230,7 +230,7 @@ export default function OptionsPage(): React.ReactElement {
             ))}
           </select>
           <p className="options-hint">
-            Ollama model used for reply generation. Fetch available models by visiting the backend health endpoint.
+            LLM model used for reply generation. Fetch available models by visiting the backend health endpoint.
           </p>
         </div>
 

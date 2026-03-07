@@ -5,16 +5,46 @@ $allGood = $true
 
 Write-Host "=== AI Helpdesk Assistant - Health Check ===" -ForegroundColor Cyan
 
-# Check Ollama
-Write-Host "`n[Ollama]" -ForegroundColor White
+# Check LLM Server
+Write-Host "`n[LLM Server]" -ForegroundColor White
 try {
-    $r = Invoke-WebRequest -Uri "http://127.0.0.1:11435/api/tags" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-    $models = ($r.Content | ConvertFrom-Json).models.name
-    Write-Host "  Status: Running" -ForegroundColor Green
-    Write-Host "  Models: $($models -join ', ')" -ForegroundColor Gray
+    $r = Invoke-WebRequest -Uri "http://127.0.0.1:11435/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+    $data = $r.Content | ConvertFrom-Json
+    if ($data.status -eq "ok") {
+        Write-Host "  Status: Running and ready (port 11435)" -ForegroundColor Green
+    } else {
+        Write-Host "  Status: Running but loading model (port 11435)" -ForegroundColor Yellow
+    }
 } catch {
-    Write-Host "  Status: NOT RUNNING" -ForegroundColor Red
-    $allGood = $false
+    $statusCode = $null
+    if ($_.Exception.Response) { $statusCode = [int]$_.Exception.Response.StatusCode }
+    if ($statusCode -eq 503) {
+        Write-Host "  Status: Running but model still loading (port 11435)" -ForegroundColor Yellow
+    } else {
+        Write-Host "  Status: NOT RUNNING" -ForegroundColor Red
+        $allGood = $false
+    }
+}
+
+# Check Embed Server
+Write-Host "`n[Embed Server]" -ForegroundColor White
+try {
+    $r = Invoke-WebRequest -Uri "http://127.0.0.1:11436/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+    $data = $r.Content | ConvertFrom-Json
+    if ($data.status -eq "ok") {
+        Write-Host "  Status: Running and ready (port 11436)" -ForegroundColor Green
+    } else {
+        Write-Host "  Status: Running but loading model (port 11436)" -ForegroundColor Yellow
+    }
+} catch {
+    $statusCode = $null
+    if ($_.Exception.Response) { $statusCode = [int]$_.Exception.Response.StatusCode }
+    if ($statusCode -eq 503) {
+        Write-Host "  Status: Running but model still loading (port 11436)" -ForegroundColor Yellow
+    } else {
+        Write-Host "  Status: NOT RUNNING" -ForegroundColor Red
+        $allGood = $false
+    }
 }
 
 # Check Backend
@@ -23,7 +53,7 @@ try {
     $r = Invoke-WebRequest -Uri "http://127.0.0.1:8765/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     Write-Host "  Status: Running" -ForegroundColor Green
     $data = $r.Content | ConvertFrom-Json
-    Write-Host "  Ollama: $(if ($data.ollama_reachable) { 'reachable' } else { 'NOT reachable' })" -ForegroundColor Gray
+    Write-Host "  LLM: $(if ($data.llm_reachable) { 'reachable' } else { 'NOT reachable' })" -ForegroundColor Gray
     Write-Host "  ChromaDB: $(if ($data.chroma_ready) { 'ready' } else { 'not ready' })" -ForegroundColor Gray
 } catch {
     Write-Host "  Status: NOT RUNNING" -ForegroundColor Red

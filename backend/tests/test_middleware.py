@@ -14,7 +14,7 @@ async def token_client() -> AsyncClient:
     with patch("app.config.settings.api_token", "test-secret"):
         token_app = create_app()
         token_app.state.chroma_client = MagicMock()
-        token_app.state.ollama_reachable = False
+        token_app.state.llm_reachable = False
         setup_app_state(token_app)
         async with AsyncClient(
             transport=ASGITransport(app=token_app),

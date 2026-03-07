@@ -51,36 +51,62 @@ jobs:
         uses: actions/cache@v4
         with:
           path: installer/deps
-          key: installer-deps-ollama-v0.17.6-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
+          key: installer-deps-llama-b8215-cuda124-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
 
-      - name: Download Ollama standalone
+      - name: Download llama-server (llama.cpp CUDA 12.4)
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # Ollama v0.17.6 standalone binary — pinned 2026-03-05
-          # SHA256 sourced from: https://github.com/ollama/ollama/releases/download/v0.17.6/sha256sum.txt
-          $ollamaVersion = "v0.17.6"
-          $ollamaUrl = "https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip"
-          $ollamaSha256 = "170d8856f597d710fa31c8e8935eba798520f47afd3afdf61eb01cfe221b0375"
+          # llama.cpp b8215 CUDA 12.4 Windows x64 — optimised for NVIDIA GPUs
+          # CUDA 12.4 supports Pascal (GTX 10xx) through current-gen GPUs.
+          # CUDA 13 drops Pascal, so we pin to 12.4.
+          $llamaTag = "b8215"
+          $llamaUrl = "https://github.com/ggml-org/llama.cpp/releases/download/${llamaTag}/llama-${llamaTag}-bin-win-cuda-12.4-x64.zip"
+          $cudartUrl = "https://github.com/ggml-org/llama.cpp/releases/download/${llamaTag}/cudart-llama-bin-win-cuda-12.4-x64.zip"
 
           New-Item -ItemType Directory -Force -Path installer/deps | Out-Null
-          Write-Host "Downloading Ollama ${ollamaVersion} standalone..."
-          Invoke-WebRequest -Uri $ollamaUrl -OutFile "installer/deps/ollama.zip"
 
-          $actual = (Get-FileHash -Path "installer/deps/ollama.zip" -Algorithm SHA256).Hash.ToLower()
-          if ($actual -ne $ollamaSha256) {
-            Write-Error "Ollama SHA256 mismatch! Expected: $ollamaSha256 | Got: $actual"
+          # Download llama-server CUDA build
+          Write-Host "Downloading llama-server ${llamaTag} CUDA 12.4..."
+          Invoke-WebRequest -Uri $llamaUrl -OutFile "installer/deps/llama.zip"
+
+          # Download CUDA runtime DLLs (cublas, cudart)
+          Write-Host "Downloading CUDA 12.4 runtime..."
+          Invoke-WebRequest -Uri $cudartUrl -OutFile "installer/deps/cudart.zip"
+
+          Write-Host "Extracting..."
+          Expand-Archive -Path "installer/deps/llama.zip" -DestinationPath "installer/deps/llama-extract" -Force
+          Expand-Archive -Path "installer/deps/cudart.zip" -DestinationPath "installer/deps/cudart-extract" -Force
+
+          New-Item -ItemType Directory -Force -Path installer/deps/llama-server | Out-Null
+
+          # Copy llama-server.exe and its DLLs
+          $serverExe = Get-ChildItem -Path "installer/deps/llama-extract" -Recurse -Filter "llama-server.exe" | Select-Object -First 1
+          if (-not $serverExe) {
+            Write-Error "llama-server.exe not found in archive"
             exit 1
           }
-          Write-Host "Ollama SHA256 verified OK"
+          Copy-Item $serverExe.FullName "installer/deps/llama-server/llama-server.exe"
+          $binDir = $serverExe.DirectoryName
+          Get-ChildItem -Path $binDir -Filter "*.dll" | ForEach-Object {
+            Copy-Item $_.FullName "installer/deps/llama-server/$($_.Name)"
+          }
 
-          # Extract full distribution (ollama.exe + lib/ollama/ with CUDA/CPU runners)
-          # Everything must live inside {app}\tools\ for AppLocker compatibility
-          Expand-Archive -Path "installer/deps/ollama.zip" -DestinationPath "installer/deps/ollama" -Force
-          Remove-Item "installer/deps/ollama.zip" -Force
-          $fileCount = (Get-ChildItem -Path "installer/deps/ollama" -Recurse -File).Count
-          $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/ollama" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
-          Write-Host "Ollama distribution: $fileCount files, $totalSize MB total"
+          # Copy CUDA runtime DLLs (cublas64_12.dll, cublasLt64_12.dll, cudart64_12.dll)
+          $cudartDll = Get-ChildItem -Path "installer/deps/cudart-extract" -Recurse -Filter "cublas64_12.dll" | Select-Object -First 1
+          if ($cudartDll) {
+            Get-ChildItem -Path $cudartDll.DirectoryName -Filter "*.dll" | ForEach-Object {
+              Copy-Item $_.FullName "installer/deps/llama-server/$($_.Name)" -Force
+            }
+          } else {
+            Write-Error "CUDA runtime DLLs not found in cudart archive"
+            exit 1
+          }
+
+          Remove-Item "installer/deps/llama.zip", "installer/deps/cudart.zip", "installer/deps/llama-extract", "installer/deps/cudart-extract" -Recurse -Force
+          $fileCount = (Get-ChildItem -Path "installer/deps/llama-server" -Recurse -File).Count
+          $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/llama-server" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
+          Write-Host "llama-server CUDA 12.4 distribution: $fileCount files, $totalSize MB total"
       - name: Download uv standalone
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
@@ -244,17 +270,18 @@ jobs:
             ## AI Helpdesk Assistant ${{ github.ref_name }}
 
             ### Downloads
-            - **`AIHelpdeskAssistant-Setup-*.exe`** — Full Windows installer (Ollama + backend + extension)
+            - **`AIHelpdeskAssistant-Setup-*.exe`** — Full Windows installer (llama-server + backend + extension)
             - **`assistant-extension-*.zip`** — Standalone Edge extension only
 
             ### Installation
             1. Download and run the `.exe` installer
             2. Follow the wizard — all defaults are fine
             3. Load the extension in Edge: `edge://extensions` → Load unpacked → select the extension folder
-            4. Pull models via Start Menu → Setup LLM Models
+            4. Download models via Start Menu → Setup LLM Models
 
             ### Manual Setup
-            1. Install [Ollama](https://ollama.com) and pull models: `ollama pull qwen3.5:9b && ollama pull nomic-embed-text`
-            2. Install [uv](https://docs.astral.sh/uv/): `pip install uv`
-            3. Clone the repo and run: `cd backend && uv sync && uv run uvicorn app.main:app --port 8765`
-            4. Extract the extension zip and load unpacked in Edge
+            1. Download llama-server from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
+            2. Download GGUF models from HuggingFace (qwen3.5-9b, nomic-embed-text-v1.5)
+            3. Install [uv](https://docs.astral.sh/uv/): `pip install uv`
+            4. Clone the repo and run: `cd backend && uv sync && uv run uvicorn app.main:app --port 8765`
+            5. Extract the extension zip and load unpacked in Edge

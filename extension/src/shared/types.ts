@@ -1,3 +1,13 @@
+/** A single note from the WHD ticket Notes section */
+export interface NoteData {
+  author: string
+  text: string
+  type: 'client' | 'tech_visible' | 'tech_internal'
+  date: string
+  noteId: string
+  timeSpent: string
+}
+
 /** Ticket data extracted from the WHD DOM */
 export interface TicketData {
   subject: string
@@ -7,6 +17,7 @@ export interface TicketData {
   status: string
   ticketUrl: string
   customFields: Record<string, string>
+  notes: NoteData[]
 }
 
 /** Settings persisted to chrome.storage.sync */
@@ -59,6 +70,14 @@ export interface GenerateRequest {
   prompt_suffix: string
   custom_fields: Record<string, string>
   pinned_article_ids?: string[]
+  notes?: Array<{
+    author: string
+    text: string
+    type: 'client' | 'tech_visible' | 'tech_internal'
+    date: string
+    note_id: string
+    time_spent: string
+  }>
 }
 
 /** Single retrieved context document */
@@ -80,7 +99,7 @@ export interface GenerateResponse {
 /** Health check response */
 export interface HealthResponse {
   status: 'ok' | 'degraded'
-  ollama_reachable: boolean
+  llm_reachable: boolean
   chroma_ready: boolean
   chroma_doc_counts: Record<string, number>
   version: string
@@ -141,6 +160,12 @@ export interface ToastMessage {
     label: string
     onClick: () => void
   }
+}
+
+/** Models endpoint response */
+export interface ModelsResponse {
+  models: string[]
+  current: string
 }
 
 /** KB article list response */

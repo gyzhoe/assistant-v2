@@ -25,7 +25,7 @@ def _setup_app_state(app: object) -> None:
     mock_client = MagicMock()
     mock_sync_client = MagicMock()
     app.state.chroma_client = MagicMock()  # type: ignore[union-attr]
-    app.state.ollama_reachable = False  # type: ignore[union-attr]
+    app.state.llm_reachable = False  # type: ignore[union-attr]
     app.state.llm_service = LLMService(client=mock_client)  # type: ignore[union-attr]
     app.state.embed_service = EmbedService(client=mock_client)  # type: ignore[union-attr]
     app.state.sync_embed_service = EmbedService(client=mock_sync_client)  # type: ignore[union-attr]
@@ -153,12 +153,12 @@ async def test_ingest_url_too_large_returns_413() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ollama down -> 503
+# Embed server down -> 503
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_ingest_url_ollama_down_returns_503() -> None:
+async def test_ingest_url_embed_down_returns_503() -> None:
     mock_chunks = [("id1", "chunk1", {"title": "T", "source_url": "u", "article_id": "a", "source_type": "url"})]
 
     fresh_app = create_app()
@@ -174,7 +174,7 @@ async def test_ingest_url_ollama_down_returns_503() -> None:
             patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls,
         ):
             mock_pipeline = MagicMock()
-            mock_pipeline.upsert_stream.side_effect = ConnectionError("Ollama down")
+            mock_pipeline.upsert_stream.side_effect = ConnectionError("Embed server down")
             mock_pipeline_cls.return_value = mock_pipeline
 
             resp = await ac.post(
@@ -183,7 +183,7 @@ async def test_ingest_url_ollama_down_returns_503() -> None:
             )
 
     assert resp.status_code == 503
-    assert "Ollama" in resp.json()["detail"]
+    assert "Embedding server" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

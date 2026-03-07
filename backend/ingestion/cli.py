@@ -31,7 +31,7 @@ def _make_pipeline() -> IngestionPipeline:
 
     chroma = chromadb.PersistentClient(path=settings.chroma_path)
     sync_client = httpx.Client(
-        base_url=settings.ollama_base_url, timeout=60.0,
+        base_url=settings.embed_base_url, timeout=60.0,
     )
     embed_svc = EmbedService(client=sync_client)
     return IngestionPipeline(chroma_client=chroma, embed_fn=embed_svc.embed_fn)

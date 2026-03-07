@@ -1,5 +1,20 @@
 """Shared constants for the AI Helpdesk Assistant backend."""
 
+# ── GGUF model mapping ──────────────────────────────────────────────────────
+# Display name <-> GGUF filename for bundled llama-server models.
+
+MODEL_DISPLAY_NAMES: dict[str, str] = {
+    "Qwen3.5-9B-Q4_K_M.gguf": "qwen3.5:9b",
+    "Qwen3-14B-Q4_K_M.gguf": "qwen3:14b",
+}
+"""Map GGUF filename → display name."""
+
+MODEL_GGUF_FILES: dict[str, str] = {v: k for k, v in MODEL_DISPLAY_NAMES.items()}
+"""Map display name → GGUF filename (reverse of MODEL_DISPLAY_NAMES)."""
+
+# Embed model filenames to exclude from LLM model listings.
+EMBED_MODEL_PREFIXES: tuple[str, ...] = ("nomic-embed-text",)
+
 # ── ChromaDB collection names ────────────────────────────────────────────────
 
 TICKET_COLLECTION = "whd_tickets"
@@ -15,19 +30,19 @@ COSINE_COLLECTION_META: dict[str, str] = {"hnsw:space": "cosine"}
 DEFAULT_CHUNK_MAX_TOKENS = 500
 DEFAULT_CHUNK_OVERLAP_TOKENS = 50
 
-# ── Ollama retry settings ────────────────────────────────────────────────────
+# ── LLM retry settings ───────────────────────────────────────────────────────
 
-OLLAMA_MAX_RETRIES = 2
-OLLAMA_RETRY_DELAY = 1.0
+LLM_MAX_RETRIES = 2
+LLM_RETRY_DELAY = 1.0
 
 
 # ── Custom exceptions ───────────────────────────────────────────────────────
 
 
-class OllamaModelError(RuntimeError):
-    """Ollama returned an HTTP error (e.g. model not found, bad request).
+class LLMModelError(RuntimeError):
+    """LLM server returned an HTTP error (e.g. model not found, bad request).
 
-    Distinct from ``ConnectionError`` which means Ollama is unreachable.
+    Distinct from ``ConnectionError`` which means the server is unreachable.
     Carries the HTTP status code for downstream error-code mapping.
     """
 

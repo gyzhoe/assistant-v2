@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from app.constants import (
     COSINE_COLLECTION_META,
     KB_COLLECTION,
-    OllamaModelError,
+    LLMModelError,
     parse_tags,
     serialize_tags,
 )
@@ -377,17 +377,17 @@ async def create_article(
 
         except HTTPException:
             raise
-        except OllamaModelError as exc:
-            logger.error("Ollama model error during article creation: %s", exc)
+        except LLMModelError as exc:
+            logger.error("LLM model error during article creation: %s", exc)
             raise HTTPException(
                 status_code=502,
                 detail={"message": str(exc), "error_code": "MODEL_ERROR"},
             ) from exc
         except ConnectionError as exc:
-            logger.error("Ollama unavailable during article creation: %s", exc)
+            logger.error("Embed server unavailable during article creation: %s", exc)
             raise HTTPException(
                 status_code=503,
-                detail="Embedding service (Ollama) is unavailable.",
+                detail="Embedding server is unavailable.",
             ) from exc
         except Exception as exc:
             logger.exception("Unexpected error during article creation")
@@ -484,17 +484,17 @@ async def update_article(
 
         except HTTPException:
             raise
-        except OllamaModelError as exc:
-            logger.error("Ollama model error during article update: %s", exc)
+        except LLMModelError as exc:
+            logger.error("LLM model error during article update: %s", exc)
             raise HTTPException(
                 status_code=502,
                 detail={"message": str(exc), "error_code": "MODEL_ERROR"},
             ) from exc
         except ConnectionError as exc:
-            logger.error("Ollama unavailable during article update: %s", exc)
+            logger.error("Embed server unavailable during article update: %s", exc)
             raise HTTPException(
                 status_code=503,
-                detail="Embedding service (Ollama) is unavailable.",
+                detail="Embedding server is unavailable.",
             ) from exc
         except Exception as exc:
             logger.exception("Unexpected error during article update")

@@ -32,7 +32,7 @@ def _fresh_client(app: object | None = None) -> AsyncClient:
     mock_client = MagicMock()
     mock_sync_client = MagicMock()
     fresh_app.state.chroma_client = MagicMock()  # type: ignore[union-attr]
-    fresh_app.state.ollama_reachable = False  # type: ignore[union-attr]
+    fresh_app.state.llm_reachable = False  # type: ignore[union-attr]
     fresh_app.state.llm_service = LLMService(client=mock_client)  # type: ignore[union-attr]
     fresh_app.state.embed_service = EmbedService(client=mock_client)  # type: ignore[union-attr]
     fresh_app.state.sync_embed_service = EmbedService(client=mock_sync_client)  # type: ignore[union-attr]
@@ -212,11 +212,11 @@ async def test_upload_path_traversal_sanitized() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_ollama_down_returns_503() -> None:
+async def test_upload_embed_down_returns_503() -> None:
     async with _fresh_client() as ac:
         with patch("app.routers.ingest.IngestionPipeline") as mock_pipeline_cls:
             mock_pipeline = MagicMock()
-            mock_pipeline.ingest_file.side_effect = ConnectionError("Ollama down")
+            mock_pipeline.ingest_file.side_effect = ConnectionError("Embed server down")
             mock_pipeline_cls.return_value = mock_pipeline
 
             content = _json_file_bytes([{"id": "1", "subject": "A", "description": "B"}])
@@ -225,7 +225,7 @@ async def test_upload_ollama_down_returns_503() -> None:
                 files={"file": ("tickets.json", io.BytesIO(content), "application/json")},
             )
             assert resp.status_code == 503
-            assert "Ollama" in resp.json()["detail"]
+            assert "Embedding server" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_concurrent_upload_returns_409() -> None:
     mock_client = MagicMock()
     mock_sync_client = MagicMock()
     fresh_app.state.chroma_client = MagicMock()
-    fresh_app.state.ollama_reachable = False
+    fresh_app.state.llm_reachable = False
     fresh_app.state.llm_service = LLMService(client=mock_client)
     fresh_app.state.embed_service = EmbedService(client=mock_client)
     fresh_app.state.sync_embed_service = EmbedService(client=mock_sync_client)

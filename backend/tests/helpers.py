@@ -17,18 +17,23 @@ def setup_app_state(app: Any) -> None:
     Required because create_app() does not run the lifespan, so
     app.state attributes that routers depend on are not initialized.
     """
-    mock_client = MagicMock()
-    mock_sync_client = MagicMock()
+    mock_llm_client = MagicMock()
+    mock_embed_client = MagicMock()
+    mock_sync_embed_client = MagicMock()
 
     if not hasattr(app.state, "chroma_client"):
         app.state.chroma_client = MagicMock()
-    if not hasattr(app.state, "ollama_reachable"):
-        app.state.ollama_reachable = False
+    if not hasattr(app.state, "llm_reachable"):
+        app.state.llm_reachable = False
+    if not hasattr(app.state, "embed_reachable"):
+        app.state.embed_reachable = False
+    if not hasattr(app.state, "current_llm_model"):
+        app.state.current_llm_model = "qwen3.5:9b"
 
-    app.state.llm_service = LLMService(client=mock_client)
-    app.state.embed_service = EmbedService(client=mock_client)
-    app.state.sync_embed_service = EmbedService(client=mock_sync_client)
-    app.state.ms_docs_service = MicrosoftDocsService(client=mock_client)
+    app.state.llm_service = LLMService(client=mock_llm_client)
+    app.state.embed_service = EmbedService(client=mock_embed_client)
+    app.state.sync_embed_service = EmbedService(client=mock_sync_embed_client)
+    app.state.ms_docs_service = MicrosoftDocsService(client=mock_llm_client)
     app.state.rag_service = RAGService(
         chroma_client=app.state.chroma_client,
         embed_svc=app.state.embed_service,

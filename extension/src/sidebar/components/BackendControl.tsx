@@ -4,7 +4,6 @@ import { apiClient, sendNativeCommand } from '../../lib/api-client'
 import { isCorsProbablyBlocked } from '../../lib/cors-detect'
 import { ThemeToggle } from './ThemeToggle'
 import { GearIcon } from '../../shared/components/Icons'
-import { DEFAULT_MODEL } from '../../shared/constants'
 import type { AppSettings } from '../../shared/types'
 
 type BackendStatus = 'online' | 'offline' | 'cors_blocked' | 'checking' | 'stopping' | 'starting'
@@ -29,35 +28,31 @@ function nextOfflinePollMs(currentMs: number): number {
 
 function OnboardingCard({
   backendOk,
-  ollamaOk,
+  llmOk,
   modelOk,
   onDismiss,
 }: {
   backendOk: boolean
-  ollamaOk: boolean
+  llmOk: boolean
   modelOk: boolean
   onDismiss: () => void
 }) {
   const steps = [
     {
-      label: 'Install Ollama',
-      done: ollamaOk,
+      label: 'Start LLM server',
+      done: llmOk,
       hint: (
         <>
-          Download from{' '}
-          <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">
-            ollama.com
-          </a>
-          , then run it.
+          Start the LLM server via the installer or manually.
         </>
       ),
     },
     {
-      label: 'Pull a model',
+      label: 'Download models',
       done: modelOk,
       hint: (
         <>
-          Run <code>ollama pull {DEFAULT_MODEL}</code> in your terminal.
+          Download models via Start Menu &rarr; Setup LLM Models.
         </>
       ),
     },
@@ -96,8 +91,8 @@ function OnboardingCard({
 
 export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: BackendControlProps): React.ReactElement {
   const [status, setStatus] = useState<BackendStatus>('checking')
-  const [ollamaOk, setOllamaOk] = useState(false)
-  const [ollamaAction, setOllamaAction] = useState<'idle' | 'starting' | 'stopping'>('idle')
+  const [llmOk, setLlmOk] = useState(false)
+  const [llmAction, setLlmAction] = useState<'idle' | 'starting' | 'stopping'>('idle')
   const [version, setVersion] = useState('')
   const [nativeError, setNativeError] = useState('')
   const [startingDetail, setStartingDetail] = useState('')
@@ -111,7 +106,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const ticketData = useSidebarStore((s) => s.ticketData)
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
   const selectedModel = useSidebarStore((s) => s.selectedModel)
-  const setOllamaReachable = useSidebarStore((s) => s.setOllamaReachable)
+  const setLlmReachable = useSidebarStore((s) => s.setLlmReachable)
   const setChromaDocCounts = useSidebarStore((s) => s.setChromaDocCounts)
 
   // Load onboarding dismissed state
@@ -136,11 +131,11 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       const h = await apiClient.health()
       if (!mountedRef.current) return false
       setStatus('online')
-      setOllamaOk(h.ollama_reachable)
-      setOllamaReachable(h.ollama_reachable)
+      setLlmOk(h.llm_reachable)
+      setLlmReachable(h.llm_reachable)
       setChromaDocCounts(h.chroma_doc_counts ?? {})
       setVersion(h.version)
-      if (h.ollama_reachable) setOllamaAction('idle')
+      if (h.llm_reachable) setLlmAction('idle')
       return true
     } catch {
       if (!mountedRef.current) return false
@@ -148,12 +143,12 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       const corsBlocked = await isCorsProbablyBlocked()
       if (!mountedRef.current) return false
       setStatus(corsBlocked ? 'cors_blocked' : 'offline')
-      setOllamaOk(false)
-      setOllamaReachable(false)
+      setLlmOk(false)
+      setLlmReachable(false)
       setVersion('')
       return false
     }
-  }, [setOllamaReachable, setChromaDocCounts])
+  }, [setLlmReachable, setChromaDocCounts])
 
   const schedulePoll = useCallback((delayMs?: number) => {
     clearTimer()
@@ -210,7 +205,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const backendOk = status === 'online'
   const isCorsBlocked = status === 'cors_blocked'
   const modelOk = selectedModel.length > 0
-  const allServicesOk = backendOk && ollamaOk && modelOk
+  const allServicesOk = backendOk && llmOk && modelOk
 
   useEffect(() => {
     if (allServicesOk && !onboardingDismissed) {
@@ -228,7 +223,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   // Don't show during initial 'checking' phase to avoid a flash.
   // CORS blocked means backend is reachable — don't show onboarding.
   const showOnboarding =
-    status === 'offline' && !ollamaOk && !onboardingDismissed
+    status === 'offline' && !llmOk && !onboardingDismissed
 
   // --- Backend controls ---
 
@@ -246,7 +241,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     setTimeout(() => {
       if (!mountedRef.current) return
       setStatus('offline')
-      setOllamaOk(false)
+      setLlmOk(false)
       setVersion('')
       pollIntervalRef.current = POLL_BASE_MS
       actionInFlightRef.current = false
@@ -270,8 +265,8 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       return
     }
     // Show phase-specific status based on native host response
-    if (resp.ollama_started) {
-      setStartingDetail('Starting Ollama\u2026')
+    if (resp.llm_started) {
+      setStartingDetail('Starting LLM server\u2026')
       await new Promise((r) => setTimeout(r, 1500))
       if (!mountedRef.current) return
     }
@@ -302,17 +297,17 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     setTimeout(pollStartup, 2000)
   }
 
-  // --- Ollama controls ---
+  // --- LLM server controls ---
 
-  const handleStartOllama = async () => {
-    setOllamaAction('starting')
+  const handleStartLlm = async () => {
+    setLlmAction('starting')
     try {
-      await apiClient.ollamaStart()
+      await apiClient.llmStart()
     } catch {
-      const resp = await sendNativeCommand('start_ollama')
+      const resp = await sendNativeCommand('start_llm')
       if (!resp.ok) {
-        setNativeError(resp.error ?? 'Failed to start Ollama')
-        setOllamaAction('idle')
+        setNativeError(resp.error ?? 'Failed to start LLM server')
+        setLlmAction('idle')
         return
       }
     }
@@ -322,17 +317,17 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     }, 3000)
   }
 
-  const handleStopOllama = async () => {
-    setOllamaAction('stopping')
+  const handleStopLlm = async () => {
+    setLlmAction('stopping')
     // Native messaging (OS-level kill) first, HTTP fallback
-    const resp = await sendNativeCommand('stop_ollama')
+    const resp = await sendNativeCommand('stop_llm')
     if (!resp.ok) {
-      try { await apiClient.ollamaStop() } catch { /* ignore */ }
+      try { await apiClient.llmStop() } catch { /* ignore */ }
     }
     clearTimer()
     setTimeout(() => {
       if (mountedRef.current) {
-        setOllamaAction('idle')
+        setLlmAction('idle')
         checkHealth().finally(() => schedulePoll())
       }
     }, POLL_FAST_MS)
@@ -343,7 +338,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const readiness = [
     { label: 'Ticket detected', ok: Boolean(isTicketPage && ticketData) },
     { label: 'Backend connected', ok: backendOk },
-    { label: 'Ollama ready', ok: ollamaOk },
+    { label: 'LLM server ready', ok: llmOk },
     { label: 'Model selected', ok: modelOk },
   ]
 
@@ -398,7 +393,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
           {showOnboarding && (
             <OnboardingCard
               backendOk={backendOk}
-              ollamaOk={ollamaOk}
+              llmOk={llmOk}
               modelOk={modelOk}
               onDismiss={handleDismissOnboarding}
             />
@@ -424,16 +419,16 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
                 <button onClick={handleStopBackend} className="svc-btn danger" aria-label="Stop backend">Stop</button>
               </div>
               <div className="service-row">
-                <span className={`service-indicator ${ollamaOk ? 'ok' : 'error'}`} />
-                <span className="service-label">Ollama</span>
-                {ollamaOk && ollamaAction === 'idle' && (
-                  <button onClick={handleStopOllama} className="svc-btn danger" aria-label="Stop Ollama">Stop</button>
+                <span className={`service-indicator ${llmOk ? 'ok' : 'error'}`} />
+                <span className="service-label">LLM Server</span>
+                {llmOk && llmAction === 'idle' && (
+                  <button onClick={handleStopLlm} className="svc-btn danger" aria-label="Stop LLM server">Stop</button>
                 )}
-                {!ollamaOk && ollamaAction === 'idle' && (
-                  <button onClick={handleStartOllama} className="svc-btn success" aria-label="Start Ollama">Start</button>
+                {!llmOk && llmAction === 'idle' && (
+                  <button onClick={handleStartLlm} className="svc-btn success" aria-label="Start LLM server">Start</button>
                 )}
-                {ollamaAction === 'starting' && <span className="svc-action">Starting…</span>}
-                {ollamaAction === 'stopping' && <span className="svc-action">Stopping…</span>}
+                {llmAction === 'starting' && <span className="svc-action">Starting…</span>}
+                {llmAction === 'stopping' && <span className="svc-action">Stopping…</span>}
               </div>
             </>
           )}

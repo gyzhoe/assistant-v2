@@ -1,4 +1,4 @@
-# import-models.ps1 - Import bundled Ollama models (offline install)
+# import-models.ps1 - Import bundled GGUF model files (offline install)
 param(
     [string]$AppDir = (Split-Path -Parent $PSScriptRoot),
     [switch]$NonInteractive
@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "logging-utils.ps1")
 $logFile      = Initialize-LogFile  -AppDir $AppDir -LogName "import-models"
 $chainLogFile = Initialize-ChainLog -AppDir $AppDir
-Write-Log "=== Importing Ollama Models ===" "INFO"
+Write-Log "=== Importing GGUF Models ===" "INFO"
 Write-Log "Log file: $logFile" "INFO"
 Write-Log "AppDir: $AppDir" "INFO"
 Write-ChainLog -ScriptName "import-models.ps1" -Message "STARTED"
@@ -24,53 +24,47 @@ trap {
     exit 1
 }
 
-$bundledModels = Join-Path $AppDir "deps\ollama-models"
-$ollamaDir = Join-Path $env:USERPROFILE ".ollama\models"
+$bundledModels = Join-Path $AppDir "deps\models"
+$modelsDir = Join-Path $AppDir "models"
 
 if (-not (Test-Path $bundledModels)) {
     Write-Log "No bundled models found at $bundledModels" "INFO"
-    Write-Log "This is an online-only build — skipping offline model import." "INFO"
-    Write-Log "Models will be downloaded during first run via 'ollama pull'." "INFO"
+    Write-Log "This is an online-only build - skipping offline model import." "INFO"
+    Write-Log "Models will be downloaded during first run via 'Setup LLM Models'." "INFO"
     Write-ChainLog -ScriptName "import-models.ps1" -Message "SKIPPED - online-only build (no bundled models at $bundledModels)"
     exit 0
 }
 
 # Create target directory if it doesn't exist
-if (-not (Test-Path $ollamaDir)) {
-    New-Item -ItemType Directory -Path $ollamaDir -Force | Out-Null
+if (-not (Test-Path $modelsDir)) {
+    New-Item -ItemType Directory -Path $modelsDir -Force | Out-Null
 }
 
-# Copy blobs (model weights and configs)
-$blobsSrc = Join-Path $bundledModels "blobs"
-$blobsDst = Join-Path $ollamaDir "blobs"
-if (Test-Path $blobsSrc) {
-    Write-Log "Copying model blobs (~6.6 GB)... this may take a few minutes." "INFO"
-    if (-not (Test-Path $blobsDst)) {
-        New-Item -ItemType Directory -Path $blobsDst -Force | Out-Null
-    }
-    try {
-        Copy-Item -Path (Join-Path $blobsSrc "*") -Destination $blobsDst -Recurse -Force
-        Write-Log "Blobs copied." "INFO"
-    } catch {
-        Write-Log "ERROR copying blobs: $_" "ERROR"
-        throw
-    }
+# Copy GGUF files from bundled deps to models directory
+Write-Log "Copying GGUF model files..." "INFO"
+$ggufFiles = Get-ChildItem -Path $bundledModels -Filter "*.gguf" -File
+if ($ggufFiles.Count -eq 0) {
+    Write-Log "WARNING: No .gguf files found in $bundledModels" "WARN"
+    Write-Host "WARNING: No .gguf files found in bundled models directory." -ForegroundColor Yellow
+    Write-ChainLog -ScriptName "import-models.ps1" -Message "SKIPPED - no .gguf files found in $bundledModels"
+    exit 0
 }
 
-# Copy manifests (model registry metadata)
-$manifestsSrc = Join-Path $bundledModels "manifests"
-if (Test-Path $manifestsSrc) {
-    Write-Log "Copying model manifests..." "INFO"
+foreach ($f in $ggufFiles) {
+    $destPath = Join-Path $modelsDir $f.Name
+    $sizeMB = [math]::Round($f.Length / 1MB, 1)
+    Write-Log "Copying $($f.Name) ($sizeMB MB)..." "INFO"
+    Write-Host "Copying $($f.Name) ($sizeMB MB)..." -ForegroundColor Yellow
     try {
-        Copy-Item -Path $manifestsSrc -Destination $ollamaDir -Recurse -Force
-        Write-Log "Manifests copied." "INFO"
+        Copy-Item -Path $f.FullName -Destination $destPath -Force
+        Write-Log "Copied $($f.Name)" "INFO"
     } catch {
-        Write-Log "ERROR copying manifests: $_" "ERROR"
+        Write-Log "ERROR copying $($f.Name): $_" "ERROR"
         throw
     }
 }
 
 Write-Log "Model import complete!" "INFO"
-Write-Log "Imported models: qwen3.5:9b, nomic-embed-text" "INFO"
-Write-ChainLog -ScriptName "import-models.ps1" -Message "SUCCESS - imported qwen3.5:9b and nomic-embed-text"
+Write-Log "Imported $($ggufFiles.Count) model file(s)" "INFO"
+Write-ChainLog -ScriptName "import-models.ps1" -Message "SUCCESS - imported $($ggufFiles.Count) GGUF model file(s)"
 if (-not $NonInteractive) { Read-Host "Press Enter to close" }

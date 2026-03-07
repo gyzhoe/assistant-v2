@@ -42,7 +42,7 @@ class APITokenMiddleware:
     """
 
     EXEMPT_PATHS = {"/health", "/docs", "/openapi.json"}
-    EXEMPT_PREFIXES = ("/auth/",)
+    EXEMPT_PREFIXES = ("/auth/", "/manage")
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -223,7 +223,7 @@ class RateLimitMiddleware:
 class RequestSizeLimitMiddleware:
     """
     Rejects requests whose body exceeds max_bytes.
-    Prevents oversized payloads from being forwarded to Ollama.
+    Prevents oversized payloads from being forwarded to the LLM server.
     Default: 64 KB — sufficient for the largest reasonable ticket description.
     """
 

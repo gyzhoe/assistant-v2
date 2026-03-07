@@ -34,6 +34,7 @@ describe('SidebarHost', () => {
         status: 'Open',
         ticketUrl: 'http://helpdesk.local/ticket/1',
         customFields: {},
+        notes: [],
       }),
     }
 
@@ -89,6 +90,7 @@ describe('SidebarHost', () => {
           status: 'Closed',
           ticketUrl: 'http://helpdesk.local/ticket/2',
           customFields: {},
+          notes: [],
         }),
     }
 

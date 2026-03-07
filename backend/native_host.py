@@ -1,9 +1,9 @@
 """
 Native messaging host for AI Helpdesk Assistant.
 
-Allows the browser extension to start and stop the backend server and Ollama
-via OS-level process management. Communicates via Chrome/Edge native
-messaging protocol (4-byte length prefix + JSON over stdio).
+Allows the browser extension to start and stop the backend server and
+llama-server instances via OS-level process management. Communicates via
+Chrome/Edge native messaging protocol (4-byte length prefix + JSON over stdio).
 
 Registered via installer/scripts/register-native-host.ps1.
 """
@@ -17,8 +17,8 @@ import sys
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_DIR = os.path.dirname(BACKEND_DIR)
-OLLAMA_EXE = os.path.join(APP_DIR, "tools", "ollama.exe")
-OLLAMA_RUNNERS_DIR = os.path.join(APP_DIR, "tools", "lib", "ollama")
+LLAMA_SERVER_EXE = os.path.join(APP_DIR, "tools", "llama-server.exe")
+MODELS_DIR = os.path.join(APP_DIR, "models")
 LOG_FILE = os.path.join(BACKEND_DIR, "native_host.log")
 
 # subprocess.CREATE_NO_WINDOW only exists on Windows; use 0 on other platforms
@@ -74,14 +74,18 @@ def _is_port_listening(port: int) -> bool:
     return len(_find_pids_on_port(port)) > 0
 
 
-def _ollama_env() -> dict[str, str]:
-    """Build environment for Ollama with runners dir and custom port."""
-    env = os.environ.copy()
-    env["OLLAMA_HOST"] = "127.0.0.1:11435"
-    env["OLLAMA_VULKAN"] = "1"
-    if os.path.isdir(OLLAMA_RUNNERS_DIR):
-        env["OLLAMA_RUNNERS_DIR"] = OLLAMA_RUNNERS_DIR
-    return env
+def _kill_legacy_ollama() -> None:
+    """Kill leftover Ollama processes to avoid port conflicts on upgrade."""
+    for exe in ("ollama.exe", "ollama_llama_server.exe"):
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", exe, "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=_CREATION_FLAGS,
+            )
+        except Exception as e:
+            log(f"_kill_legacy_ollama: failed to kill {exe}: {e}")
 
 
 def start_backend() -> dict:
@@ -90,22 +94,13 @@ def start_backend() -> dict:
         log(f"venv not found at {venv_python}")
         return {"ok": False, "error": "Backend venv not found. Run setup first."}
 
-    # Start Ollama first if not already running
-    ollama_started = False
+    # Kill leftover Ollama processes to avoid port conflicts on upgrade
+    _kill_legacy_ollama()
+
+    # Start llama-server instances if not already running
+    llm_started = False
     if not _is_port_listening(11435):
-        cmd = [OLLAMA_EXE, "serve"] if os.path.exists(OLLAMA_EXE) else ["ollama", "serve"]
-        log(f"Ollama not running — starting: {cmd[0]}")
-        try:
-            subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=_CREATION_FLAGS,
-                env=_ollama_env(),
-            )
-            ollama_started = True
-        except Exception as e:
-            log(f"Warning: could not start Ollama: {e}")
+        llm_started = _start_llama_servers()
 
     log_out = os.path.join(BACKEND_DIR, "backend_stdout.log")
     log_err = os.path.join(BACKEND_DIR, "backend_stderr.log")
@@ -121,10 +116,54 @@ def start_backend() -> dict:
                 creationflags=_CREATION_FLAGS,
             )
         log(f"Started PID={proc.pid}")
-        return {"ok": True, "status": "starting", "pid": proc.pid, "ollama_started": ollama_started}
+        return {"ok": True, "status": "starting", "pid": proc.pid, "llm_started": llm_started}
     except Exception as e:
         log(f"Error starting backend: {e}")
         return {"ok": False, "error": str(e)}
+
+
+def _start_llama_servers() -> bool:
+    """Start both LLM and embed llama-server instances."""
+    llama_exe = LLAMA_SERVER_EXE if os.path.exists(LLAMA_SERVER_EXE) else "llama-server"
+    log(f"Starting llama-server instances: {llama_exe}")
+
+    logs_dir = os.path.join(APP_DIR, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    try:
+        # LLM server
+        llm_model = os.path.join(MODELS_DIR, "Qwen3.5-9B-Q4_K_M.gguf")
+        llm_log = open(os.path.join(logs_dir, "llm_server.log"), "w")  # noqa: SIM115
+        subprocess.Popen(
+            [
+                llama_exe, "-m", llm_model,
+                "--port", "11435",
+                "--n-gpu-layers", "-1",
+                "--ctx-size", "8192",
+            ],
+            stdout=llm_log,
+            stderr=llm_log,
+            creationflags=_CREATION_FLAGS,
+        )
+
+        # Embed server
+        embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.f16.gguf")
+        embed_log = open(os.path.join(logs_dir, "embed_server.log"), "w")  # noqa: SIM115
+        subprocess.Popen(
+            [
+                llama_exe, "-m", embed_model,
+                "--port", "11436",
+                "--embedding",
+                "--n-gpu-layers", "-1",
+            ],
+            stdout=embed_log,
+            stderr=embed_log,
+            creationflags=_CREATION_FLAGS,
+        )
+        return True
+    except Exception as e:
+        log(f"Warning: could not start llama-server: {e}")
+        return False
 
 
 def get_token() -> dict:
@@ -154,39 +193,32 @@ def get_token() -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def start_ollama() -> dict:
-    cmd = [OLLAMA_EXE, "serve"] if os.path.exists(OLLAMA_EXE) else ["ollama", "serve"]
-    log(f"Starting Ollama: {cmd[0]}")
+def start_llm() -> dict:
+    """Start llama-server instances."""
+    # Kill leftover Ollama processes to avoid port conflicts on upgrade
+    _kill_legacy_ollama()
+
+    ok = _start_llama_servers()
+    if ok:
+        return {"ok": True, "status": "starting"}
+    return {"ok": False, "error": "Failed to start llama-server"}
+
+
+def _kill_llm() -> None:
+    """Kill llama-server processes (shared by stop_backend and stop_llm)."""
     try:
-        subprocess.Popen(
-            cmd,
+        subprocess.run(
+            ["taskkill", "/IM", "llama-server.exe", "/F"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=_CREATION_FLAGS,
-            env=_ollama_env(),
         )
-        return {"ok": True, "status": "starting"}
     except Exception as e:
-        log(f"Error starting Ollama: {e}")
-        return {"ok": False, "error": str(e)}
-
-
-def _kill_ollama() -> None:
-    """Kill Ollama processes by image name (shared by stop_backend and stop_ollama)."""
-    for exe in ("ollama.exe", "ollama_llama_server.exe"):
-        try:
-            subprocess.run(
-                ["taskkill", "/IM", exe, "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=_CREATION_FLAGS,
-            )
-        except Exception as e:
-            log(f"_kill_ollama: failed to kill {exe}: {e}")
+        log(f"_kill_llm: failed to kill llama-server.exe: {e}")
 
 
 def stop_backend() -> dict:
-    """Stop the backend and Ollama (symmetric with start_backend which starts both)."""
+    """Stop the backend and llama-server (symmetric with start_backend which starts both)."""
     pids = _find_pids_on_port(8765)
     if not pids:
         log("stop_backend: no process found on port 8765")
@@ -203,16 +235,16 @@ def stop_backend() -> dict:
             except Exception as e:
                 log(f"stop_backend: failed to kill PID {pid}: {e}")
 
-    log("stop_backend: also killing Ollama (symmetric with start_backend)")
-    _kill_ollama()
+    log("stop_backend: also killing llama-server (symmetric with start_backend)")
+    _kill_llm()
 
-    return {"ok": True, "status": "stopped", "pids": pids if pids else [], "ollama_stopped": True}
+    return {"ok": True, "status": "stopped", "pids": pids if pids else [], "llm_stopped": True}
 
 
-def stop_ollama() -> dict:
-    """Stop Ollama by killing its process tree."""
-    log("stop_ollama: killing ollama.exe and ollama_llama_server.exe")
-    _kill_ollama()
+def stop_llm() -> dict:
+    """Stop llama-server processes."""
+    log("stop_llm: killing llama-server.exe")
+    _kill_llm()
     return {"ok": True, "status": "stopped"}
 
 
@@ -226,12 +258,12 @@ def main() -> None:
 
     if action == "start_backend":
         send_message(start_backend())
-    elif action == "start_ollama":
-        send_message(start_ollama())
+    elif action == "start_llm":
+        send_message(start_llm())
     elif action == "stop_backend":
         send_message(stop_backend())
-    elif action == "stop_ollama":
-        send_message(stop_ollama())
+    elif action == "stop_llm":
+        send_message(stop_llm())
     elif action == "get_token":
         send_message(get_token())
     else:

@@ -149,8 +149,10 @@ if (Test-Path $envFile) {
 } elseif (Test-Path $envExample) {
     Write-Log "Generating API token..." "INFO"
     Write-Host "Generating API token..." -ForegroundColor Yellow
+    $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::new()
     $tokenBytes = [byte[]]::new(32)
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($tokenBytes)
+    $rng.GetBytes($tokenBytes)
+    $rng.Dispose()
     $token = ($tokenBytes | ForEach-Object { $_.ToString("x2") }) -join ""
 
     $envContent = Get-Content $envExample -Raw

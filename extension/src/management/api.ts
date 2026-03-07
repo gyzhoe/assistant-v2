@@ -46,12 +46,24 @@ export async function logout(): Promise<void> {
   })
 }
 
+function getCsrfToken(): string {
+  const match = document.cookie.match(/(?:^|;\s*)whd_csrf=([^;]+)/)
+  return match ? match[1] : ''
+}
+
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {}
 
   // Don't set Content-Type for FormData (browser sets multipart boundary)
   if (!(options?.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
+  }
+
+  // CSRF token for mutating requests (double-submit cookie pattern)
+  const method = options?.method?.toUpperCase() ?? 'GET'
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    const csrf = getCsrfToken()
+    if (csrf) headers['X-CSRF-Token'] = csrf
   }
 
   const resp = await fetch(path, {

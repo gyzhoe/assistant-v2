@@ -28,7 +28,7 @@ Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 # --- Detect environment ---
-$modelsDir = Join-Path $env:USERPROFILE ".ollama\models"
+$modelsDir = Join-Path $AppDir "models"
 $modelsExist = Test-Path $modelsDir
 
 $chromaDir = Join-Path $AppDir "backend\chroma_data"
@@ -155,7 +155,7 @@ $chkVenv = Add-CleanupOption "Remove Python environment (.venv)" $venvExist $ven
 # --- Models ---
 $modelLabel = if ($modelSizeMB -gt 0) { "Remove downloaded LLM models (~$modelSizeMB MB)" } else { "Remove downloaded LLM models" }
 $chkModels = Add-CleanupOption $modelLabel $modelsExist $modelsExist $(
-    if (-not $modelsExist) { "No model data found" } else { "Warning: other programs using Ollama will lose these models" }
+    if (-not $modelsExist) { "No model data found" } else { "GGUF model files in the install directory" }
 )
 
 # --- Buttons ---

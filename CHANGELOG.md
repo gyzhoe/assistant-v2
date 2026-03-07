@@ -5,6 +5,46 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — llama.cpp Migration + Multi-Model + Notes (2026-03-07)
+
+### Added
+
+- **Multi-model support** — dropdown to switch between qwen3.5:9b (fast) and qwen3:14b (quality) at runtime. `POST /llm/switch` restarts llama-server with selected GGUF. `GET /models` scans models directory. Extension shows switching state and polls until ready.
+- **Ticket notes extraction** — reads client/tech/internal notes from WHD Notes section, displays in sidebar with color-coded type indicators, feeds chronological history to LLM (capped at 10 most recent)
+- **Custom fields extraction** — reads fields from WHD CustomFieldsPanelDiv (Computer Name, Campus radio buttons, etc.), displays in sidebar, included in LLM prompt
+- **Prompt: language matching** — replies in same language as ticket (FORMAT RULE 6)
+- **Prompt: English UI paths** — keeps Windows click-paths in English when replying in Dutch (FORMAT RULE 7)
+- **Prompt: requester fallback** — shows "(unknown)" instead of LLM hallucinating a name
+- 7 new extension tests (ModelSelector), 13 new backend tests (models endpoint), 3 new backend tests (switch endpoint), 10 new backend tests (notes feature)
+
+### Changed
+
+- **Backend: Replace Ollama with llama.cpp server** — all LLM inference now goes through llama-server's OpenAI-compatible API (`/v1/chat/completions`, `/v1/embeddings`) instead of Ollama's custom endpoints
+- Backend: Two separate llama-server instances — LLM on port 11435, embeddings on port 11436
+- Backend: `ollama_base_url` config → `llm_base_url` + `embed_base_url` (separate endpoints)
+- Backend: `OllamaModelError` → `LLMModelError`, `OLLAMA_DOWN` → `LLM_DOWN` error codes
+- Backend: `/ollama/start` and `/ollama/stop` → `/llm/start` and `/llm/stop` endpoints
+- Backend: `/models` returns configured `default_model` instead of querying model registry
+- Backend: Health detail returns `llm_reachable` + `embed_reachable` instead of `ollama_reachable`
+- Backend: EmbedService adds nomic-embed-text task prefixes (`search_query:` / `search_document:`) — required since llama-server doesn't inject them like Ollama's Modelfile did
+- Backend: `--n-gpu-layers -1` for auto GPU detection (NVIDIA, AMD, Intel, CPU fallback)
+- Installer: Bundles llama-server (Vulkan build, ~142 MB) instead of Ollama (~3.3 GB) — **~9x smaller**
+- Installer: GGUF model downloads from HuggingFace instead of `ollama pull`
+- Installer: Models stored in `{app}/models/` as GGUF files (no Ollama registry)
+- Installer: Kills legacy Ollama processes on upgrade for clean transition
+- Extension: All Ollama references renamed to LLM server (UI labels, state, API calls)
+- Extension: Native messaging commands `start_ollama`/`stop_ollama` → `start_llm`/`stop_llm`
+
+### Added
+
+- Backend: Embedding vector verification script (`backend/scripts/verify_embeddings.py`)
+
+### Removed
+
+- Ollama dependency — no longer needed for any part of the stack
+- Ollama model registry integration (`/api/tags`, `/api/pull`)
+- CUDA/Vulkan runner directory management (`OLLAMA_RUNNERS_DIR`)
+
 ## [1.14.2] — Installer Fix (2026-03-04)
 
 ### Fixed

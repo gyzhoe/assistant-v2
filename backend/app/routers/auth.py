@@ -68,7 +68,10 @@ async def login(request: Request) -> JSONResponse:
     client_ip = request.client.host if request.client else ""
 
     # If no API token is configured (dev mode), login always succeeds.
-    if settings.api_token:
+    # Localhost access also succeeds without a token — this is a local-only app
+    # and requiring manual token entry for the management SPA is unnecessary.
+    is_localhost = client_ip in ("127.0.0.1", "::1")
+    if settings.api_token and not is_localhost:
         if not provided_token or not secrets.compare_digest(
             provided_token, settings.api_token
         ):

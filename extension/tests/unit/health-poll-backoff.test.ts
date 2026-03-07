@@ -30,7 +30,7 @@ Element.prototype.scrollIntoView = vi.fn()
 let healthOnline = false
 const mockHealth = vi.fn().mockImplementation(() => {
   if (healthOnline) {
-    return Promise.resolve({ status: 'ok', version: '1.0.0', ollama_reachable: false, chroma_doc_counts: {} })
+    return Promise.resolve({ status: 'ok', version: '1.0.0', llm_reachable: false, chroma_doc_counts: {} })
   }
   return Promise.reject(new Error('Connection refused'))
 })
@@ -43,9 +43,9 @@ vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     health: (...args: unknown[]) => mockHealth(...args),
     shutdown: vi.fn().mockResolvedValue(undefined),
-    ollamaStop: vi.fn().mockResolvedValue({}),
-    ollamaStart: vi.fn().mockResolvedValue({}),
-    models: vi.fn().mockResolvedValue([]),
+    llmStop: vi.fn().mockResolvedValue({}),
+    llmStart: vi.fn().mockResolvedValue({}),
+    models: vi.fn().mockResolvedValue({ models: [], current: '' }),
   },
   sendNativeCommand: vi.fn().mockResolvedValue({ ok: false }),
 }))

@@ -15,8 +15,8 @@ describe('parseErrorDetail', () => {
   })
 
   it('includes error_code prefix when present', () => {
-    expect(parseErrorDetail({ error_code: 'OLLAMA_DOWN', detail: 'Service unavailable' }))
-      .toBe('[OLLAMA_DOWN] Service unavailable')
+    expect(parseErrorDetail({ error_code: 'LLM_DOWN', detail: 'Service unavailable' }))
+      .toBe('[LLM_DOWN] Service unavailable')
   })
 
   it('does not prefix when error_code is the only useful field', () => {

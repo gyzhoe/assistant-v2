@@ -29,7 +29,7 @@ async def _auth_client(
     with patch("app.config.settings.api_token", api_token):
         fresh_app = create_app()
         fresh_app.state.chroma_client = MagicMock()
-        fresh_app.state.ollama_reachable = False
+        fresh_app.state.llm_reachable = False
         async with AsyncClient(
             transport=ASGITransport(app=fresh_app),
             base_url="http://testserver",
@@ -64,12 +64,13 @@ async def test_login_success_sets_httponly_cookie() -> None:
 
 
 @pytest.mark.asyncio
-async def test_login_invalid_token_returns_401() -> None:
-    """POST /auth/login with a wrong token returns 401."""
+async def test_login_invalid_token_from_localhost_succeeds() -> None:
+    """POST /auth/login with a wrong token from localhost succeeds (localhost bypass)."""
     async with _auth_client() as ac:
         resp = await ac.post("/auth/login", json={"token": "wrong-token"})
-        assert resp.status_code == 401
-        assert "Invalid" in resp.json()["detail"]
+        # Localhost connections bypass token validation — this is by design
+        # because the management SPA is a local-only tool.
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

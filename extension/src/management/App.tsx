@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { managementApi, ApiError, checkSession } from './api'
+import { managementApi, ApiError, checkSession, login } from './api'
 import { Header } from './components/Header'
 import { StatCards } from './components/StatCards'
 import { ArticleList } from './components/ArticleList'
@@ -38,11 +38,18 @@ export function App(): React.ReactElement {
     })
   }, [])
 
-  // Check existing session cookie on mount
+  // Check existing session cookie on mount; auto-login from localhost
   useEffect(() => {
     checkSession()
-      .then(valid => {
-        setNeedsAuth(!valid)
+      .then(async valid => {
+        if (valid) {
+          setNeedsAuth(false)
+          setSessionChecked(true)
+          return
+        }
+        // Auto-login from localhost (backend allows token-less login for local access)
+        const ok = await login('').catch(() => false)
+        setNeedsAuth(!ok)
         setSessionChecked(true)
       })
       .catch(() => {

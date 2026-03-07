@@ -377,6 +377,139 @@ body {
   align-self: flex-start;
 }
 
+/* ─── Custom fields ───────────────────────────────── */
+.ticket-custom-fields {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--soft-border);
+  padding-top: 6px;
+}
+
+.custom-field-row {
+  display: flex;
+  gap: 6px;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.custom-field-key {
+  color: var(--muted);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.custom-field-key::after {
+  content: ':';
+}
+
+.custom-field-value {
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Notes section ───────────────────────────────── */
+.ticket-notes-section {
+  margin-top: 6px;
+  border-top: 1px solid var(--soft-border);
+  padding-top: 6px;
+}
+
+.ticket-notes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.ticket-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.ticket-note {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.ticket-note-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6875rem;
+  margin-bottom: 3px;
+}
+
+.note-type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.note-type-dot.note-type-client {
+  background: var(--warn-text);
+}
+
+.note-type-dot.note-type-tech_visible {
+  background: var(--accent);
+}
+
+.note-type-dot.note-type-tech_internal {
+  background: var(--muted);
+}
+
+.note-author {
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.note-date {
+  color: var(--muted);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.note-text {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note-text.note-text-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.note-expand-btn {
+  font-size: 0.625rem;
+  margin-top: 2px;
+}
+
 /* ─── Controls ─────────────────────────────────────── */
 .control-row {
   display: flex;

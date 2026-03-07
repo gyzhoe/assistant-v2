@@ -34,9 +34,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("Starting AI Helpdesk Assistant backend v%s", settings.version)
 
     # --- Shared httpx clients (connection pooling) ---
-    ollama_client = httpx.AsyncClient(
-        base_url=settings.ollama_base_url,
+    llm_client = httpx.AsyncClient(
+        base_url=settings.llm_base_url,
         timeout=120.0,
+    )
+    embed_client = httpx.AsyncClient(
+        base_url=settings.embed_base_url,
+        timeout=30.0,
     )
     web_client = httpx.AsyncClient(
         timeout=10.0,
@@ -44,8 +48,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         max_redirects=3,
     )
     # Sync client for ingestion pipelines (run in to_thread)
-    sync_ollama_client = httpx.Client(
-        base_url=settings.ollama_base_url,
+    sync_embed_client = httpx.Client(
+        base_url=settings.embed_base_url,
         timeout=30.0,
     )
 
@@ -54,34 +58,51 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("ChromaDB initialized at %s", settings.chroma_path)
 
     # --- Singleton services ---
-    app.state.llm_service = LLMService(client=ollama_client)
-    app.state.embed_service = EmbedService(client=ollama_client)
-    app.state.sync_embed_service = EmbedService(client=sync_ollama_client)
+    app.state.llm_service = LLMService(client=llm_client)
+    app.state.embed_service = EmbedService(client=embed_client)
+    app.state.sync_embed_service = EmbedService(client=sync_embed_client)
     app.state.ms_docs_service = MicrosoftDocsService(client=web_client)
     app.state.rag_service = RAGService(
         chroma_client=app.state.chroma_client,
         embed_svc=app.state.embed_service,
     )
 
-    # --- Ollama health probe ---
-    app.state.ollama_reachable = False
-    try:
-        resp = await ollama_client.get("/api/tags", timeout=5.0)
-        app.state.ollama_reachable = resp.status_code == 200
-    except Exception:
-        app.state.ollama_reachable = False
+    # --- Current LLM model tracking ---
+    app.state.current_llm_model = settings.default_model
 
-    if app.state.ollama_reachable:
-        logger.info("Ollama reachable at %s", settings.ollama_base_url)
+    # --- LLM health probe ---
+    app.state.llm_reachable = False
+    try:
+        resp = await llm_client.get("/health", timeout=5.0)
+        app.state.llm_reachable = resp.status_code == 200
+    except Exception:
+        app.state.llm_reachable = False
+
+    # --- Embed health probe ---
+    app.state.embed_reachable = False
+    try:
+        resp = await embed_client.get("/health", timeout=5.0)
+        app.state.embed_reachable = resp.status_code == 200
+    except Exception:
+        app.state.embed_reachable = False
+
+    if app.state.llm_reachable:
+        logger.info("LLM server reachable at %s", settings.llm_base_url)
     else:
-        logger.warning("Ollama not reachable at %s", settings.ollama_base_url)
+        logger.warning("LLM server not reachable at %s", settings.llm_base_url)
+
+    if app.state.embed_reachable:
+        logger.info("Embed server reachable at %s", settings.embed_base_url)
+    else:
+        logger.warning("Embed server not reachable at %s", settings.embed_base_url)
 
     yield
 
     # --- Cleanup: close httpx clients ---
-    await ollama_client.aclose()
+    await llm_client.aclose()
+    await embed_client.aclose()
     await web_client.aclose()
-    sync_ollama_client.close()
+    sync_embed_client.close()
 
 
 def create_app() -> FastAPI:

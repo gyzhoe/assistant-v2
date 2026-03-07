@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
-# Enterprise input limits — prevents oversized payloads reaching Ollama
+# Enterprise input limits — prevents oversized payloads reaching the LLM server
 # and mitigates prompt injection via extremely long ticket content.
 _SUBJECT_MAX = 500
 _DESCRIPTION_MAX = 16_000   # ~4k tokens — generous for real tickets
@@ -18,6 +18,21 @@ _CF_MAX_VAL_LEN = 500
 _CF_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
+_NOTE_TEXT_MAX = 4000
+_NOTE_SHORT_MAX = 200
+_NOTE_ID_MAX = 50
+_NOTE_MAX_COUNT = 50
+
+
+class NoteItem(BaseModel):
+    author: str = Field(default="", max_length=_NOTE_SHORT_MAX)
+    text: str = Field(default="", max_length=_NOTE_TEXT_MAX)
+    type: Literal["client", "tech_visible", "tech_internal"] = "client"
+    date: str = Field(default="", max_length=_NOTE_ID_MAX)
+    note_id: str = Field(default="", max_length=_NOTE_ID_MAX)
+    time_spent: str = Field(default="", max_length=_NOTE_ID_MAX)
+
+
 class GenerateRequest(BaseModel):
     ticket_subject: str = Field(
         default="", max_length=_SUBJECT_MAX, description="Ticket subject line"
@@ -28,7 +43,7 @@ class GenerateRequest(BaseModel):
     requester_name: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="Requester's name")
     category: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="WHD ticket category")
     status: str = Field(default="", max_length=_SHORT_FIELD_MAX, description="WHD ticket status")
-    model: str = Field(default="qwen3.5:9b", max_length=_MODEL_MAX, description="Ollama model to use")
+    model: str = Field(default="qwen3.5:9b", max_length=_MODEL_MAX, description="LLM model to use")
     max_context_docs: int = Field(default=5, ge=1, le=20)
     stream: bool = Field(default=False)
     custom_fields: dict[str, str] = Field(
@@ -41,6 +56,17 @@ class GenerateRequest(BaseModel):
     pinned_article_ids: list[str] = Field(
         default_factory=list, max_length=10, description="KB article IDs to inject as pinned context"
     )
+    notes: list[NoteItem] = Field(
+        default_factory=list, description="Ticket conversation notes"
+    )
+
+    @field_validator("notes")
+    @classmethod
+    def validate_notes(cls, v: list[NoteItem]) -> list[NoteItem]:
+        if len(v) > _NOTE_MAX_COUNT:
+            msg = f"Maximum {_NOTE_MAX_COUNT} notes allowed"
+            raise ValueError(msg)
+        return v
 
     @field_validator("pinned_article_ids")
     @classmethod
@@ -145,3 +171,7 @@ class FeedbackRequest(BaseModel):
     category: str = Field("", max_length=200)
     reply: str = Field(..., max_length=4000)
     rating: Literal["good", "bad"]
+
+
+class SwitchModelRequest(BaseModel):
+    model: str = Field(..., min_length=1, max_length=100)

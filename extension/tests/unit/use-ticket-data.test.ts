@@ -69,6 +69,7 @@ describe('useTicketData', () => {
       status: 'Open',
       ticketUrl: 'http://helpdesk.local/ticket/3',
       customFields: {},
+      notes: [],
     }
 
     listener({ type: 'TICKET_DATA_UPDATED', payload: ticketPayload })

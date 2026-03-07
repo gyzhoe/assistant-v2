@@ -1,14 +1,12 @@
-"""pull-models-gui.py - Download Ollama models with a native tkinter progress window.
+"""pull-models-gui.py - Download GGUF model files with a native tkinter progress window.
 
 Falls back to console-based progress if tkinter is unavailable (e.g. embeddable Python).
 Usage: python pull-models-gui.py [--app-dir <path>]
 """
 
 import argparse
-import json
 import logging
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -22,12 +20,14 @@ try:
 except ImportError:
     HAS_TKINTER = False
 
-OLLAMA_BASE = "http://127.0.0.1:11435"
-MODELS = ["nomic-embed-text", "qwen3.5:9b"]
-OLLAMA_START_TIMEOUT = 30  # seconds to wait for Ollama to become reachable
+MODELS = [
+    {"name": "nomic-embed-text-v1.5.f16.gguf", "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf", "desc": "~262 MB"},
+    {"name": "Qwen3.5-9B-Q4_K_M.gguf", "url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf", "desc": "~5.3 GB"},
+    {"name": "Qwen3-14B-Q4_K_M.gguf", "url": "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf", "desc": "~9 GB (optional, better language control)"},
+]
 AUTO_CLOSE_DELAY = 3000  # ms to wait before closing after success
-PULL_MAX_RETRIES = 3  # retry up to 3 times on failure (4 total attempts)
-PULL_RETRY_DELAY = 3  # seconds to wait before retrying
+DOWNLOAD_MAX_RETRIES = 3  # retry up to 3 times on failure (4 total attempts)
+DOWNLOAD_RETRY_DELAY = 3  # seconds to wait before retrying
 RETRY_SHORTCUT_NAME = "Setup LLM Models"  # Start Menu shortcut for manual retry
 
 # Module-level logger; configured by setup_logging() after app_dir is resolved.
@@ -35,12 +35,7 @@ log = logging.getLogger("pull-models-gui")
 
 
 def write_chain_log(app_dir: str, message: str, script_name: str = "pull-models-gui.py") -> None:
-    """Append a timestamped chain-level outcome record to logs/install-chain.log.
-
-    All installer scripts write to this shared file so the complete install
-    chain outcome is visible in one place.  Failures here are silent so that
-    a logging error never masks the real error.
-    """
+    """Append a timestamped chain-level outcome record to logs/install-chain.log."""
     try:
         logs_dir = os.path.join(app_dir, "logs")
         os.makedirs(logs_dir, exist_ok=True)
@@ -84,16 +79,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help=(
-            "Skip model pull and exit 0 cleanly. "
+            "Skip model download and exit 0 cleanly. "
             "Also honoured automatically when the SKIP_MODEL_PULL environment "
             "variable is set to any non-empty value (e.g. in CI builds)."
         ),
     )
     return parser.parse_args()
-
-
-def find_ollama_exe(app_dir: str) -> str:
-    return os.path.join(app_dir, "tools", "ollama.exe")
 
 
 def fmt_size(n: int) -> str:
@@ -102,152 +93,103 @@ def fmt_size(n: int) -> str:
     return f"{n / 1_048_576:.1f} MB"
 
 
-def ollama_reachable() -> bool:
-    try:
-        urllib.request.urlopen(f"{OLLAMA_BASE}/api/tags", timeout=2)
-        return True
-    except Exception as exc:
-        log.debug("Ollama not yet reachable: %s", exc)
-        return False
+class DownloadError(Exception):
+    """Raised when a model file download fails."""
 
 
-def verify_model_exists(name: str) -> bool:
-    """Check /api/tags to confirm *name* was pulled successfully.
-
-    Matches the short name (e.g. ``qwen3.5:9b``) against each model's
-    ``name`` field.  When the caller omits a tag the comparison also
-    accepts ``<name>:latest``.
-    """
-    try:
-        resp = urllib.request.urlopen(f"{OLLAMA_BASE}/api/tags", timeout=5)
-        data = json.loads(resp.read().decode())
-    except Exception as exc:
-        log.error("Failed to query /api/tags for model verification: %s", exc)
-        return False
-
-    candidates = {name.lower()}
-    if ":" not in name:
-        candidates.add(f"{name}:latest".lower())
-
-    for m in data.get("models", []):
-        if m.get("name", "").lower() in candidates:
-            return True
-    return False
-
-
-def _ollama_env(ollama_exe: str) -> dict[str, str]:
-    """Build environment for Ollama with runners dir and custom port."""
-    env = os.environ.copy()
-    env["OLLAMA_HOST"] = "127.0.0.1:11435"
-    env["OLLAMA_VULKAN"] = "1"
-    runners_dir = os.path.join(os.path.dirname(ollama_exe), "lib", "ollama")
-    if os.path.isdir(runners_dir):
-        env["OLLAMA_RUNNERS_DIR"] = runners_dir
-    return env
-
-
-def ensure_ollama_running(ollama_exe: str) -> bool:
-    if ollama_reachable():
-        log.info("Ollama already reachable at %s", OLLAMA_BASE)
-        return True
-    log.info("Starting Ollama: %s", ollama_exe)
-    if os.path.isfile(ollama_exe):
-        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-        subprocess.Popen([ollama_exe, "serve"], creationflags=flags,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         env=_ollama_env(ollama_exe))
-    else:
-        log.warning("Ollama executable not found: %s", ollama_exe)
-    deadline = time.time() + OLLAMA_START_TIMEOUT
-    while time.time() < deadline:
-        time.sleep(1)
-        if ollama_reachable():
-            log.info("Ollama is reachable")
-            return True
-    log.error("Ollama did not become reachable within %ds", OLLAMA_START_TIMEOUT)
-    return False
-
-
-class ModelPullError(Exception):
-    """Raised when Ollama returns an error during model pull."""
-
-
-def pull_model(name: str, on_progress: "callable") -> None:
-    """Stream-pull a model; call on_progress(status, pct) on each JSON line.
-
-    Raises ModelPullError if Ollama returns an error object in the stream.
-    """
-    body = json.dumps({"name": name, "stream": True}).encode()
-    req = urllib.request.Request(
-        f"{OLLAMA_BASE}/api/pull",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req) as resp:
-        for raw in resp:
-            line = raw.decode().strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            # Ollama signals errors via an "error" key in the JSON stream
-            if "error" in obj:
-                raise ModelPullError(obj["error"])
-            status = obj.get("status", "")
-            total = obj.get("total", 0)
-            completed = obj.get("completed", 0)
-            pct = (completed / total * 100) if total > 0 else None
-            size_info = f"  ({fmt_size(completed)} / {fmt_size(total)})" if total > 0 else ""
-            on_progress(status + size_info, pct)
-
-
-def pull_model_with_retry(
+def download_model(
     name: str,
+    url: str,
+    dest_dir: str,
+    on_progress: "callable",
+) -> None:
+    """Download a GGUF model file with streaming progress.
+
+    Calls on_progress(status, pct) periodically during download.
+    Raises DownloadError on failure.
+    """
+    dest_path = os.path.join(dest_dir, name)
+    tmp_path = dest_path + ".tmp"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "AIHelpdeskAssistant/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk_size = 1024 * 1024  # 1 MB chunks
+
+            with open(tmp_path, "wb") as f:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    pct = (downloaded / total * 100) if total > 0 else None
+                    size_info = f"{fmt_size(downloaded)} / {fmt_size(total)}" if total > 0 else fmt_size(downloaded)
+                    on_progress(f"Downloading {size_info}", pct)
+
+        # Verify non-empty download
+        if os.path.getsize(tmp_path) == 0:
+            raise DownloadError(f"Downloaded file is empty: {name}")
+
+        # Atomic rename
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        os.rename(tmp_path, dest_path)
+
+    except DownloadError:
+        raise
+    except Exception as exc:
+        # Clean up partial download
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise DownloadError(f"Failed to download {name}: {exc}") from exc
+
+
+def download_model_with_retry(
+    name: str,
+    url: str,
+    dest_dir: str,
     on_progress: "callable",
     on_retry: "callable | None" = None,
 ) -> None:
-    """Pull a model, retrying up to PULL_MAX_RETRIES times on failure.
-
-    *on_retry(attempt, error)* is called before each retry so callers can
-    update the UI (e.g. "Retrying…").  If all attempts fail the last
-    exception is re-raised.
-    """
+    """Download a model, retrying up to DOWNLOAD_MAX_RETRIES times on failure."""
     last_exc: Exception | None = None
-    total_attempts = 1 + PULL_MAX_RETRIES
+    total_attempts = 1 + DOWNLOAD_MAX_RETRIES
     for attempt in range(total_attempts):
         log.info(
-            "Pull attempt %d of %d started for %s",
+            "Download attempt %d of %d started for %s",
             attempt + 1, total_attempts, name,
         )
         try:
-            pull_model(name, on_progress)
+            download_model(name, url, dest_dir, on_progress)
             log.info(
-                "Pull attempt %d of %d succeeded for %s",
+                "Download attempt %d of %d succeeded for %s",
                 attempt + 1, total_attempts, name,
             )
             return  # success
         except Exception as exc:
             last_exc = exc
             log.warning(
-                "Pull attempt %d of %d for %s failed [%s]: %s",
+                "Download attempt %d of %d for %s failed [%s]: %s",
                 attempt + 1, total_attempts, name, type(exc).__name__, exc,
             )
-            if attempt < PULL_MAX_RETRIES:
+            if attempt < DOWNLOAD_MAX_RETRIES:
                 log.info(
-                    "Sleeping %ds before attempt %d of %d for %s…",
-                    PULL_RETRY_DELAY, attempt + 2, total_attempts, name,
+                    "Sleeping %ds before attempt %d of %d for %s...",
+                    DOWNLOAD_RETRY_DELAY, attempt + 2, total_attempts, name,
                 )
                 if on_retry is not None:
                     on_retry(attempt + 1, exc)
-                time.sleep(PULL_RETRY_DELAY)
+                time.sleep(DOWNLOAD_RETRY_DELAY)
     log.error(
         "All %d attempts exhausted for %s. Last error [%s]: %s",
         total_attempts, name, type(last_exc).__name__, last_exc,
     )
-    # All attempts exhausted – propagate the last error
     raise last_exc  # type: ignore[misc]
 
 
@@ -263,12 +205,6 @@ class PullWindow:
         root.resizable(False, False)
         root.attributes("-topmost", True)
 
-        # Disable the X (close) button while a download or failure dialog is
-        # pending.  The window is only destroyed programmatically — either after
-        # the user explicitly acknowledges an error dialog (post_fatal_error /
-        # Ollama/verify error handlers) or after the AUTO_CLOSE_DELAY on success
-        # (post_done).  This guarantees the installer's waituntilterminated flag
-        # correctly holds the Run sequence until the user has been informed.
         root.protocol("WM_DELETE_WINDOW", lambda: None)
 
         W = 460
@@ -332,33 +268,25 @@ class PullWindow:
             self.status_label.config(text=msg, foreground="#c00")
         self.root.after(0, _err)
 
-    def post_fatal_error(self, model: str, exc: Exception) -> None:
-        """Show the inline error label then a blocking messagebox directing the user to retry.
-
-        This is called on the worker thread; both UI updates are dispatched to
-        the main thread via root.after so tkinter is only touched from its own
-        thread.  The messagebox is modal and will block the event loop until the
-        user dismisses it, after which the window is destroyed.
-        """
+    def post_fatal_error(self, model_name: str, exc: Exception) -> None:
+        """Show the inline error label then a blocking messagebox directing the user to retry."""
         inline_msg = (
-            f"Failed to pull {model} after {1 + PULL_MAX_RETRIES} attempts: {exc}"
+            f"Failed to download {model_name} after {1 + DOWNLOAD_MAX_RETRIES} attempts: {exc}"
         )
         dialog_msg = (
-            f"Model download failed: {model}\n\n"
-            f"All {1 + PULL_MAX_RETRIES} download attempts were exhausted.\n\n"
+            f"Model download failed: {model_name}\n\n"
+            f"All {1 + DOWNLOAD_MAX_RETRIES} download attempts were exhausted.\n\n"
             f"To retry, open the Start Menu and run:\n"
             f"  \u2192 AI Helpdesk Assistant \u2192 {RETRY_SHORTCUT_NAME}\n\n"
             f"Error detail: {exc}"
         )
 
         def _show() -> None:
-            # Update the inline status labels first
             self.model_label.config(text="Download Failed")
             self.bar.stop()
             self.bar.config(mode="determinate")
             self.bar["value"] = 0
             self.status_label.config(text=inline_msg, foreground="#c00")
-            # Show blocking modal dialog — user must click OK before window closes
             messagebox.showerror(
                 title="AI Helpdesk Assistant \u2014 Model Download Failed",
                 message=dialog_msg,
@@ -370,72 +298,56 @@ class PullWindow:
 
 
 def worker(win: PullWindow, app_dir: str) -> None:
-    ollama_exe = find_ollama_exe(app_dir)
+    models_dir = os.path.join(app_dir, "models")
+    os.makedirs(models_dir, exist_ok=True)
 
-    log.info("worker: starting model pull for %d model(s)", len(MODELS))
-    win.post("Starting Ollama\u2026", "Waiting for Ollama to become reachable\u2026", None, f"0 of {len(MODELS)} models")
-    if not ensure_ollama_running(ollama_exe):
-        msg = f"Ollama did not start within {OLLAMA_START_TIMEOUT}s. Check {ollama_exe}"
-        log.error("%s — user directed to '%s' shortcut", msg, RETRY_SHORTCUT_NAME)
-        write_chain_log(app_dir, f"FAILED - Ollama did not start within {OLLAMA_START_TIMEOUT}s")
-        write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
-
-        def _ollama_err() -> None:
-            win.model_label.config(text="Ollama Startup Failed")
-            win.bar.stop()
-            win.bar.config(mode="determinate")
-            win.bar["value"] = 0
-            win.status_label.config(text=msg, foreground="#c00")
-            messagebox.showerror(
-                title="AI Helpdesk Assistant \u2014 Ollama Startup Failed",
-                message=(
-                    f"{msg}\n\n"
-                    f"To retry the model download, open the Start Menu and run:\n"
-                    f"  \u2192 AI Helpdesk Assistant \u2192 {RETRY_SHORTCUT_NAME}"
-                ),
-                parent=win.root,
-            )
-            win.root.destroy()
-
-        win.root.after(0, _ollama_err)
-        return
+    log.info("worker: starting model download for %d model(s)", len(MODELS))
 
     for idx, model in enumerate(MODELS):
+        name = model["name"]
+        url = model["url"]
+        dest_path = os.path.join(models_dir, name)
         overall = f"{idx} of {len(MODELS)} models"
-        log.info("Starting pull for model: %s (%s)", model, overall)
-        win.post(f"Pulling {model}", "Connecting\u2026", None, overall)
-        try:
-            def on_progress(status: str, pct: "float | None", _m: str = model, _i: int = idx) -> None:
-                win.post(f"Pulling {_m}", status, pct, f"{_i} of {len(MODELS)} models")
 
-            def on_retry(attempt: int, exc: Exception, _m: str = model, _i: int = idx) -> None:
+        # Skip if already downloaded
+        if os.path.isfile(dest_path) and os.path.getsize(dest_path) > 0:
+            log.info("Model %s already exists (%s) - skipping", name, fmt_size(os.path.getsize(dest_path)))
+            continue
+
+        log.info("Starting download for model: %s (%s)", name, overall)
+        win.post(f"Downloading {name}", "Connecting\u2026", None, overall)
+        try:
+            def on_progress(status: str, pct: "float | None", _n: str = name, _i: int = idx) -> None:
+                win.post(f"Downloading {_n}", status, pct, f"{_i} of {len(MODELS)} models")
+
+            def on_retry(attempt: int, exc: Exception, _n: str = name, _i: int = idx) -> None:
                 win.post(
-                    f"Retrying {_m} (attempt {attempt} of {PULL_MAX_RETRIES})",
-                    f"Pull failed: {exc} \u2014 retrying in {PULL_RETRY_DELAY}s\u2026",
+                    f"Retrying {_n} (attempt {attempt} of {DOWNLOAD_MAX_RETRIES})",
+                    f"Download failed: {exc} \u2014 retrying in {DOWNLOAD_RETRY_DELAY}s\u2026",
                     None,
                     f"{_i} of {len(MODELS)} models",
                 )
 
-            pull_model_with_retry(model, on_progress, on_retry)
-            log.info("Pull complete for model: %s", model)
+            download_model_with_retry(name, url, models_dir, on_progress, on_retry)
+            log.info("Download complete for model: %s", name)
         except Exception as exc:
             log.error(
                 "All %d attempts exhausted for %s: %s — user directed to '%s' shortcut",
-                1 + PULL_MAX_RETRIES, model, exc, RETRY_SHORTCUT_NAME,
+                1 + DOWNLOAD_MAX_RETRIES, name, exc, RETRY_SHORTCUT_NAME,
             )
-            write_chain_log(app_dir, f"FAILED - {model} pull exhausted {1 + PULL_MAX_RETRIES} attempts: {exc}")
+            write_chain_log(app_dir, f"FAILED - {name} download exhausted {1 + DOWNLOAD_MAX_RETRIES} attempts: {exc}")
             write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
-            win.post_fatal_error(model, exc)
+            win.post_fatal_error(name, exc)
             return
 
-    # Verify all models are actually present via /api/tags
-    log.info("Verifying downloaded models via /api/tags")
+    # Verify all models are present
+    log.info("Verifying downloaded models")
     win.post("Verifying models\u2026", "Checking downloaded models\u2026", None,
              f"{len(MODELS)} of {len(MODELS)} models")
-    missing = [m for m in MODELS if not verify_model_exists(m)]
+    missing = [m["name"] for m in MODELS if not os.path.isfile(os.path.join(models_dir, m["name"])) or os.path.getsize(os.path.join(models_dir, m["name"])) == 0]
     if missing:
         missing_str = ", ".join(missing)
-        msg = f"Verification failed — missing models: {missing_str}"
+        msg = f"Verification failed \u2014 missing models: {missing_str}"
         log.error("%s — user directed to '%s' shortcut", msg, RETRY_SHORTCUT_NAME)
         write_chain_log(app_dir, f"FAILED - verification: missing models: {missing_str}")
         write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
@@ -464,19 +376,13 @@ def worker(win: PullWindow, app_dir: str) -> None:
         return
 
     log.info("All %d model(s) downloaded and verified successfully.", len(MODELS))
-    write_chain_log(app_dir, f"SUCCESS - all {len(MODELS)} model(s) pulled and verified")
+    write_chain_log(app_dir, f"SUCCESS - all {len(MODELS)} model(s) downloaded and verified")
     write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - SUCCESS ===")
     win.post_done()
 
 
 def _blocking_console_dialog(title: str, message: str) -> None:
-    """Print a formatted error notice and block until the user presses Enter.
-
-    Equivalent to the tkinter ``messagebox.showerror`` used in the GUI path.
-    In headless / piped environments where stdin is not a TTY the ``input()``
-    call raises ``EOFError`` or ``OSError``; in that case we wait 5 seconds so
-    the installer log has time to flush before the process exits.
-    """
+    """Print a formatted error notice and block until the user presses Enter."""
     border = "=" * 60
     print(f"\n{border}", file=sys.stderr)
     print(f"  {title}", file=sys.stderr)
@@ -487,22 +393,15 @@ def _blocking_console_dialog(title: str, message: str) -> None:
     try:
         input("\nPress Enter to exit... ")
     except (EOFError, OSError):
-        # stdin is closed or not a TTY (headless / piped install); wait briefly
-        # so the log file has time to flush before the process terminates.
         print(
-            "\n(No interactive console detected — exiting in 5s…)",
+            "\n(No interactive console detected — exiting in 5s...)",
             file=sys.stderr,
         )
         time.sleep(5)
 
 
 def console_pull(app_dir: str, headless: bool = False) -> None:
-    """Fallback: pull models with console output when tkinter is unavailable.
-
-    *headless* is ``True`` when the caller detected that the display is
-    unavailable (e.g. a ``TclError`` when constructing ``tk.Tk()``).  The flag
-    is used only for the startup banner; all other behaviour is identical.
-    """
+    """Fallback: download models with console output when tkinter is unavailable."""
     reason = "no display available" if headless else "tkinter unavailable"
     print("=" * 60)
     print("AI Helpdesk Assistant - Downloading Models")
@@ -510,32 +409,23 @@ def console_pull(app_dir: str, headless: bool = False) -> None:
     print("=" * 60)
 
     log.info("console_pull: starting (%s)", reason)
-    ollama_exe = find_ollama_exe(app_dir)
-
-    print("Starting Ollama...")
-    if not ensure_ollama_running(ollama_exe):
-        msg = f"Ollama did not start within {OLLAMA_START_TIMEOUT}s."
-        log.error(
-            "%s Exe: %s — user directed to '%s' shortcut",
-            msg, ollama_exe, RETRY_SHORTCUT_NAME,
-        )
-        write_chain_log(app_dir, f"FAILED - Ollama did not start within {OLLAMA_START_TIMEOUT}s")
-        write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
-        _blocking_console_dialog(
-            "AI Helpdesk Assistant — Ollama Startup Failed",
-            (
-                f"{msg}\n"
-                f"Executable: {ollama_exe}\n"
-                f"\n"
-                f"To retry the model download, open the Start Menu and run:\n"
-                f"  -> AI Helpdesk Assistant -> {RETRY_SHORTCUT_NAME}"
-            ),
-        )
-        sys.exit(1)
+    models_dir = os.path.join(app_dir, "models")
+    os.makedirs(models_dir, exist_ok=True)
 
     for idx, model in enumerate(MODELS):
-        log.info("[%d/%d] Pulling %s", idx + 1, len(MODELS), model)
-        print(f"\n[{idx + 1}/{len(MODELS)}] Pulling {model}...")
+        name = model["name"]
+        url = model["url"]
+        dest_path = os.path.join(models_dir, name)
+
+        # Skip if already downloaded
+        if os.path.isfile(dest_path) and os.path.getsize(dest_path) > 0:
+            size = fmt_size(os.path.getsize(dest_path))
+            log.info("[%d/%d] %s already exists (%s) - skipping", idx + 1, len(MODELS), name, size)
+            print(f"\n[{idx + 1}/{len(MODELS)}] {name} already exists ({size}) - skipping")
+            continue
+
+        log.info("[%d/%d] Downloading %s", idx + 1, len(MODELS), name)
+        print(f"\n[{idx + 1}/{len(MODELS)}] Downloading {name} ({model['desc']})...")
         try:
             last_status = ""
 
@@ -551,25 +441,25 @@ def console_pull(app_dir: str, headless: bool = False) -> None:
                 last_status = status
 
             def on_retry(attempt: int, exc: Exception) -> None:
-                print(f"\n  Pull failed: {exc}")
-                print(f"  Retrying in {PULL_RETRY_DELAY}s (attempt {attempt} of {PULL_MAX_RETRIES})...")
+                print(f"\n  Download failed: {exc}")
+                print(f"  Retrying in {DOWNLOAD_RETRY_DELAY}s (attempt {attempt} of {DOWNLOAD_MAX_RETRIES})...")
 
-            pull_model_with_retry(model, on_progress, on_retry)
-            log.info("Pull complete for %s", model)
+            download_model_with_retry(name, url, models_dir, on_progress, on_retry)
+            log.info("Download complete for %s", name)
             print()  # newline after progress bar
         except Exception as exc:
             log.error(
                 "All %d attempts exhausted for %s: %s — user directed to '%s' shortcut",
-                1 + PULL_MAX_RETRIES, model, exc, RETRY_SHORTCUT_NAME,
+                1 + DOWNLOAD_MAX_RETRIES, name, exc, RETRY_SHORTCUT_NAME,
             )
-            write_chain_log(app_dir, f"FAILED - {model} pull exhausted {1 + PULL_MAX_RETRIES} attempts: {exc}")
+            write_chain_log(app_dir, f"FAILED - {name} download exhausted {1 + DOWNLOAD_MAX_RETRIES} attempts: {exc}")
             write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - FAILED ===")
             _blocking_console_dialog(
                 "AI Helpdesk Assistant — Model Download Failed",
                 (
-                    f"Model download failed: {model}\n"
+                    f"Model download failed: {name}\n"
                     f"\n"
-                    f"All {1 + PULL_MAX_RETRIES} download attempts were exhausted.\n"
+                    f"All {1 + DOWNLOAD_MAX_RETRIES} download attempts were exhausted.\n"
                     f"\n"
                     f"To retry, open the Start Menu and run:\n"
                     f"  -> AI Helpdesk Assistant -> {RETRY_SHORTCUT_NAME}\n"
@@ -579,10 +469,10 @@ def console_pull(app_dir: str, headless: bool = False) -> None:
             )
             sys.exit(1)
 
-    # Verify all models are actually present via /api/tags
-    log.info("Verifying downloaded models via /api/tags")
+    # Verify all models are present
+    log.info("Verifying downloaded models")
     print("\nVerifying downloaded models...")
-    missing = [m for m in MODELS if not verify_model_exists(m)]
+    missing = [m["name"] for m in MODELS if not os.path.isfile(os.path.join(models_dir, m["name"])) or os.path.getsize(os.path.join(models_dir, m["name"])) == 0]
     if missing:
         missing_str = ", ".join(missing)
         log.error(
@@ -605,7 +495,7 @@ def console_pull(app_dir: str, headless: bool = False) -> None:
 
     log.info("All %d model(s) downloaded and verified successfully.", len(MODELS))
     print(f"\nDone! All {len(MODELS)} models downloaded and verified.")
-    write_chain_log(app_dir, f"SUCCESS - all {len(MODELS)} model(s) pulled and verified")
+    write_chain_log(app_dir, f"SUCCESS - all {len(MODELS)} model(s) downloaded and verified")
     write_chain_log(app_dir, "=== INSTALL CHAIN COMPLETE - SUCCESS ===")
     time.sleep(2)
 
@@ -618,30 +508,23 @@ def main() -> None:
     setup_logging(app_dir)
     write_chain_log(app_dir, "STARTED")
 
-    # --- Graceful skip for CI / offline environments ----------------------------
-    # Honour SKIP_MODEL_PULL env var (any non-empty value) or the --skip flag.
-    # Exits 0 with a clear log entry so the installer chain records SKIPPED
-    # rather than a silent success or an unexpected failure.
+    # --- Graceful skip for CI / offline environments ---
     _skip_env = os.environ.get("SKIP_MODEL_PULL", "").strip()
     if args.skip or _skip_env:
         reason = "--skip flag" if args.skip else f"SKIP_MODEL_PULL={_skip_env!r}"
         log.info(
-            "Model pull skipped (%s). "
+            "Model download skipped (%s). "
             "Run 'Setup LLM Models' from the Start Menu when ready to download.",
             reason,
         )
-        write_chain_log(app_dir, f"SKIPPED - model pull bypassed ({reason})")
-        return  # exit 0; no dialog, no pull attempt
-    # ---------------------------------------------------------------------------
+        write_chain_log(app_dir, f"SKIPPED - model download bypassed ({reason})")
+        return  # exit 0
 
     if not HAS_TKINTER:
         log.info("tkinter unavailable — using console fallback")
         console_pull(app_dir)
         return
 
-    # tkinter is importable but may still fail in a headless environment
-    # (e.g. no DISPLAY on Linux, or a locked Windows session).  Catch the
-    # TclError that tk.Tk() raises in those cases and fall back to console.
     log.info("tkinter available — launching GUI")
     try:
         root = tk.Tk()

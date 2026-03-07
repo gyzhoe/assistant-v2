@@ -1,4 +1,4 @@
-import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse } from '../shared/types'
+import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelsResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS, NATIVE_HOST } from '../shared/constants'
 import { ApiError } from '../shared/api-error'
 
@@ -47,7 +47,7 @@ export const apiClient = {
 
   async health(): Promise<HealthResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    // /health/detail returns full info (ollama, chroma counts) behind auth.
+    // /health/detail returns full info (LLM, chroma counts) behind auth.
     // On 401/403 (token not yet provisioned), fall back to unauthenticated /health.
     const detailResp = await fetch(`${base}/health/detail`, { headers, signal: AbortSignal.timeout(4000) })
     if (detailResp.ok) {
@@ -59,7 +59,7 @@ export const apiClient = {
         const data = await basicResp.json() as { status: string; version?: string }
         return {
           status: data.status === 'ok' ? 'ok' : 'degraded',
-          ollama_reachable: false,
+          llm_reachable: false,
           chroma_ready: false,
           chroma_doc_counts: {},
           version: data.version ?? '',
@@ -75,29 +75,42 @@ export const apiClient = {
     await fetch(`${base}/shutdown`, { method: 'POST', headers, signal: AbortSignal.timeout(2000) }).catch(() => {})
   },
 
-  async ollamaStart(): Promise<{ status: string }> {
+  async llmStart(): Promise<{ status: string }> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    const resp = await fetch(`${base}/ollama/start`, { method: 'POST', headers })
-    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to start Ollama' })
+    const resp = await fetch(`${base}/llm/start`, { method: 'POST', headers })
+    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to start LLM server' })
     return resp.json() as Promise<{ status: string }>
   },
 
-  async ollamaStop(): Promise<{ status: string }> {
+  async llmStop(): Promise<{ status: string }> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
-    const resp = await fetch(`${base}/ollama/stop`, { method: 'POST', headers })
-    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to stop Ollama' })
+    const resp = await fetch(`${base}/llm/stop`, { method: 'POST', headers })
+    if (!resp.ok) throw new ApiError(resp.status, { detail: 'Failed to stop LLM server' })
     return resp.json() as Promise<{ status: string }>
   },
 
-  async models(): Promise<string[]> {
+  async models(): Promise<ModelsResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
     const resp = await fetch(`${base}/models`, { headers })
     if (!resp.ok) {
       const error = await resp.json().catch(() => ({ detail: 'Failed to fetch models' }))
       throw new ApiError(resp.status, error)
     }
-    const data = (await resp.json()) as { models: string[] }
-    return data.models
+    return resp.json() as Promise<ModelsResponse>
+  },
+
+  async switchModel(model: string): Promise<{ status: string; model: string }> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/llm/switch`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model }),
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Failed to switch model' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<{ status: string; model: string }>
   },
 
   async uploadFile(file: File, signal?: AbortSignal): Promise<IngestUploadResponse> {
@@ -189,7 +202,7 @@ interface NativeResponse {
   status?: string
   error?: string
   token?: string
-  ollama_started?: boolean
+  llm_started?: boolean
 }
 
 /** Send a command to the native messaging host to start a service. */

@@ -32,7 +32,7 @@ const mockGenerate = vi.fn()
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     generate: (...args: unknown[]) => mockGenerate(...args),
-    models: vi.fn().mockResolvedValue(['qwen3.5:9b']),
+    models: vi.fn().mockResolvedValue({ models: ['qwen3.5:9b'], current: 'qwen3.5:9b' }),
     health: vi.fn().mockResolvedValue({ status: 'ok' }),
   },
   ApiError: class ApiError extends Error {
@@ -57,6 +57,7 @@ const ticketData = {
   status: 'Open',
   ticketUrl: 'http://helpdesk.local/ticket/1',
   customFields: {},
+  notes: [],
 }
 
 describe('useGenerateReply', () => {
@@ -150,9 +151,9 @@ describe('useGenerateReply', () => {
     expect(useSidebarStore.getState().reply).toBe('Try restarting.')
   })
 
-  it('classifies OLLAMA_DOWN on 503 error', async () => {
+  it('classifies LLM_DOWN on 503 error', async () => {
     const { ApiError } = await import('../../src/lib/api-client')
-    mockGenerate.mockRejectedValueOnce(new ApiError(503, { error_code: 'OLLAMA_DOWN' }))
+    mockGenerate.mockRejectedValueOnce(new ApiError(503, { error_code: 'LLM_DOWN' }))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -162,10 +163,10 @@ describe('useGenerateReply', () => {
       await result.current.generate()
     })
 
-    expect(useSidebarStore.getState().generateError).toBe('Ollama is not running. Please start it and try again.')
+    expect(useSidebarStore.getState().generateError).toBe('LLM server is not running. Please start it and try again.')
   })
 
-  it('does not show Ollama message for 503 without OLLAMA_DOWN error_code', async () => {
+  it('does not show LLM message for 503 without LLM_DOWN error_code', async () => {
     const { ApiError } = await import('../../src/lib/api-client')
     mockGenerate.mockRejectedValueOnce(new ApiError(503, { detail: 'Service temporarily unavailable' }))
 

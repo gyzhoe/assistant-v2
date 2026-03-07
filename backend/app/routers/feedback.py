@@ -54,7 +54,7 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONRespon
             doc_id, body.rating, body.category[:40],
         )
     except (ConnectionError, ConnectionRefusedError, OSError):
-        logger.warning("Ollama/ChromaDB unavailable — feedback not stored")
+        logger.warning("Embed server/ChromaDB unavailable — feedback not stored")
         raise HTTPException(
             status_code=503,
             detail="Embedding service unavailable. Feedback not stored.",

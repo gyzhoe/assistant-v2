@@ -37,7 +37,7 @@ def _fresh_client(
         mock_col.get.return_value = collection_data or default_data
 
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
 
     # Reset the module-level cache before each test
     kb_mod._article_cache = {}
@@ -428,7 +428,7 @@ async def test_cache_is_reused_on_second_call() -> None:
     mock_chroma.get_collection.return_value = mock_col
     mock_col.get.return_value = _sample_collection_data()
     app.state.chroma_client = mock_chroma
-    app.state.ollama_reachable = False
+    app.state.llm_reachable = False
 
     kb_mod._article_cache = {}
     kb_mod._cache_timestamp = 0.0

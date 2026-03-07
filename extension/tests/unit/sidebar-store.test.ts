@@ -37,6 +37,7 @@ describe('sidebarStore', () => {
       status: 'Open',
       ticketUrl: 'http://helpdesk.local/ticket/1',
       customFields: {},
+      notes: [],
     }
     useSidebarStore.getState().setTicketData(ticket)
     expect(useSidebarStore.getState().ticketData).toEqual(ticket)
@@ -92,6 +93,7 @@ describe('sidebarStore', () => {
       status: 'Open',
       ticketUrl: 'http://helpdesk.local/ticket/1',
       customFields: {},
+      notes: [],
     }
     useSidebarStore.getState().setTicketData(ticket)
     useSidebarStore.getState().setSelectedModel('llama3.1:8b')

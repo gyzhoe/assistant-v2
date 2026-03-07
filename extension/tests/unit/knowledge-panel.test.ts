@@ -28,7 +28,7 @@ vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     health: vi.fn().mockResolvedValue({
       status: 'ok',
-      ollama_reachable: true,
+      llm_reachable: true,
       chroma_ready: true,
       chroma_doc_counts: { whd_tickets: 10, kb_articles: 5 },
       version: '1.3.0',

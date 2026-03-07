@@ -13,7 +13,7 @@ from app.main import create_app
 def _make_client() -> AsyncClient:
     fresh_app = create_app()
     fresh_app.state.chroma_client = MagicMock()
-    fresh_app.state.ollama_reachable = False
+    fresh_app.state.llm_reachable = False
     return AsyncClient(
         transport=ASGITransport(app=fresh_app),
         base_url="http://testserver",
@@ -55,7 +55,7 @@ async def test_clear_idempotent() -> None:
     fresh_app = create_app()
     mock_client = MagicMock()
     fresh_app.state.chroma_client = mock_client
-    fresh_app.state.ollama_reachable = False
+    fresh_app.state.llm_reachable = False
 
     # First call succeeds normally
     # Second call: delete_collection raises ValueError (already deleted)
@@ -84,7 +84,7 @@ async def test_clear_requires_api_token_when_configured() -> None:
     ):
         fresh_app = create_app()
         fresh_app.state.chroma_client = MagicMock()
-        fresh_app.state.ollama_reachable = False
+        fresh_app.state.llm_reachable = False
 
         async with AsyncClient(
             transport=ASGITransport(app=fresh_app),

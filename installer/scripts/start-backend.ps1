@@ -4,13 +4,6 @@ $backendDir = Join-Path $AppDir "backend"
 $venvPython = Join-Path $backendDir ".venv\Scripts\python.exe"
 $uvPath = Join-Path $AppDir "tools\uv.exe"
 
-# Ensure Ollama binds to the isolated port and finds bundled CUDA runners
-$env:OLLAMA_HOST = "127.0.0.1:11435"
-# Enable Vulkan GPU backend for AMD/Intel GPUs (silently falls back to CPU if unavailable)
-$env:OLLAMA_VULKAN = "1"
-$runnersDir = Join-Path $AppDir "tools\lib\ollama"
-if (Test-Path $runnersDir) { $env:OLLAMA_RUNNERS_DIR = $runnersDir }
-
 Push-Location $backendDir
 if (Test-Path $venvPython) {
     # Use venv directly (works offline - no resolution step)

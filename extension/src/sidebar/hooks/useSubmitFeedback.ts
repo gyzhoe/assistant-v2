@@ -42,11 +42,14 @@ export function useSubmitFeedback() {
     }
 
     setReplyRating(rating)
-    setFeedbackError(null)
     setRatingConfirmed(false)
     setRatingRemoved(false)
 
-    if (!ticketData || !reply) return
+    if (!ticketData || !reply) {
+      setFeedbackError('Open a ticket page to save ratings')
+      return
+    }
+    setFeedbackError(null)
 
     try {
       const result = await apiClient.submitFeedback({
