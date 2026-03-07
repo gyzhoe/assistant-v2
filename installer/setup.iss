@@ -6,6 +6,12 @@
   #define MyAppVersion "2.0.0"
 #endif
 
+; InstallerType: "online" (no models) or "offline" (bundled models).
+; Override at compile time: iscc /DInstallerType=offline setup.iss
+#ifndef InstallerType
+  #define InstallerType "online"
+#endif
+
 #define MyAppName     "AI Helpdesk Assistant"
 #define MyAppPublisher "AI Helpdesk"
 #define MyAppURL      "https://github.com/gyzhoe/assistant-v2"
@@ -21,10 +27,14 @@ DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=output
-OutputBaseFilename=AIHelpdeskAssistant-Setup-{#MyAppVersion}
+#if InstallerType == "offline"
+OutputBaseFilename=AIHelpdeskAssistant-Full-Setup-{#MyAppVersion}
+#else
+OutputBaseFilename=AIHelpdeskAssistant-Online-Setup-{#MyAppVersion}
+#endif
 Compression=lzma2/fast
 SolidCompression=no
-DiskSpanning=yes
+DiskSpanning=no
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -46,7 +56,11 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 Name: "backend";   Description: "Backend Service (FastAPI + Python)";           Types: full custom; Flags: fixed
 Name: "extension"; Description: "Edge Extension (pre-built)";                   Types: full custom; Flags: fixed
 Name: "llama";     Description: "llama.cpp LLM Runtime (llama-server)";          Types: full custom
+#if InstallerType == "offline"
+Name: "models";    Description: "LLM models (bundled, ~6 GB)";                    Types: full custom
+#else
 Name: "models";    Description: "Download LLM models (~6 GB, requires internet)";   Types: full custom
+#endif
 
 [InstallDelete]
 ; Clean up stale files from previous installs before copying new ones.
@@ -112,10 +126,13 @@ Source: "deps\wheels\*";             DestDir: "{app}\deps\wheels";       Flags: 
 ; Requirements file for offline pip install
 Source: "..\backend\requirements.txt"; DestDir: "{app}\backend";         Flags: ignoreversion; Components: backend
 
-; Bundled GGUF model files (offline install — ~15 GB)
-; Only included when built locally with models present; CI builds skip this.
-#ifexist "deps\models\nomic-embed-text-v1.5.f16.gguf"
-Source: "deps\models\*";             DestDir: "{app}\models";            Flags: ignoreversion; Components: models
+; Bundled GGUF model files (offline install only — ~6 GB)
+; Requires both: InstallerType=offline AND model files present in deps/models/.
+; Online builds always skip this, even if models happen to exist locally.
+#if InstallerType == "offline"
+  #ifexist "deps\models\nomic-embed-text-v1.5.f16.gguf"
+  Source: "deps\models\*";             DestDir: "{app}\models";            Flags: ignoreversion; Components: models
+  #endif
 #endif
 
 ; PowerShell helper scripts

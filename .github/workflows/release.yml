@@ -4,17 +4,97 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 2.0.1). Bumps manifest.json, pyproject.toml, setup.iss, and CHANGELOG.md header.'
+        required: true
+        type: string
+      installer_type:
+        description: 'Installer type to build'
+        required: true
+        type: choice
+        options:
+          - online
+          - offline
+          - both
+        default: online
+      bump_version:
+        description: 'Commit version bump to main before building?'
+        required: true
+        type: boolean
+        default: false
+      create_tag:
+        description: 'Create and push git tag after version bump?'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
 jobs:
+  # Job 0 (optional): Bump version in source files and commit to main
+  version-bump:
+    name: Version Bump
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.bump_version
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version in source files
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "Bumping version to $VERSION"
+
+          # extension/public/manifest.json
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" extension/public/manifest.json
+
+          # backend/pyproject.toml (first version = line)
+          sed -i "0,/^version = \"[^\"]*\"/s//version = \"$VERSION\"/" backend/pyproject.toml
+
+          # installer/setup.iss (default version define)
+          sed -i "s/#define MyAppVersion \"[^\"]*\"/#define MyAppVersion \"$VERSION\"/" installer/setup.iss
+
+          # CHANGELOG.md — add Unreleased → version header if needed
+          if grep -q "## \[Unreleased\]" CHANGELOG.md 2>/dev/null; then
+            DATE=$(date +%Y-%m-%d)
+            sed -i "s/## \[Unreleased\]/## [$VERSION] - $DATE/" CHANGELOG.md
+          fi
+
+          echo "Files updated:"
+          git diff --stat
+
+      - name: Commit and push version bump
+        run: |
+          VERSION="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extension/public/manifest.json backend/pyproject.toml installer/setup.iss CHANGELOG.md
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: bump version to v$VERSION"
+          git push origin main
+
+      - name: Create and push tag
+        if: inputs.create_tag
+        run: |
+          VERSION="${{ inputs.version }}"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
   # Job 1: Build the extension on Ubuntu (fast, has Node)
   extension-build:
     name: Build Extension
     runs-on: ubuntu-latest
+    needs: [version-bump]
+    if: always() && (needs.version-bump.result == 'success' || needs.version-bump.result == 'skipped')
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
       - uses: actions/setup-node@v6
         with:
@@ -34,17 +114,37 @@ jobs:
 
   # Job 2: Build the Inno Setup installer on Windows
   build-installer:
-    name: Build Windows Installer
+    name: Build Windows Installer (${{ matrix.type }})
     runs-on: windows-latest
     needs: extension-build
+    strategy:
+      matrix:
+        type: ${{ fromJson(
+          github.event_name == 'push' && '["online"]' ||
+          inputs.installer_type == 'both' && '["online", "offline"]' ||
+          format('["{0}"]', inputs.installer_type)
+          ) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
       - name: Download extension dist
         uses: actions/download-artifact@v8
         with:
           name: extension-dist
           path: extension/dist/
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}" -replace '^v', ''
+          }
+          Write-Host "Version: $version"
+          echo "APP_VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Cache installer dependencies
         id: deps-cache
@@ -167,6 +267,7 @@ jobs:
           $fileCount = (Get-ChildItem -Path "installer/deps/llama-cpu" -Recurse -File).Count
           $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/llama-cpu" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
           Write-Host "llama-server CPU: $fileCount files, $totalSize MB"
+
       - name: Download assistant-tools binary
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
@@ -312,52 +413,122 @@ jobs:
           $count = (Get-ChildItem installer/deps/wheels/*.whl).Count
           Write-Host "Downloaded $count wheels (hash-verified) to installer/deps/wheels/"
 
-      - name: Set version from tag
+      - name: Download GGUF models (offline only)
+        if: matrix.type == 'offline'
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          Write-Host "Version: $version"
-          echo "APP_VERSION=$version" >> $env:GITHUB_ENV
+          # Download GGUF models for offline installer (~6 GB total)
+          New-Item -ItemType Directory -Force -Path installer/deps/models | Out-Null
+
+          # Qwen3.5-9B Q4_K_M (~5.5 GB)
+          $qwenUrl = "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf"
+          Write-Host "Downloading Qwen3.5-9B-Q4_K_M.gguf (~5.5 GB)..."
+          Invoke-WebRequest -Uri $qwenUrl -OutFile "installer/deps/models/Qwen3.5-9B-Q4_K_M.gguf"
+          $size = [math]::Round((Get-Item "installer/deps/models/Qwen3.5-9B-Q4_K_M.gguf").Length / 1GB, 2)
+          Write-Host "Qwen3.5-9B-Q4_K_M.gguf: $size GB"
+
+          # nomic-embed-text v1.5 F16 (~260 MB)
+          $nomicUrl = "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf"
+          Write-Host "Downloading nomic-embed-text-v1.5.f16.gguf (~260 MB)..."
+          Invoke-WebRequest -Uri $nomicUrl -OutFile "installer/deps/models/nomic-embed-text-v1.5.f16.gguf"
+          $size = [math]::Round((Get-Item "installer/deps/models/nomic-embed-text-v1.5.f16.gguf").Length / 1MB, 1)
+          Write-Host "nomic-embed-text-v1.5.f16.gguf: $size MB"
 
       - name: Compile Inno Setup installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: installer/setup.iss
-          options: /DMyAppVersion=${{ env.APP_VERSION }}
+          options: /DMyAppVersion=${{ env.APP_VERSION }} /DInstallerType=${{ matrix.type }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-${{ matrix.type }}
+          path: installer/output/AIHelpdeskAssistant-*-Setup-*.exe
+
+      - name: Upload offline .bin files
+        if: matrix.type == 'offline'
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-offline-bins
+          path: installer/output/AIHelpdeskAssistant-*-Setup-*.bin
+
+  # Job 3: Create GitHub Release with all artifacts
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-installer, extension-build]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installer-*
+          path: artifacts/
+          merge-multiple: true
 
       - name: Zip extension standalone
-        shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          Compress-Archive -Path "extension/dist/*" -DestinationPath "assistant-extension-${tag}.zip"
+          VERSION="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Download extension dist
+        uses: actions/download-artifact@v8
+        with:
+          name: extension-dist
+          path: extension-dist/
+
+      - name: Create extension zip
+        run: |
+          cd extension-dist && zip -r "../assistant-extension-v${APP_VERSION}.zip" .
+
+      - name: List release artifacts
+        run: |
+          echo "=== Installer artifacts ==="
+          ls -lh artifacts/ 2>/dev/null || echo "No artifacts found"
+          echo "=== Extension zip ==="
+          ls -lh assistant-extension-*.zip
+
+      - name: Resolve tag name
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=v${{ inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG_NAME }}
           files: |
-            installer/output/AIHelpdeskAssistant-Setup-*.exe
+            artifacts/AIHelpdeskAssistant-*
             assistant-extension-*.zip
           generate_release_notes: true
           body: |
-            ## AI Helpdesk Assistant ${{ github.ref_name }}
-
-            ### What's New
-            - **GPU auto-detection** — installer detects your GPU (NVIDIA, AMD, Intel Arc) and installs the optimal llama-server build automatically
-            - Three bundled builds: CUDA 12.4 (NVIDIA), Vulkan (AMD/Intel Arc), CPU-only (fallback)
+            ## AI Helpdesk Assistant ${{ env.TAG_NAME }}
 
             ### Downloads
-            - **`AIHelpdeskAssistant-Setup-*.exe`** — Full Windows installer (llama-server + backend + extension)
-            - **`assistant-extension-*.zip`** — Standalone Edge extension only
+            | File | Description |
+            |------|-------------|
+            | `AIHelpdeskAssistant-Online-Setup-*.exe` | Online installer (~680 MB) — downloads models via Options page |
+            | `AIHelpdeskAssistant-Full-Setup-*.exe` | Offline installer (~6.5 GB) — models bundled (+ `.bin` split files) |
+            | `assistant-extension-*.zip` | Standalone Edge extension only |
+
+            ### GPU Auto-Detection
+            The installer automatically detects your GPU and installs the optimal llama-server build:
+            | GPU | Backend | Size |
+            |-----|---------|------|
+            | NVIDIA (Pascal+) | CUDA 12.4 | ~583 MB |
+            | AMD / Intel Arc | Vulkan | ~46 MB |
+            | No GPU | CPU-only | ~31 MB |
 
             ### Installation
             1. Download and run the `.exe` installer
-            2. Follow the wizard — the installer auto-selects the best GPU backend for your system
+            2. Follow the wizard — GPU backend is auto-selected
             3. Load the extension in Edge: `edge://extensions` → Load unpacked → select the extension folder
-            4. Configure models in the extension Options page
-
-            ### Manual Setup
-            1. Download llama-server from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases) (pick CUDA/Vulkan/CPU for your GPU)
-            2. Download GGUF models from HuggingFace (qwen3.5-9b, nomic-embed-text-v1.5)
-            3. Install [uv](https://docs.astral.sh/uv/): `pip install uv`
-            4. Clone the repo and run: `cd backend && uv sync && uv run uvicorn app.main:app --port 8765`
-            5. Extract the extension zip and load unpacked in Edge
+            4. Open extension Options page to download models (online installer) or they're pre-installed (offline)
