@@ -1,4 +1,21 @@
+from enum import StrEnum
+
 from pydantic import BaseModel
+
+
+class ErrorCode(StrEnum):
+    """Machine-readable error codes returned in ErrorResponse."""
+
+    LLM_DOWN = "LLM_DOWN"
+    MODEL_ERROR = "MODEL_ERROR"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+
+class ErrorResponse(BaseModel):
+    """Structured error envelope for all API error responses."""
+
+    message: str
+    error_code: ErrorCode
 
 
 class ContextDoc(BaseModel):

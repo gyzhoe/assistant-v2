@@ -8,9 +8,11 @@ Provides:
 - Request size limiting
 - Rate limiting per client
 - Security headers
+- Generic unhandled exception catch-all
 """
 
 import asyncio
+import json
 import logging
 import secrets
 import time
@@ -320,6 +322,59 @@ class RequestSizeLimitMiddleware:
 # ---------------------------------------------------------------------------
 # Security Headers Middleware
 # ---------------------------------------------------------------------------
+
+
+class UnhandledExceptionMiddleware:
+    """Catch-all for unhandled exceptions.
+
+    Returns a structured JSON error response with ErrorCode.INTERNAL_ERROR
+    instead of letting Starlette return a plain-text 500. This is implemented
+    as ASGI middleware because Starlette 0.52's ``@app.exception_handler(Exception)``
+    does not reliably intercept generic exceptions (the route-level wrapper
+    re-raises before the ExceptionMiddleware can handle them).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+        original_send = send
+
+        async def tracking_send(message: MutableMapping[str, object]) -> None:
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await original_send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception:
+            path: str = scope.get("path", "unknown")
+            logger.exception("Unhandled exception on %s", path)
+            if not response_started:
+                from app.models.response_models import ErrorCode
+
+                payload = json.dumps({
+                    "message": "Internal server error",
+                    "error_code": ErrorCode.INTERNAL_ERROR.value,
+                }).encode("utf-8")
+                await original_send({
+                    "type": "http.response.start",
+                    "status": 500,
+                    "headers": [
+                        [b"content-type", b"application/json"],
+                        [b"content-length", str(len(payload)).encode("ascii")],
+                    ],
+                })
+                await original_send({
+                    "type": "http.response.body",
+                    "body": payload,
+                })
 
 
 class SecurityHeadersMiddleware:

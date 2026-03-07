@@ -1,10 +1,13 @@
 import asyncio
+import json
 import logging
 import time
+from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 from chromadb.api import ClientAPI
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 
 from app.config import settings
 from app.constants import (
@@ -14,7 +17,7 @@ from app.constants import (
     distance_to_similarity,
 )
 from app.models.request_models import GenerateRequest
-from app.models.response_models import ContextDoc, GenerateResponse
+from app.models.response_models import ContextDoc, ErrorCode, GenerateResponse
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 from app.services.microsoft_docs import MicrosoftDocsService
@@ -25,65 +28,43 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["generate"])
 
 
-@router.post("/generate", response_model=GenerateResponse)
-async def generate_reply(body: GenerateRequest, request: Request) -> GenerateResponse:
-    """Retrieve RAG context and generate a helpdesk reply via LLM server."""
+async def _prepare_context(
+    body: GenerateRequest, request: Request,
+) -> tuple[list[ContextDoc], str]:
+    """Retrieve RAG context, pinned articles, and web docs; build the prompt.
+
+    Returns (context_docs, prompt).
+    """
     chroma_client = request.app.state.chroma_client
     rag: RAGService = request.app.state.rag_service
-    llm: LLMService = request.app.state.llm_service
     ms_docs: MicrosoftDocsService = request.app.state.ms_docs_service
 
-    logger.info(
-        "Generate request: model=%s subject_len=%d",
-        body.model, len(body.ticket_subject),
-    )
-    start = time.perf_counter()
-
-    # Retrieve context — RAG + optional Microsoft Learn search in parallel
     query = f"{body.ticket_subject}\n\n{body.ticket_description}".strip()
     web_search_keywords = f"{body.ticket_subject} {body.category}".strip()
     include_web = body.include_web_context and settings.microsoft_docs_enabled
 
-    try:
-        if include_web:
-            context_docs, web_docs = await asyncio.gather(
-                rag.retrieve(
-                    query=query or "general helpdesk inquiry",
-                    max_docs=body.max_context_docs,
-                    category=body.category,
-                ),
-                ms_docs.search(web_search_keywords),
-            )
-        else:
-            context_docs = await rag.retrieve(
+    if include_web:
+        context_docs, web_docs = await asyncio.gather(
+            rag.retrieve(
                 query=query or "general helpdesk inquiry",
                 max_docs=body.max_context_docs,
                 category=body.category,
-            )
-            web_docs = []
-    except LLMModelError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "message": str(exc),
-                "error_code": "MODEL_ERROR",
-            },
-        ) from exc
-    except ConnectionError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "message": str(exc),
-                "error_code": "LLM_DOWN",
-            },
-        ) from exc
+            ),
+            ms_docs.search(web_search_keywords),
+        )
+    else:
+        context_docs = await rag.retrieve(
+            query=query or "general helpdesk inquiry",
+            max_docs=body.max_context_docs,
+            category=body.category,
+        )
+        web_docs = []
 
     # Fetch pinned articles and prepend to context
     if body.pinned_article_ids:
         pinned_docs = await _fetch_pinned_articles(
             chroma_client, body.pinned_article_ids,
         )
-        # Prepend pinned docs before RAG results
         context_docs = pinned_docs + context_docs
 
     # Build prompt
@@ -101,7 +82,6 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
         else:
             context_text = web_context
 
-    # Retrieve dynamic few-shot examples from rated replies
     embed_svc: EmbedService = request.app.state.embed_service
     few_shot_examples = await _get_dynamic_examples(
         chroma_client, query, body.category, embed_svc,
@@ -115,30 +95,81 @@ async def generate_reply(body: GenerateRequest, request: Request) -> GenerateRes
             "</user_additional_instructions>"
         )
 
-    # Generate
+    return context_docs, prompt
+
+
+def _sse_event(data: dict[str, object]) -> str:
+    """Format a single SSE event line."""
+    return f"data: {json.dumps(data)}\n\n"
+
+
+async def _stream_generate(
+    llm: LLMService,
+    body: GenerateRequest,
+    context_docs: list[ContextDoc],
+    prompt: str,
+    start: float,
+) -> AsyncGenerator[str]:
+    """Async generator producing SSE events for the streaming endpoint."""
+    # First event: meta with context docs
+    yield _sse_event({
+        "type": "meta",
+        "context_docs": [doc.model_dump() for doc in context_docs],
+    })
+
     try:
-        reply = await llm.generate(prompt=prompt, model=body.model)
-    except LLMModelError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "message": str(exc),
-                "error_code": "MODEL_ERROR",
+        async for token in llm.generate_stream(prompt=prompt, model=body.model):
+            yield _sse_event({"type": "token", "content": token})
+    except (ConnectionError, LLMModelError) as exc:
+        yield _sse_event({
+            "type": "error",
+            "error_code": ErrorCode.LLM_DOWN.value
+            if isinstance(exc, ConnectionError)
+            else ErrorCode.MODEL_ERROR.value,
+            "message": str(exc),
+        })
+        return
+
+    latency_ms = int((time.perf_counter() - start) * 1000)
+    yield _sse_event({"type": "done", "latency_ms": latency_ms})
+
+
+@router.post("/generate", response_model=GenerateResponse)
+async def generate_reply(
+    body: GenerateRequest, request: Request,
+) -> GenerateResponse | StreamingResponse:
+    """Retrieve RAG context and generate a helpdesk reply via LLM server.
+
+    When ``body.stream`` is True, returns an SSE ``StreamingResponse``.
+    Otherwise returns a JSON ``GenerateResponse``.
+    """
+    llm: LLMService = request.app.state.llm_service
+
+    logger.info(
+        "Generate request: model=%s subject_len=%d stream=%s",
+        body.model, len(body.ticket_subject), body.stream,
+    )
+    start = time.perf_counter()
+
+    context_docs, prompt = await _prepare_context(body, request)
+
+    if body.stream:
+        return StreamingResponse(
+            _stream_generate(llm, body, context_docs, prompt, start),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
             },
-        ) from exc
-    except ConnectionError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "message": str(exc),
-                "error_code": "LLM_DOWN",
-            },
-        ) from exc
+        )
+
+    # Non-streaming JSON response (existing behavior)
+    reply = await llm.generate(prompt=prompt, model=body.model)
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     logger.info(
-        "Generate complete: model=%s latency=%dms docs=%d web_docs=%d",
-        body.model, latency_ms, len(context_docs), len(web_docs),
+        "Generate complete: model=%s latency=%dms docs=%d",
+        body.model, latency_ms, len(context_docs),
     )
 
     return GenerateResponse(
