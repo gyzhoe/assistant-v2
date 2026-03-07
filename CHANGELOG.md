@@ -5,6 +5,39 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Sprint A: SSE Streaming + Exception Handlers + ChromaDB Warm-up
+
+### Added
+
+- **SSE streaming generation** — `POST /generate` with `stream: true` returns a `text/event-stream` response with four event types: `meta` (RAG context docs), `token` (incremental text), `done` (latency), and `error` (typed error mid-stream)
+- **`LLMService.generate_stream()`** — async generator that streams tokens from llama-server's OpenAI-compatible SSE endpoint (`/v1/chat/completions` with `stream: true`)
+- **Global exception handlers** — `ConnectionError` → 503 `LLM_DOWN`, `LLMModelError` → 502 `MODEL_ERROR`; structured `ErrorResponse` model with `ErrorCode` StrEnum replaces ad-hoc error dicts
+- **`UnhandledExceptionMiddleware`** — outermost ASGI catch-all returns structured JSON 500 `INTERNAL_ERROR` instead of Starlette's plain-text response; safe when response headers already sent
+- **ChromaDB cold-start warm-up** — `warmup_chromadb()` runs at startup, touches `kb_articles` and `whd_tickets` collections to avoid first-query latency; logs document counts or gracefully handles missing collections
+- **SSE parser** (`sse-parser.ts`) — async generator that decodes `ReadableStream` chunks into typed `SSEEvent` objects with line buffering across chunk boundaries and `AbortSignal` support
+- **`apiClient.generateStream()`** — streams `POST /generate` via Fetch API `ReadableStream` reader, returns `AsyncGenerator<SSEEvent>`
+- **Streaming reply UI** — token-by-token text display with blinking cursor (0.8s blink rate), RAF-throttled state updates, skeleton loader until first token, inline error banner for interrupted streams
+- **SSE event types** (`types.ts`) — `SSEMetaEvent`, `SSETokenEvent`, `SSEDoneEvent`, `SSEErrorEvent` discriminated union
+- 25 new backend tests: SSE streaming endpoint (13), global exception handlers (4), ChromaDB warm-up (3), SSE error scenarios (5)
+- 11 new extension tests: SSE parser (8), streaming API client (3), plus updated `useGenerateReply` tests for streaming
+
+### Changed
+
+- Backend: Generate router refactored — shared `_prepare_context()` extracts RAG retrieval, pinned articles, web docs, and prompt building; used by both streaming and non-streaming paths
+- Backend: Generate router no longer catches `ConnectionError`/`LLMModelError` locally — delegated to global exception handlers (non-streaming) or SSE error events (streaming)
+- Backend: `LLMService._generate_async` uses `self._client.base_url` instead of re-reading `settings.llm_base_url`
+- Extension: `useGenerateReply` rewritten for streaming — ref-based token accumulation with `requestAnimationFrame` throttle instead of single JSON response
+- Extension: "Cancel" button renamed to "Stop" with updated `aria-label`
+- Extension: Skeleton loader only shown before first token arrives (not for entire generation)
+- Extension: Keyboard shortcut hint hidden when there is a generation error
+
+### Fixed
+
+- Extension: Screen reader announces generation completion and errors via `aria-live="polite"` region
+- Extension: Streaming reply container uses `role="log"` for accessible live content
+- Extension: `prefers-reduced-motion` disables streaming cursor animation
+- Extension: Partial reply preserved and displayed when generation is interrupted mid-stream
+
 ## [2.0.0] — llama.cpp Migration + GPU Detection + Multi-Model + Notes (2026-03-07)
 
 ### Added
