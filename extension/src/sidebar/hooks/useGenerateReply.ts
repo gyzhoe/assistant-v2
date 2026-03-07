@@ -1,9 +1,10 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useSidebarStore } from '../store/sidebarStore'
 import { useSettings } from './useSettings'
 import { apiClient, ApiError } from '../../lib/api-client'
 import { parseErrorDetail } from '../../lib/error-utils'
 import { debugLog, debugError } from '../../shared/constants'
+import type { ContextDoc } from '../../shared/types'
 
 export function useGenerateReply() {
   const ticketData = useSidebarStore((s) => s.ticketData)
@@ -20,6 +21,9 @@ export function useGenerateReply() {
   const saveReplyForTicket = useSidebarStore((s) => s.saveReplyForTicket)
   const { settings } = useSettings()
 
+  // Ref-based token accumulation for performance (no setState per token)
+  const replyRef = useRef('')
+
   const generate = useCallback(async () => {
     if (!ticketData) return
 
@@ -31,9 +35,13 @@ export function useGenerateReply() {
     setIsInserted(false)
     setIsEditingReply(false)
     setReplyRating(null)
+    replyRef.current = ''
+
+    let contextDocs: ContextDoc[] = []
+    let latencyMs = 0
 
     try {
-      const response = await apiClient.generate({
+      const stream = await apiClient.generateStream({
         ticket_subject: ticketData.subject,
         ticket_description: ticketData.description,
         requester_name: ticketData.requesterName,
@@ -41,7 +49,7 @@ export function useGenerateReply() {
         status: ticketData.status,
         model: selectedModel,
         max_context_docs: 5,
-        stream: false,
+        stream: true,
         include_web_context: true,
         prompt_suffix: settings.promptSuffix,
         custom_fields: ticketData.customFields,
@@ -55,8 +63,38 @@ export function useGenerateReply() {
           time_spent: n.timeSpent,
         })),
       }, ctrl.signal)
-      setReply(response.reply)
-      setLastResponse(response)
+
+      for await (const event of stream) {
+        if (ctrl.signal.aborted) return
+
+        switch (event.type) {
+          case 'meta':
+            contextDocs = event.context_docs
+            debugLog('SSE meta: received', event.context_docs.length, 'context docs')
+            break
+          case 'token':
+            replyRef.current += event.content
+            setReply(replyRef.current)
+            break
+          case 'error':
+            // Preserve partial text and show inline error
+            setGenerateError(event.message)
+            debugError('SSE error:', event.error_code, event.message)
+            return
+          case 'done':
+            latencyMs = event.latency_ms
+            debugLog('SSE done: latency', event.latency_ms, 'ms')
+            break
+        }
+      }
+
+      const finalReply = replyRef.current
+      setLastResponse({
+        reply: finalReply,
+        model_used: selectedModel,
+        context_docs: contextDocs,
+        latency_ms: latencyMs,
+      })
 
       // Persist reply for this ticket so it survives navigation
       if (ticketData.ticketUrl) {
@@ -64,9 +102,9 @@ export function useGenerateReply() {
       }
 
       // Auto-insert: send INSERT_REPLY message to content script after successful generation
-      if (settings.autoInsert && response.reply) {
+      if (settings.autoInsert && finalReply) {
         debugLog('Auto-insert enabled, sending INSERT_REPLY')
-        chrome.runtime.sendMessage({ type: 'INSERT_REPLY', payload: { text: response.reply } }).catch((err: unknown) => {
+        chrome.runtime.sendMessage({ type: 'INSERT_REPLY', payload: { text: finalReply } }).catch((err: unknown) => {
           debugError('Auto-insert failed:', err)
         })
       }

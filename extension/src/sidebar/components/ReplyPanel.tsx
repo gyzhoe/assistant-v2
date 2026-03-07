@@ -103,9 +103,9 @@ export function ReplyPanel(): React.ReactElement {
             type="button"
             className="secondary-btn cancel-btn"
             onClick={cancelGeneration}
-            aria-label="Cancel reply generation"
+            aria-label="Stop generating"
           >
-            Cancel
+            Stop
           </button>
         )}
         {generateError && !isGenerating && (
@@ -116,14 +116,58 @@ export function ReplyPanel(): React.ReactElement {
       {/* Draft output */}
       <section className="panel" aria-label="Generated reply">
         <h2 className="section-heading">Draft output</h2>
-        {isGenerating && <SkeletonLoader />}
+        {isGenerating && !reply && <SkeletonLoader />}
 
-        {!isGenerating && !reply && (
+        {isGenerating && reply && (
+          <div className="draft-panel">
+            <div className="draft-header">
+              <span className="draft-label">Generating...</span>
+              <div className="draft-actions">
+                <button
+                  type="button"
+                  className="secondary-btn draft-toggle"
+                  disabled
+                  aria-label="Copy reply to clipboard"
+                  title="Copy reply to clipboard"
+                >
+                  <CopyIcon />
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn draft-toggle"
+                  disabled
+                  aria-label="Edit reply"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+            <div
+              className="reply-box"
+              role="log"
+              aria-live="polite"
+              aria-label="Reply being generated"
+            >
+              {reply}<span className="streaming-cursor" aria-hidden="true" />
+            </div>
+            <InsertButton />
+          </div>
+        )}
+
+        {!isGenerating && !reply && !generateError && (
           <div className="reply-box">
             <span className="reply-placeholder">
               Your generated reply will appear here.
             </span>
             <span className="reply-hint">Press Alt+Shift+H to toggle sidebar</span>
+          </div>
+        )}
+
+        {!isGenerating && !reply && generateError && (
+          <div className="reply-box">
+            <span className="reply-placeholder">
+              Your generated reply will appear here.
+            </span>
           </div>
         )}
 
@@ -186,6 +230,11 @@ export function ReplyPanel(): React.ReactElement {
                 </button>
               </div>
             </div>
+            {generateError && (
+              <p className="support-text error-text stream-error-inline" role="alert">
+                Generation interrupted &mdash; you can use what&rsquo;s above or try again
+              </p>
+            )}
             {isEditingReply ? (
               <textarea
                 className="reply-edit"
@@ -202,6 +251,10 @@ export function ReplyPanel(): React.ReactElement {
             {!isInserted && <InsertButton />}
           </div>
         )}
+        <div aria-live="polite" className="sr-only">
+          {!isGenerating && reply && !generateError && 'Reply generation complete.'}
+          {!isGenerating && generateError && 'Reply generation encountered an error.'}
+        </div>
       </section>
     </>
   )

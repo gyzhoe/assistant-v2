@@ -1,4 +1,5 @@
-import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelDownloadStatus, ModelsResponse } from '../shared/types'
+import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelDownloadStatus, ModelsResponse, SSEEvent } from '../shared/types'
+import { parseSSEStream } from './sse-parser'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS, NATIVE_HOST } from '../shared/constants'
 import { ApiError } from '../shared/api-error'
 
@@ -43,6 +44,24 @@ export const apiClient = {
       throw new ApiError(resp.status, error)
     }
     return resp.json() as Promise<GenerateResponse>
+  },
+
+  async generateStream(req: GenerateRequest, signal?: AbortSignal): Promise<AsyncGenerator<SSEEvent>> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...req, stream: true }),
+      signal,
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+    if (!resp.body) {
+      throw new ApiError(0, { detail: 'Response body is not readable' })
+    }
+    return parseSSEStream(resp.body.getReader(), signal)
   },
 
   async health(): Promise<HealthResponse> {
