@@ -167,6 +167,18 @@ jobs:
           $fileCount = (Get-ChildItem -Path "installer/deps/llama-cpu" -Recurse -File).Count
           $totalSize = [math]::Round((Get-ChildItem -Path "installer/deps/llama-cpu" -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB, 1)
           Write-Host "llama-server CPU: $fileCount files, $totalSize MB"
+      - name: Download assistant-tools binary
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # assistant-tools.exe — Rust binary for health check and update commands
+          # Hosted on the 'tools' GitHub release
+          $toolsUrl = "https://github.com/gyzhoe/assistant-v2/releases/download/tools/assistant-tools.exe"
+          Write-Host "Downloading assistant-tools.exe..."
+          Invoke-WebRequest -Uri $toolsUrl -OutFile "installer/deps/assistant-tools.exe"
+          $size = [math]::Round((Get-Item "installer/deps/assistant-tools.exe").Length / 1MB, 1)
+          Write-Host "assistant-tools.exe: $size MB"
+
       - name: Download uv standalone
         if: steps.deps-cache.outputs.cache-hit != 'true'
         shell: pwsh
