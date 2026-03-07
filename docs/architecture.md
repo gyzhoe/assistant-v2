@@ -4,7 +4,7 @@
 
 The AI Helpdesk Assistant is a two-part system:
 1. A **Microsoft Edge browser extension** (Manifest V3) that reads WHD ticket pages and hosts the React UI sidebar
-2. A **Python FastAPI backend** that runs locally, orchestrates RAG retrieval, and calls Ollama for inference
+2. A **Python FastAPI backend** that runs locally, orchestrates RAG retrieval, and calls llama-server (llama.cpp) for inference
 
 All processing is local — no data leaves the machine.
 
@@ -25,13 +25,13 @@ All processing is local — no data leaves the machine.
 ┌───────────▼──────────────────────────────────────┐
 │         Python FastAPI Backend (port 8765)        │
 │  - RAG orchestration   - Prompt assembly          │
-│  - ChromaDB retrieval  - Ollama client            │
+│  - ChromaDB retrieval  - llama.cpp client         │
 └──────────┬─────────────────────┬─────────────────┘
            │                     │
 ┌──────────▼──────────┐ ┌────────▼───────────────┐
-│   Ollama Server     │ │   ChromaDB (local)     │
-│  qwen3.5:9b (gen)   │ │  - whd_tickets         │
-│  nomic-embed-text   │ │  - kb_articles         │
+│  llama-server (x2)  │ │   ChromaDB (local)     │
+│  :11435 chat model  │ │  - whd_tickets         │
+│  :11436 embed model │ │  - kb_articles         │
 └─────────────────────┘ └────────────────────────┘
 ```
 
@@ -62,7 +62,7 @@ All processing is local — no data leaves the machine.
 ## Backend Architecture
 
 ### FastAPI Application (`app/main.py`)
-- Lifespan handler initializes ChromaDB and verifies Ollama connectivity
+- Lifespan handler initializes ChromaDB and verifies llama-server connectivity
 - CORS restricted to the exact extension origin
 
 ### Routers
@@ -70,13 +70,13 @@ All processing is local — no data leaves the machine.
 |---|---|
 | `GET /health` | System status check |
 | `POST /generate` | Main RAG + LLM inference endpoint |
-| `GET /models` | Lists available Ollama models |
+| `GET /models` | Lists available GGUF models |
 | `POST /ingest` | Triggers ingestion (for future web UI) |
 
 ### Services
-- `embed_service.py`: Embeds text using `nomic-embed-text` via Ollama
+- `embed_service.py`: Embeds text using `nomic-embed-text` via llama-server `/v1/embeddings` (port 11436)
 - `rag_service.py`: Queries ChromaDB collections, merges and ranks results
-- `llm_service.py`: Sends prompt to Ollama, returns completion
+- `llm_service.py`: Sends prompt to llama-server `/v1/chat/completions` (port 11435), returns completion
 
 ### Data Flow for Reply Generation
 
@@ -86,7 +86,7 @@ All processing is local — no data leaves the machine.
 3. rag_service queries whd_tickets and kb_articles collections
 4. Top-k results merged and ranked by similarity score
 5. llm_service assembles prompt + context docs
-6. Ollama generates reply
+6. llama-server generates reply
 7. Backend returns { reply, context_docs, latency_ms }
 8. Sidebar displays reply; user clicks Insert
 9. INSERT_REPLY message flows: sidebar → background SW → content script

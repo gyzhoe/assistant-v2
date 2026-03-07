@@ -12,7 +12,7 @@ in place and the steps required to harden the deployment.
 
 | Control | Status | Notes |
 |---|---|---|
-| All inference local | Enforced | Ollama only — no cloud calls for inference. Optional Microsoft Learn search is read-only documentation lookup |
+| All inference local | Enforced | llama-server (llama.cpp) only — no cloud calls for inference. Optional Microsoft Learn search is read-only documentation lookup |
 | CORS restricted to extension origin | Enforced | `CORSMiddleware` locks to `chrome-extension://<ID>` |
 | API token auth | Configurable | Set `API_TOKEN` in `.env` — required in production |
 | Request size limit | Enforced | Default 64 KB for API; 50 MB for file uploads (`MAX_UPLOAD_BYTES`) |
@@ -84,15 +84,16 @@ ChromaDB stores embeddings of your ticket/KB content. Protect it:
 - Restrict file system permissions to the service account only
 - Include in your backup rotation
 
-### 6. Ollama Hardening
+### 6. LLM Server Hardening
 
-Ensure Ollama is also bound to localhost:
+Ensure llama-server is bound to localhost (the default):
 ```
-# Edit Ollama service to set OLLAMA_HOST=127.0.0.1:11435
+llama-server --host 127.0.0.1 --port 11435 -m models/Qwen3.5-9B-Q4_K_M.gguf
+llama-server --host 127.0.0.1 --port 11436 -m models/nomic-embed-text-v1.5.f16.gguf --embedding
 ```
 
-Ollama has no built-in authentication. The FastAPI backend is the only component
-that should call Ollama.
+llama-server has no built-in authentication. The FastAPI backend is the only component
+that should call llama-server.
 
 ### 7. Audit Logging (optional enhancement)
 
@@ -108,7 +109,7 @@ If your security policy requires audit logs, add structured logging middleware t
 | Threat | Mitigation |
 |---|---|
 | Malicious local process calling the backend | API token header (`X-Extension-Token`) |
-| Oversized payload to Ollama (DoS) | Request size limit (64 KB API, 50 MB upload), input `max_length` |
+| Oversized payload to LLM server (DoS) | Request size limit (64 KB API, 50 MB upload), input `max_length` |
 | Rate abuse (runaway extension) | Rate limiting (20 req/min generate, 5 req/min upload) |
 | Concurrent upload exhaustion | Semaphore limits to 1 active ingestion; 409 on conflict |
 | Path traversal via filename | Filename sanitized with `PurePosixPath().name` |
@@ -154,7 +155,7 @@ The optional Microsoft Learn integration searches public documentation at genera
 
 ## What This System Does NOT Do
 
-- Does not send data to OpenAI, Anthropic, or any cloud service for inference
+- Does not send data to any cloud service for inference (llama-server runs entirely locally)
 - Does not store ticket content to disk (only embeddings of ingested KB/past tickets)
 - Does not log ticket content
 - Does not require internet access (Microsoft Learn search is optional and degrades gracefully)
