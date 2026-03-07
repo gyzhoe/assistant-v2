@@ -336,6 +336,126 @@ select.options-input {
   color: #f85149;
 }
 
+/* ── LLM Models ───────────────────────────────────────────────────── */
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.model-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.8125rem;
+}
+
+.model-card:last-child {
+  border-bottom: none;
+}
+
+.model-card-name {
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+
+.model-card-size {
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.model-status-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.model-status-badge--downloaded {
+  background: color-mix(in srgb, #1a7f37 12%, transparent);
+  color: #1a7f37;
+}
+
+.options-shell[data-theme='dark'] .model-status-badge--downloaded {
+  background: color-mix(in srgb, #3fb950 12%, transparent);
+  color: #3fb950;
+}
+
+.model-status-badge--download {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.model-status-badge--download:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.model-status-badge--download:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.model-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-progress-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0;
+}
+
+.model-progress-bar-track {
+  height: 8px;
+  background: var(--border-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.model-progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 300ms ease;
+}
+
+.model-progress-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.model-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-error-text {
+  font-size: 0.75rem;
+  color: #d1242f;
+  margin: 0;
+  flex: 1;
+}
+
+.options-shell[data-theme='dark'] .model-error-text {
+  color: #f85149;
+}
+
 /* ── Quick links ───────────────────────────────────────────────────── */
 
 .options-links-list {

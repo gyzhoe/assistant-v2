@@ -1,5 +1,9 @@
 """Shared constants for the AI Helpdesk Assistant backend."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
+
 # ── GGUF model mapping ──────────────────────────────────────────────────────
 # Display name <-> GGUF filename for bundled llama-server models.
 
@@ -14,6 +18,46 @@ MODEL_GGUF_FILES: dict[str, str] = {v: k for k, v in MODEL_DISPLAY_NAMES.items()
 
 # Embed model filenames to exclude from LLM model listings.
 EMBED_MODEL_PREFIXES: tuple[str, ...] = ("nomic-embed-text",)
+
+
+@dataclass(frozen=True)
+class GGUFModelInfo:
+    """Metadata for a downloadable GGUF model file."""
+
+    name: str
+    display_name: str
+    url: str
+    description: str
+    is_embed: bool
+
+
+GGUF_MODELS: list[GGUFModelInfo] = [
+    GGUFModelInfo(
+        name="nomic-embed-text-v1.5.f16.gguf",
+        display_name="nomic-embed-text",
+        url="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf",
+        description="~262 MB",
+        is_embed=True,
+    ),
+    GGUFModelInfo(
+        name="Qwen3.5-9B-Q4_K_M.gguf",
+        display_name="qwen3.5:9b",
+        url="https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        description="~5.3 GB",
+        is_embed=False,
+    ),
+    GGUFModelInfo(
+        name="Qwen3-14B-Q4_K_M.gguf",
+        display_name="qwen3:14b",
+        url="https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf",
+        description="~9 GB (optional, better language control)",
+        is_embed=False,
+    ),
+]
+"""All known GGUF models with download URLs."""
+
+GGUF_MODELS_BY_NAME: dict[str, GGUFModelInfo] = {m.name: m for m in GGUF_MODELS}
+"""Lookup GGUF model info by filename."""
 
 # ── ChromaDB collection names ────────────────────────────────────────────────
 

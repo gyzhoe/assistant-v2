@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
 from app.services.microsoft_docs import MicrosoftDocsService
+from app.services.model_download_service import ModelDownloadService
 from app.services.rag_service import RAGService
 
 
@@ -38,3 +39,4 @@ def setup_app_state(app: Any) -> None:
         chroma_client=app.state.chroma_client,
         embed_svc=app.state.embed_service,
     )
+    app.state.model_download_service = ModelDownloadService()

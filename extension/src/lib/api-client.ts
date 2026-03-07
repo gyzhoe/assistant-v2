@@ -1,4 +1,4 @@
-import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelsResponse } from '../shared/types'
+import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelDownloadStatus, ModelsResponse } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS, NATIVE_HOST } from '../shared/constants'
 import { ApiError } from '../shared/api-error'
 
@@ -111,6 +111,40 @@ export const apiClient = {
       throw new ApiError(resp.status, error)
     }
     return resp.json() as Promise<{ status: string; model: string }>
+  },
+
+  async downloadModels(models?: string[]): Promise<{ status: string; models: string[] }> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/models/download`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ models: models ?? [] }),
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Failed to start download' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<{ status: string; models: string[] }>
+  },
+
+  async downloadStatus(): Promise<ModelDownloadStatus> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/models/download/status`, { headers })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Failed to get download status' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<ModelDownloadStatus>
+  },
+
+  async cancelDownload(): Promise<{ status: string }> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/models/download/cancel`, { method: 'POST', headers })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Failed to cancel download' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<{ status: string }>
   },
 
   async uploadFile(file: File, signal?: AbortSignal): Promise<IngestUploadResponse> {
