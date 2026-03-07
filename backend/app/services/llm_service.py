@@ -52,7 +52,7 @@ class LLMService:
         raise last_error  # type: ignore[misc]
 
     async def _generate_async(self, prompt: str, model: str) -> str:
-        base_url = settings.llm_base_url
+        base_url = str(self._client.base_url)
         try:
             resp = await self._client.post(
                 "/v1/chat/completions",
@@ -95,7 +95,7 @@ class LLMService:
         Yields raw token strings. Raises ConnectionError or LLMModelError
         on failure (same contract as ``generate``).
         """
-        base_url = settings.llm_base_url
+        base_url = str(self._client.base_url)
         try:
             async with self._client.stream(
                 "POST",

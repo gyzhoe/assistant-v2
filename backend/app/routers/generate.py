@@ -30,10 +30,10 @@ router = APIRouter(tags=["generate"])
 
 async def _prepare_context(
     body: GenerateRequest, request: Request,
-) -> tuple[list[ContextDoc], str]:
+) -> tuple[list[ContextDoc], str, int]:
     """Retrieve RAG context, pinned articles, and web docs; build the prompt.
 
-    Returns (context_docs, prompt).
+    Returns (context_docs, prompt, web_docs_count).
     """
     chroma_client = request.app.state.chroma_client
     rag: RAGService = request.app.state.rag_service
@@ -95,12 +95,23 @@ async def _prepare_context(
             "</user_additional_instructions>"
         )
 
-    return context_docs, prompt
+    return context_docs, prompt, len(web_docs)
 
 
 def _sse_event(data: dict[str, object]) -> str:
     """Format a single SSE event line."""
     return f"data: {json.dumps(data)}\n\n"
+
+
+async def _sse_error_only(exc: Exception) -> AsyncGenerator[str]:
+    """Yield a single SSE error event for context-preparation failures."""
+    if isinstance(exc, ConnectionError):
+        code = ErrorCode.LLM_DOWN.value
+    elif isinstance(exc, LLMModelError):
+        code = ErrorCode.MODEL_ERROR.value
+    else:
+        code = ErrorCode.INTERNAL_ERROR.value
+    yield _sse_event({"type": "error", "error_code": code, "message": str(exc)})
 
 
 async def _stream_generate(
@@ -129,6 +140,14 @@ async def _stream_generate(
             "message": str(exc),
         })
         return
+    except Exception:
+        logger.exception("Unexpected error during SSE streaming")
+        yield _sse_event({
+            "type": "error",
+            "error_code": ErrorCode.INTERNAL_ERROR.value,
+            "message": "Internal server error",
+        })
+        return
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     yield _sse_event({"type": "done", "latency_ms": latency_ms})
@@ -151,9 +170,20 @@ async def generate_reply(
     )
     start = time.perf_counter()
 
-    context_docs, prompt = await _prepare_context(body, request)
-
     if body.stream:
+        try:
+            context_docs, prompt, _web_count = await _prepare_context(
+                body, request,
+            )
+        except (ConnectionError, LLMModelError) as exc:
+            return StreamingResponse(
+                _sse_error_only(exc),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         return StreamingResponse(
             _stream_generate(llm, body, context_docs, prompt, start),
             media_type="text/event-stream",
@@ -164,12 +194,13 @@ async def generate_reply(
         )
 
     # Non-streaming JSON response (existing behavior)
+    context_docs, prompt, web_count = await _prepare_context(body, request)
     reply = await llm.generate(prompt=prompt, model=body.model)
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     logger.info(
-        "Generate complete: model=%s latency=%dms docs=%d",
-        body.model, latency_ms, len(context_docs),
+        "Generate complete: model=%s latency=%dms docs=%d web_docs=%d",
+        body.model, latency_ms, len(context_docs), web_count,
     )
 
     return GenerateResponse(

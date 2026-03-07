@@ -346,3 +346,80 @@ async def test_stream_response_headers(
     })
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
+
+
+# ---------------------------------------------------------------------------
+# [H1] Context prep failure returns SSE error (not JSON)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_context_prep_failure_returns_sse_error(
+    stream_app: Any, stream_client: AsyncClient,
+) -> None:
+    """If _prepare_context fails, streaming returns SSE error, not JSON 503."""
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(
+        side_effect=ConnectionError("Embed server down"),
+    )
+    mock_llm = MagicMock()
+    mock_ms = _mock_ms_docs()
+
+    stream_app.state.rag_service = mock_rag
+    stream_app.state.llm_service = mock_llm
+    stream_app.state.ms_docs_service = mock_ms
+
+    response = await stream_client.post("/generate", json={
+        "ticket_subject": "Test",
+        "stream": True,
+    })
+    # Should still be 200 with SSE content type, not 503 JSON
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+
+    events = _parse_sse_events(response.text)
+    assert len(events) == 1
+    assert events[0]["type"] == "error"
+    assert events[0]["error_code"] == ErrorCode.LLM_DOWN.value
+    assert "Embed server down" in str(events[0]["message"])
+
+
+# ---------------------------------------------------------------------------
+# [M4] Generic exception during streaming yields INTERNAL_ERROR
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_unexpected_error_yields_internal_error(
+    stream_app: Any, stream_client: AsyncClient,
+) -> None:
+    """An unexpected exception during streaming yields INTERNAL_ERROR SSE event."""
+    mock_rag = MagicMock()
+    mock_rag.retrieve = AsyncMock(return_value=[])
+    mock_llm = MagicMock()
+
+    async def exploding_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
+        yield "partial"
+        raise RuntimeError("something unexpected broke")
+
+    mock_llm.generate_stream = exploding_stream
+    mock_ms = _mock_ms_docs()
+
+    stream_app.state.rag_service = mock_rag
+    stream_app.state.llm_service = mock_llm
+    stream_app.state.ms_docs_service = mock_ms
+
+    response = await stream_client.post("/generate", json={
+        "ticket_subject": "Test",
+        "stream": True,
+    })
+    assert response.status_code == 200
+
+    events = _parse_sse_events(response.text)
+    error_events = [e for e in events if e["type"] == "error"]
+    assert len(error_events) == 1
+    assert error_events[0]["error_code"] == ErrorCode.INTERNAL_ERROR.value
+
+    # No done event after error
+    done_events = [e for e in events if e["type"] == "done"]
+    assert len(done_events) == 0

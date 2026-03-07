@@ -59,5 +59,5 @@ def test_warmup_partial_collections(
         warmup_chromadb(mock_chroma)
 
     log_messages = " ".join(r.getMessage() for r in caplog.records)
-    assert "has 10 documents" in log_messages
-    assert "not found" in log_messages
+    assert "kb_articles has 10 documents" in log_messages
+    assert "whd_tickets not found" in log_messages

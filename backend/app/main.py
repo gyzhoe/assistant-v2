@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.constants import LLMModelError
+from app.constants import KB_COLLECTION, TICKET_COLLECTION, LLMModelError
 from app.logging_config import setup_logging
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.security import (
@@ -35,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 def warmup_chromadb(chroma_client: "chromadb.api.ClientAPI") -> None:
     """Warm up ChromaDB collections to avoid cold-start latency on first query."""
-    from app.constants import KB_COLLECTION, TICKET_COLLECTION
-
     for col_name in (KB_COLLECTION, TICKET_COLLECTION):
         try:
             col = chroma_client.get_collection(col_name)

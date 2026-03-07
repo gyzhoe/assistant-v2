@@ -62,6 +62,7 @@ def _mock_async_client() -> MagicMock:
     mock = MagicMock(spec=httpx.AsyncClient)
     mock.post = AsyncMock()
     mock.get = AsyncMock()
+    mock.base_url = httpx.URL("http://localhost:11435")
     return mock
 
 

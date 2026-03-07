@@ -375,6 +375,12 @@ class UnhandledExceptionMiddleware:
                     "type": "http.response.body",
                     "body": payload,
                 })
+            else:
+                logger.warning(
+                    "Unhandled exception after response started on %s"
+                    " — client will see a broken stream",
+                    path,
+                )
 
 
 class SecurityHeadersMiddleware:
