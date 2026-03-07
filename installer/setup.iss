@@ -185,8 +185,9 @@ Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-
 ; Step 2: Cleanup dialog — now safe to delete files (processes are dead)
 Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-cleanup.ps1"" -AppDir ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "UninstallCleanup"
 
-; Step 3: Remove the install directory if it's empty or nearly empty after Inno cleanup
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Start-Sleep -Seconds 1; $d = '{app}'; if (Test-Path $d) {{ Remove-Item -Path $d -Recurse -Force -EA SilentlyContinue }}"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveInstallDir"
+; Step 3: Remove the install directory — but preserve models if the user chose to keep them.
+; The cleanup dialog already ran, so if models/ still exists the user wanted to keep it.
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Start-Sleep -Seconds 1; $d = '{app}'; if (Test-Path $d) {{ $models = Join-Path $d 'models'; $hasModels = (Test-Path $models) -and (Get-ChildItem $models -File -EA SilentlyContinue | Select-Object -First 1); Get-ChildItem $d -Exclude 'models' -EA SilentlyContinue | Remove-Item -Recurse -Force -EA SilentlyContinue; if (-not $hasModels) {{ Remove-Item $d -Recurse -Force -EA SilentlyContinue }} else {{ Write-Host 'Keeping models directory as requested' }} }}"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveInstallDir"
 
 [Code]
 var
