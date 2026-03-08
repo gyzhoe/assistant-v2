@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.constants import KB_COLLECTION, TICKET_COLLECTION, LLMModelError
+from app.constants import KB_COLLECTION, MODEL_DISPLAY_NAMES, TICKET_COLLECTION, LLMModelError
 from app.logging_config import setup_logging
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.security import (
@@ -110,6 +110,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     if app.state.llm_reachable:
         logger.info("LLM server reachable at %s", settings.llm_base_url)
+        # Detect which model is actually loaded via /v1/models
+        try:
+            resp = await llm_client.get("/v1/models", timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                models_list = data.get("data", [])
+                if models_list:
+                    model_id: str = models_list[0].get("id", "")
+                    # model_id is typically the GGUF filename
+                    basename = model_id.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+                    detected = MODEL_DISPLAY_NAMES.get(
+                        model_id,
+                        MODEL_DISPLAY_NAMES.get(basename),
+                    )
+                    if detected:
+                        app.state.current_llm_model = detected
+                        logger.info("Detected loaded model: %s", detected)
+                    else:
+                        logger.debug(
+                            "Model ID '%s' not in MODEL_DISPLAY_NAMES, "
+                            "keeping default '%s'",
+                            model_id, settings.default_model,
+                        )
+        except Exception:
+            logger.debug("Could not probe /v1/models, using default model")
     else:
         logger.warning("LLM server not reachable at %s", settings.llm_base_url)
 

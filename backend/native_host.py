@@ -94,6 +94,11 @@ def start_backend() -> dict:
         log(f"venv not found at {venv_python}")
         return {"ok": False, "error": "Backend venv not found. Run setup first."}
 
+    # Check if backend is already running on port 8765
+    if _is_port_listening(8765):
+        log("start_backend: port 8765 already in use, backend likely running")
+        return {"ok": False, "error": "Backend already running on port 8765."}
+
     # Kill leftover Ollama processes to avoid port conflicts on upgrade
     _kill_legacy_ollama()
 
@@ -109,14 +114,18 @@ def start_backend() -> dict:
     try:
         with open(log_out, "w") as fout, open(log_err, "w") as ferr:
             proc = subprocess.Popen(
-                [venv_python, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8765"],
+                [venv_python, "-m", "uvicorn", "app.main:app",
+                 "--host", "127.0.0.1", "--port", "8765"],
                 cwd=BACKEND_DIR,
                 stdout=fout,
                 stderr=ferr,
                 creationflags=_CREATION_FLAGS,
             )
         log(f"Started PID={proc.pid}")
-        return {"ok": True, "status": "starting", "pid": proc.pid, "llm_started": llm_started}
+        return {
+            "ok": True, "status": "starting",
+            "pid": proc.pid, "llm_started": llm_started,
+        }
     except Exception as e:
         log(f"Error starting backend: {e}")
         return {"ok": False, "error": str(e)}
@@ -281,10 +290,17 @@ def _detect_gpu_config() -> tuple[str, str]:
         return ("0", "2048")
 
 
-def _start_llama_servers() -> bool:
-    """Start both LLM and embed llama-server instances."""
+def _start_llama_servers(
+    *, skip_llm: bool = False, skip_embed: bool = False,
+) -> bool:
+    """Start LLM and/or embed llama-server instances.
+
+    Args:
+        skip_llm: If True, skip starting the LLM server (already running).
+        skip_embed: If True, skip starting the embed server (already running).
+    """
     llama_exe = LLAMA_SERVER_EXE if os.path.exists(LLAMA_SERVER_EXE) else "llama-server"
-    log(f"Starting llama-server instances: {llama_exe}")
+    log(f"Starting llama-server instances: {llama_exe} (skip_llm={skip_llm}, skip_embed={skip_embed})")
 
     n_gpu_layers, ctx_size = _detect_gpu_config()
     logs_dir = os.path.join(APP_DIR, "logs")
@@ -293,35 +309,37 @@ def _start_llama_servers() -> bool:
     llm_log = None
     embed_log = None
     try:
-        # LLM server
-        llm_model = os.path.join(MODELS_DIR, "Qwen3.5-9B-Q4_K_M.gguf")
-        llm_log = open(os.path.join(logs_dir, "llm_server.log"), "w")  # noqa: SIM115
-        subprocess.Popen(
-            [
-                llama_exe, "-m", llm_model,
-                "--port", "11435",
-                "--n-gpu-layers", n_gpu_layers,
-                "--ctx-size", ctx_size,
-            ],
-            stdout=llm_log,
-            stderr=llm_log,
-            creationflags=_CREATION_FLAGS,
-        )
+        if not skip_llm:
+            # LLM server
+            llm_model = os.path.join(MODELS_DIR, "Qwen3.5-9B-Q4_K_M.gguf")
+            llm_log = open(os.path.join(logs_dir, "llm_server.log"), "w")  # noqa: SIM115
+            subprocess.Popen(
+                [
+                    llama_exe, "-m", llm_model,
+                    "--port", "11435",
+                    "--n-gpu-layers", n_gpu_layers,
+                    "--ctx-size", ctx_size,
+                ],
+                stdout=llm_log,
+                stderr=llm_log,
+                creationflags=_CREATION_FLAGS,
+            )
 
-        # Embed server (small model — always offload same as LLM)
-        embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.f16.gguf")
-        embed_log = open(os.path.join(logs_dir, "embed_server.log"), "w")  # noqa: SIM115
-        subprocess.Popen(
-            [
-                llama_exe, "-m", embed_model,
-                "--port", "11436",
-                "--embedding",
-                "--n-gpu-layers", n_gpu_layers,
-            ],
-            stdout=embed_log,
-            stderr=embed_log,
-            creationflags=_CREATION_FLAGS,
-        )
+        if not skip_embed:
+            # Embed server (small model — always offload same as LLM)
+            embed_model = os.path.join(MODELS_DIR, "nomic-embed-text-v1.5.f16.gguf")
+            embed_log = open(os.path.join(logs_dir, "embed_server.log"), "w")  # noqa: SIM115
+            subprocess.Popen(
+                [
+                    llama_exe, "-m", embed_model,
+                    "--port", "11436",
+                    "--embedding",
+                    "--n-gpu-layers", n_gpu_layers,
+                ],
+                stdout=embed_log,
+                stderr=embed_log,
+                creationflags=_CREATION_FLAGS,
+            )
         return True
     except Exception as e:
         log(f"Warning: could not start llama-server: {e}")
@@ -360,27 +378,51 @@ def get_token() -> dict:
 
 
 def start_llm() -> dict:
-    """Start llama-server instances."""
+    """Start llama-server instances, skipping any that are already running."""
     # Kill leftover Ollama processes to avoid port conflicts on upgrade
     _kill_legacy_ollama()
 
-    ok = _start_llama_servers()
+    llm_running = _is_port_listening(11435)
+    embed_running = _is_port_listening(11436)
+
+    if llm_running and embed_running:
+        log("start_llm: both servers already running")
+        return {"ok": True, "status": "already_running"}
+
+    ok = _start_llama_servers(skip_llm=llm_running, skip_embed=embed_running)
     if ok:
         return {"ok": True, "status": "starting"}
     return {"ok": False, "error": "Failed to start llama-server"}
 
 
+def _kill_pids(pids: list[int]) -> None:
+    """Kill specific PIDs using taskkill."""
+    for pid in pids:
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=_CREATION_FLAGS,
+            )
+        except Exception as e:
+            log(f"_kill_pids: failed to kill PID {pid}: {e}")
+
+
 def _kill_llm() -> None:
-    """Kill llama-server processes (shared by stop_backend and stop_llm)."""
-    try:
-        subprocess.run(
-            ["taskkill", "/IM", "llama-server.exe", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=_CREATION_FLAGS,
-        )
-    except Exception as e:
-        log(f"_kill_llm: failed to kill llama-server.exe: {e}")
+    """Kill llama-server processes on ports 11435 and 11436 (port-targeted).
+
+    Uses _find_pids_on_port() instead of ``taskkill /IM`` to avoid killing
+    unrelated llama-server processes that might be running on other ports.
+    """
+    pids_llm = _find_pids_on_port(11435)
+    pids_embed = _find_pids_on_port(11436)
+    all_pids = sorted(set(pids_llm + pids_embed))
+    if all_pids:
+        log(f"_kill_llm: killing PIDs {all_pids} on ports 11435/11436")
+        _kill_pids(all_pids)
+    else:
+        log("_kill_llm: no llama-server PIDs found on ports 11435/11436")
 
 
 def stop_backend() -> dict:

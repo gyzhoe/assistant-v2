@@ -456,3 +456,77 @@ class TestEmbedServiceEmbedAsync:
         svc, _ = self._svc()
         with pytest.raises(TypeError, match="embed_fn.*not available"):
             _ = svc.embed_fn
+
+
+# ---------------------------------------------------------------------------
+# LLMService._prepare_prompt tests
+# ---------------------------------------------------------------------------
+
+
+class TestPreparePrompt:
+    """Tests for conditional /no_think suffix on Qwen3 models."""
+
+    def test_qwen3_gets_no_think_suffix(self) -> None:
+        """Qwen3 models (thinking=1 by default) get /no_think appended."""
+        result = LLMService._prepare_prompt("Hello", "qwen3:14b")
+        assert result == "Hello /no_think"
+
+    def test_qwen3_case_insensitive(self) -> None:
+        """Model name matching is case-insensitive."""
+        result = LLMService._prepare_prompt("Hello", "Qwen3:14b")
+        assert result == "Hello /no_think"
+
+    def test_qwen35_no_suffix(self) -> None:
+        """Qwen3.5 models (thinking=0 by default) do NOT get the suffix."""
+        result = LLMService._prepare_prompt("Hello", "qwen3.5:9b")
+        assert result == "Hello"
+
+    def test_qwen35_uppercase_no_suffix(self) -> None:
+        """Qwen3.5 case-insensitive — still no suffix."""
+        result = LLMService._prepare_prompt("Hello", "Qwen3.5:9b")
+        assert result == "Hello"
+
+    def test_other_model_no_suffix(self) -> None:
+        """Non-Qwen models get no suffix."""
+        result = LLMService._prepare_prompt("Hello", "llama3.2:3b")
+        assert result == "Hello"
+
+    def test_empty_model_no_suffix(self) -> None:
+        """Empty model name does not crash."""
+        result = LLMService._prepare_prompt("Hello", "")
+        assert result == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_generate_sends_prepared_prompt_for_qwen3(self) -> None:
+        """generate() applies _prepare_prompt before sending to server."""
+        mock_client = _mock_async_client()
+        svc = LLMService(client=mock_client)
+        mock_resp = _make_response(json_data={
+            "choices": [{"message": {"content": "ok"}}],
+        })
+        mock_client.post.return_value = mock_resp
+
+        await svc.generate("Describe the issue.", "qwen3:14b")
+
+        call_kwargs = mock_client.post.call_args
+        sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
+        content = sent_json["messages"][0]["content"]
+        assert content.endswith(" /no_think")
+
+    @pytest.mark.asyncio
+    async def test_generate_no_suffix_for_qwen35(self) -> None:
+        """generate() does NOT append /no_think for qwen3.5 models."""
+        mock_client = _mock_async_client()
+        svc = LLMService(client=mock_client)
+        mock_resp = _make_response(json_data={
+            "choices": [{"message": {"content": "ok"}}],
+        })
+        mock_client.post.return_value = mock_resp
+
+        await svc.generate("Describe the issue.", "qwen3.5:9b")
+
+        call_kwargs = mock_client.post.call_args
+        sent_json: dict[str, Any] = call_kwargs.kwargs.get("json") or call_kwargs.args[1]
+        content = sent_json["messages"][0]["content"]
+        assert not content.endswith(" /no_think")
+        assert content == "Describe the issue."
