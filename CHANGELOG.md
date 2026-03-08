@@ -5,7 +5,7 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Process Management Fixes
+## [Unreleased] — Process Management Fixes + Docs Cleanup
 
 ### Added
 
@@ -23,12 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Port-targeted process kill** (backend) — LLM stop/restart now kills only the LLM server process, preserving the embed server
 - **Duplicate process creation** (backend) — port-in-use guards prevent starting a second LLM server when one is already running
 - **Model state detection** (backend) — probes the actual server instead of trusting in-memory state
+- CI environment variables: `OLLAMA_BASE_URL` → `LLM_BASE_URL`/`EMBED_BASE_URL`, `DEFAULT_MODEL` → `qwen3.5:9b`
 
 ### Changed
 
 - `BackendControl` LLM action state expanded: `'idle' | 'starting' | 'stopping' | 'restarting'`
 - `ModelSelector` tracks switch phase (`'switching' | 'loading'`) for accurate status text
 - 10 new extension tests: `modelConfirmed` lifecycle (4), restart button (3), stop race condition (1), health polling after model switch (2)
+- Update CLAUDE.md, CI workflows, and templates for llama-server architecture
+
+### Removed
+
+- Ollama references from docs, CI, templates, and third-party licenses
 
 ## [Unreleased] — Sprint A: SSE Streaming + Exception Handlers + ChromaDB Warm-up
 

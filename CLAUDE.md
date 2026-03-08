@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Local AI assistant for SolarWinds Web Help Desk (on-prem). Delivered as a Microsoft Edge
 browser extension (Manifest V3) with a Python FastAPI backend. All AI inference is local
-via Ollama — no cloud calls are ever made.
+via llama.cpp (llama-server) — no cloud calls are ever made.
 
 ```text
 Edge Extension (sidebar UI + content script)
@@ -15,7 +15,7 @@ Edge Extension (sidebar UI + content script)
         ↕ fetch → http://localhost:8765
 FastAPI Backend
         ↕                      ↕
-   Ollama (LLM + embed)   ChromaDB (vector store)
+   llama-server (LLM :11435 + embed :11436)   ChromaDB (vector store)
 ```
 
 ---
@@ -64,7 +64,10 @@ This repo runs under WSL2 on Windows 11. Critical rules for agents:
 ### Running Services
 
 ```bash
-ollama serve                             # port 11435, models: qwen3.5:9b, nomic-embed-text
+# LLM + embed servers are started automatically by native_host.py
+# Manual start (if needed):
+llama-server -m models/Qwen3.5-9B-Q4_K_M.gguf --port 11435 --n-gpu-layers -1
+llama-server -m models/nomic-embed-text-v1.5.f16.gguf --port 11436 --embedding --n-gpu-layers -1
 cd backend && python -m uv run uvicorn app.main:app --port 8765 --reload
 ```
 
@@ -104,10 +107,10 @@ The extension requires two separate Vite builds (`npm run build` runs both):
 
 ### Backend Service Layer
 
-- `LLMService` (`app/services/llm_service.py`): generates text via Ollama `/api/generate` using httpx (no LangChain)
-- `EmbedService` (`app/services/embed_service.py`): generates embeddings via Ollama `/api/embeddings` (model: `nomic-embed-text`)
+- `LLMService` (`app/services/llm_service.py`): generates text via llama-server's OpenAI-compatible `/v1/chat/completions` using httpx (no LangChain)
+- `EmbedService` (`app/services/embed_service.py`): generates embeddings via llama-server `/v1/embeddings` (model: `nomic-embed-text`)
 - `RAGService` (`app/services/rag_service.py`): queries two ChromaDB collections (`whd_tickets`, `kb_articles`), merges results by similarity score
-- All blocking Ollama/ChromaDB calls wrapped in `asyncio.to_thread`
+- All blocking llama-server/ChromaDB calls wrapped in `asyncio.to_thread`
 - Config via `pydantic-settings` in `app/config.py` (reads `.env`)
 
 ### Sidebar State Management

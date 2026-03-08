@@ -47,6 +47,6 @@ This project uses the following open-source components.
 
 | Name | Version | License | URL |
 |---|---|---|---|
-| Ollama | 0.17.0 | MIT | https://github.com/ollama/ollama |
+| llama.cpp | b5437 | MIT | https://github.com/ggml-org/llama.cpp |
 | uv | 0.10.6 | MIT / Apache 2.0 | https://github.com/astral-sh/uv |
 | Python | 3.13 | PSF License | https://www.python.org/psf/license/ |

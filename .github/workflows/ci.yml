@@ -96,7 +96,8 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short
         env:
-          OLLAMA_BASE_URL: "http://localhost:11434"
+          LLM_BASE_URL: "http://localhost:11435"
+          EMBED_BASE_URL: "http://localhost:11436"
           CHROMA_PATH: "/tmp/test_chroma"
           CORS_ORIGIN: "chrome-extension://test"
-          DEFAULT_MODEL: "llama3.2:3b"
+          DEFAULT_MODEL: "qwen3.5:9b"
