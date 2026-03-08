@@ -246,8 +246,17 @@ describe('BackendControl — native stop commands', () => {
     const restartBtn = container.querySelector('button[aria-label="Restart LLM server"]') as HTMLButtonElement
     expect(restartBtn).not.toBeNull()
 
+    // First click shows confirmation
     await act(async () => {
       restartBtn.click()
+    })
+
+    // Click the Confirm button
+    const confirmBtn = container.querySelector('button[aria-label="Confirm restart"]') as HTMLButtonElement
+    expect(confirmBtn).not.toBeNull()
+
+    await act(async () => {
+      confirmBtn.click()
     })
 
     expect(mockLlmRestart).toHaveBeenCalled()
@@ -268,8 +277,17 @@ describe('BackendControl — native stop commands', () => {
 
     const restartBtn = container.querySelector('button[aria-label="Restart LLM server"]') as HTMLButtonElement
 
+    // First click shows confirmation
     await act(async () => {
       restartBtn.click()
+    })
+
+    // Click the Confirm button
+    const confirmBtn = container.querySelector('button[aria-label="Confirm restart"]') as HTMLButtonElement
+    expect(confirmBtn).not.toBeNull()
+
+    await act(async () => {
+      confirmBtn.click()
     })
 
     // Advance past restart poll interval

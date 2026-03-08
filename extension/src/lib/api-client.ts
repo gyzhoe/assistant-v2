@@ -1,4 +1,4 @@
-import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelDownloadStatus, ModelsResponse } from '../shared/types'
+import type { FeedbackRequest, FeedbackResponse, GenerateRequest, GenerateResponse, HealthResponse, IngestUploadResponse, IngestUrlResponse, KBArticleListResponse, ModelDownloadStatus, ModelsResponse, SSEEvent } from '../shared/types'
 import { DEFAULT_BACKEND_URL, STORAGE_KEY_SETTINGS, STORAGE_KEY_SECRETS, NATIVE_HOST } from '../shared/constants'
 import { ApiError } from '../shared/api-error'
 
@@ -43,6 +43,47 @@ export const apiClient = {
       throw new ApiError(resp.status, error)
     }
     return resp.json() as Promise<GenerateResponse>
+  },
+
+  async *generateStream(req: GenerateRequest, signal?: AbortSignal): AsyncGenerator<SSEEvent> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...req, stream: true }),
+      signal,
+    })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new ApiError(resp.status, error)
+    }
+    const reader = resp.body?.getReader()
+    if (!reader) throw new Error('No response body')
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const json = line.slice(6).trim()
+            if (json) yield JSON.parse(json) as SSEEvent
+          }
+        }
+      }
+      // Process remaining buffer
+      if (buffer.startsWith('data: ')) {
+        const json = buffer.slice(6).trim()
+        if (json) yield JSON.parse(json) as SSEEvent
+      }
+    } finally {
+      reader.releaseLock()
+    }
   },
 
   async health(): Promise<HealthResponse> {

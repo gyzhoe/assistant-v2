@@ -390,9 +390,14 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
     }, POLL_FAST_MS)
   }
 
+  const [confirmRestart, setConfirmRestart] = useState(false)
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const handleRestartLlm = async () => {
     if (llmAction !== 'idle') return
     setLlmAction('restarting')
+    setConfirmRestart(false)
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
     clearTimer()
 
     try {
@@ -527,10 +532,27 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
               <div className="service-row">
                 <span className={`service-indicator ${llmOk ? 'ok' : 'error'}`} />
                 <span className="service-label">LLM Server</span>
-                {llmOk && llmAction === 'idle' && (
+                {llmOk && llmAction === 'idle' && !confirmRestart && (
                   <>
-                    <button onClick={handleRestartLlm} className="svc-btn success" aria-label="Restart LLM server">Restart</button>
+                    <button
+                      onClick={() => {
+                        setConfirmRestart(true)
+                        if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+                        confirmTimerRef.current = setTimeout(() => setConfirmRestart(false), 5000)
+                      }}
+                      className="svc-btn success"
+                      aria-label="Restart LLM server"
+                    >
+                      Restart
+                    </button>
                     <button onClick={handleStopLlm} className="svc-btn danger" aria-label="Stop LLM server">Stop</button>
+                  </>
+                )}
+                {llmOk && llmAction === 'idle' && confirmRestart && (
+                  <>
+                    <span className="svc-action">Restart? (~30s downtime)</span>
+                    <button onClick={handleRestartLlm} className="svc-btn success" aria-label="Confirm restart">Confirm</button>
+                    <button onClick={() => setConfirmRestart(false)} className="svc-btn danger" aria-label="Cancel restart">Cancel</button>
                   </>
                 )}
                 {!llmOk && llmAction === 'idle' && (

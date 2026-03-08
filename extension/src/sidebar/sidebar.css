@@ -562,6 +562,10 @@ body {
   opacity: 0.5;
 }
 
+.primary-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
 .primary-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent);
@@ -1770,4 +1774,35 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sidebar-confirm-overlay { animation: none; }
   .sidebar-confirm-content { animation: none; }
+}
+
+/* ─── Model select wrapper ────────────────────────── */
+.model-select-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Streaming cursor ────────────────────────────── */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: blink-cursor 1s step-end infinite;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-cursor {
+    animation: none;
+  }
 }

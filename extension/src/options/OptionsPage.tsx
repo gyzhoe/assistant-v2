@@ -367,7 +367,7 @@ export default function OptionsPage(): React.ReactElement {
           </div>
 
           {!backendReachable && (
-            <p className="options-hint" style={{ color: '#c57600', fontWeight: 500, marginBottom: '0.5rem' }}>
+            <p className="options-hint options-hint--warn">
               Backend is not running. Start the backend from the sidebar, then refresh this page to download models.
             </p>
           )}

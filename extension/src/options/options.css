@@ -165,6 +165,16 @@ select.options-input {
   margin: 0;
 }
 
+.options-hint--warn {
+  color: #9a6700;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.options-shell[data-theme='dark'] .options-hint--warn {
+  color: #d29922;
+}
+
 .options-hint code {
   font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   background: var(--code-bg);

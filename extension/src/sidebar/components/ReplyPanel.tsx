@@ -108,15 +108,29 @@ export function ReplyPanel(): React.ReactElement {
             Stop
           </button>
         )}
-        {generateError && !isGenerating && (
-          <ErrorState message={generateError} onRetry={generate} />
-        )}
+        {generateError && !isGenerating && (() => {
+          const parts = generateError.split('|')
+          const hasTitle = parts.length > 1
+          return (
+            <ErrorState
+              message={hasTitle ? parts.slice(1).join('|') : generateError}
+              title={hasTitle ? parts[0] : undefined}
+              onRetry={generate}
+            />
+          )
+        })()}
       </section>
 
       {/* Draft output */}
       <section className="panel" aria-label="Generated reply">
         <h2 className="section-heading">Draft output</h2>
         {isGenerating && !reply && <SkeletonLoader />}
+
+        {isGenerating && reply && (
+          <div className="reply-box streaming-reply" aria-live="polite" aria-label="Streaming reply">
+            {reply}<span className="streaming-cursor" aria-hidden="true" />
+          </div>
+        )}
 
         {!isGenerating && !reply && (
           <div className="reply-box">
