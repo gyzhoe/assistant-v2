@@ -19,6 +19,21 @@ const POLL_FAST_MS = 1500
 const POLL_MAX_MS = 60000
 const ONBOARDING_DISMISSED_KEY = 'onboardingDismissed'
 
+/** Minimum delay after stop before allowing start, to ensure port is freed */
+const STOP_SETTLE_MIN_MS = 2000
+
+/** Maximum time to wait for the backend to confirm it's down after stop */
+const STOP_CONFIRM_TIMEOUT_MS = 10000
+
+/** Polling interval when confirming server is down after stop */
+const STOP_CONFIRM_POLL_MS = 500
+
+/** Maximum time to wait for LLM to come back after restart */
+const RESTART_TIMEOUT_MS = 30000
+
+/** Polling interval during LLM restart health checks */
+const RESTART_POLL_MS = 2000
+
 /** Exponential backoff for offline polling: 5s → 15s → 30s → 60s max */
 function nextOfflinePollMs(currentMs: number): number {
   if (currentMs < 15000) return 15000
@@ -92,7 +107,7 @@ function OnboardingCard({
 export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: BackendControlProps): React.ReactElement {
   const [status, setStatus] = useState<BackendStatus>('checking')
   const [llmOk, setLlmOk] = useState(false)
-  const [llmAction, setLlmAction] = useState<'idle' | 'starting' | 'stopping'>('idle')
+  const [llmAction, setLlmAction] = useState<'idle' | 'starting' | 'stopping' | 'restarting'>('idle')
   const [version, setVersion] = useState('')
   const [nativeError, setNativeError] = useState('')
   const [startingDetail, setStartingDetail] = useState('')
@@ -105,7 +120,8 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   const ticketData = useSidebarStore((s) => s.ticketData)
   const isTicketPage = useSidebarStore((s) => s.isTicketPage)
-  const selectedModel = useSidebarStore((s) => s.selectedModel)
+  const modelConfirmed = useSidebarStore((s) => s.modelConfirmed)
+  const setModelConfirmed = useSidebarStore((s) => s.setModelConfirmed)
   const setLlmReachable = useSidebarStore((s) => s.setLlmReachable)
   const setChromaDocCounts = useSidebarStore((s) => s.setChromaDocCounts)
 
@@ -145,10 +161,11 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       setStatus(corsBlocked ? 'cors_blocked' : 'offline')
       setLlmOk(false)
       setLlmReachable(false)
+      setModelConfirmed(false)
       setVersion('')
       return false
     }
-  }, [setLlmReachable, setChromaDocCounts])
+  }, [setLlmReachable, setChromaDocCounts, setModelConfirmed])
 
   const schedulePoll = useCallback((delayMs?: number) => {
     clearTimer()
@@ -204,7 +221,7 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   // Auto-dismiss onboarding when all service checks pass
   const backendOk = status === 'online'
   const isCorsBlocked = status === 'cors_blocked'
-  const modelOk = selectedModel.length > 0
+  const modelOk = modelConfirmed
   const allServicesOk = backendOk && llmOk && modelOk
 
   useEffect(() => {
@@ -225,6 +242,33 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
   const showOnboarding =
     status === 'offline' && !llmOk && !onboardingDismissed
 
+  // --- Wait for server to fully stop (poll health until connection error) ---
+  const waitForServerDown = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const startTime = Date.now()
+
+      const check = () => {
+        if (!mountedRef.current) {
+          resolve()
+          return
+        }
+        if (Date.now() - startTime > STOP_CONFIRM_TIMEOUT_MS) {
+          resolve()
+          return
+        }
+        apiClient.health().then(() => {
+          // Still responding — keep polling
+          setTimeout(check, STOP_CONFIRM_POLL_MS)
+        }).catch(() => {
+          // Connection error — server is down
+          resolve()
+        })
+      }
+
+      check()
+    })
+  }, [])
+
   // --- Backend controls ---
 
   const handleStopBackend = async () => {
@@ -237,16 +281,20 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
       apiClient.shutdown().catch(() => {})
     }
     clearTimer()
-    // Go straight to offline after a brief visual pause
-    setTimeout(() => {
-      if (!mountedRef.current) return
-      setStatus('offline')
-      setLlmOk(false)
-      setVersion('')
-      pollIntervalRef.current = POLL_BASE_MS
-      actionInFlightRef.current = false
-      schedulePoll()
-    }, 800)
+
+    // Wait for server to confirm it's fully down, with a minimum settle time
+    const settlePromise = new Promise<void>((r) => setTimeout(r, STOP_SETTLE_MIN_MS))
+    const downPromise = waitForServerDown()
+    await Promise.all([settlePromise, downPromise])
+
+    if (!mountedRef.current) return
+    setStatus('offline')
+    setLlmOk(false)
+    setModelConfirmed(false)
+    setVersion('')
+    pollIntervalRef.current = POLL_BASE_MS
+    actionInFlightRef.current = false
+    schedulePoll()
   }
 
   const handleStartBackend = async () => {
@@ -322,10 +370,16 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
 
   const handleStopLlm = async () => {
     setLlmAction('stopping')
-    // Native messaging (OS-level kill) first, HTTP fallback
-    const resp = await sendNativeCommand('stop_llm')
-    if (!resp.ok) {
-      try { await apiClient.llmStop() } catch { /* ignore */ }
+    try {
+      await apiClient.llmStop()
+    } catch {
+      // Backend unreachable — fall back to native messaging (OS-level kill)
+      const resp = await sendNativeCommand('stop_llm')
+      if (!resp.ok) {
+        setNativeError(resp.error ?? 'Failed to stop LLM server')
+        setLlmAction('idle')
+        return
+      }
     }
     clearTimer()
     setTimeout(() => {
@@ -334,6 +388,55 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
         checkHealth().finally(() => schedulePoll())
       }
     }, POLL_FAST_MS)
+  }
+
+  const handleRestartLlm = async () => {
+    if (llmAction !== 'idle') return
+    setLlmAction('restarting')
+    clearTimer()
+
+    try {
+      await apiClient.llmRestart()
+    } catch {
+      // If the endpoint fails, fall back to stop+start
+      setLlmAction('idle')
+      setNativeError('Failed to restart LLM server. Try stopping and starting manually.')
+      schedulePoll()
+      return
+    }
+
+    // Poll health until LLM comes back or timeout
+    const startTime = Date.now()
+    const pollRestart = () => {
+      if (!mountedRef.current) return
+      if (Date.now() - startTime > RESTART_TIMEOUT_MS) {
+        setLlmAction('idle')
+        setNativeError('LLM restart timed out — server may still be loading')
+        schedulePoll()
+        return
+      }
+
+      apiClient.health().then((h) => {
+        if (!mountedRef.current) return
+        setLlmOk(h.llm_reachable)
+        setLlmReachable(h.llm_reachable)
+        setVersion(h.version)
+        if (h.llm_reachable) {
+          setLlmAction('idle')
+          setNativeError('')
+          schedulePoll()
+        } else {
+          timerRef.current = setTimeout(pollRestart, RESTART_POLL_MS)
+        }
+      }).catch(() => {
+        if (mountedRef.current) {
+          timerRef.current = setTimeout(pollRestart, RESTART_POLL_MS)
+        }
+      })
+    }
+
+    // Give the server a moment to begin restarting before polling
+    timerRef.current = setTimeout(pollRestart, RESTART_POLL_MS)
   }
 
   // --- Readiness badges ---
@@ -425,13 +528,17 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
                 <span className={`service-indicator ${llmOk ? 'ok' : 'error'}`} />
                 <span className="service-label">LLM Server</span>
                 {llmOk && llmAction === 'idle' && (
-                  <button onClick={handleStopLlm} className="svc-btn danger" aria-label="Stop LLM server">Stop</button>
+                  <>
+                    <button onClick={handleRestartLlm} className="svc-btn success" aria-label="Restart LLM server">Restart</button>
+                    <button onClick={handleStopLlm} className="svc-btn danger" aria-label="Stop LLM server">Stop</button>
+                  </>
                 )}
                 {!llmOk && llmAction === 'idle' && (
                   <button onClick={handleStartLlm} className="svc-btn success" aria-label="Start LLM server">Start</button>
                 )}
                 {llmAction === 'starting' && <span className="svc-action">Starting…</span>}
                 {llmAction === 'stopping' && <span className="svc-action">Stopping…</span>}
+                {llmAction === 'restarting' && <span className="svc-action">Restarting…</span>}
               </div>
             </>
           )}
@@ -472,6 +579,11 @@ export function BackendControl({ themeSetting, resolvedTheme, onCycleTheme }: Ba
           {/* --- Transitional --- */}
           {status === 'stopping' && <p className="support-text">Shutting down…</p>}
           {status === 'starting' && <p className="support-text">{startingDetail || 'Starting\u2026'}</p>}
+
+          {/* --- LLM restart error (shown in any online state) --- */}
+          {nativeError && status === 'online' && (
+            <p className="support-text error-text" role="alert">{nativeError}</p>
+          )}
         </div>
       )}
     </section>

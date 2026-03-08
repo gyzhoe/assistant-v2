@@ -5,6 +5,31 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Process Management Fixes
+
+### Added
+
+- **`POST /llm/restart` endpoint** (backend) — kills the LLM server, waits for port to free, and restarts with the current model; returns `{"status": "restarting", "model": "..."}`
+- **Restart LLM button** (extension) — visible when LLM server is online; calls `/llm/restart`, shows "Restarting..." spinner, polls health until the server comes back
+- **`apiClient.llmRestart()`** (extension) — new API client method for the restart endpoint
+- **`modelConfirmed` store field** (extension) — tracks whether the backend has actually confirmed the loaded model, preventing false-positive "Model selected" badges when backend is offline
+- **`/no_think` suffix** (backend) — appended for Qwen3 models to skip hidden reasoning tokens
+
+### Fixed
+
+- **Model badge shows "loaded" before backend confirms** (extension) — `BackendControl` now reads `modelConfirmed` (set only after `/models` succeeds) instead of checking `selectedModel.length > 0`; resets to `false` when backend goes offline or LLM becomes unreachable
+- **Race condition in Stop → Start flow** (extension) — after stopping the backend, the sidebar now polls the health endpoint until a connection error confirms the server is fully down (plus a 2-second minimum delay) before allowing Start; prevents port-binding failures
+- **Model switch shows complete before LLM is ready** (extension) — after `/models` confirms the new model, `ModelSelector` now also polls `/health` to verify `llm_reachable: true` before declaring the switch complete; shows "Loading model..." during this phase
+- **Port-targeted process kill** (backend) — LLM stop/restart now kills only the LLM server process, preserving the embed server
+- **Duplicate process creation** (backend) — port-in-use guards prevent starting a second LLM server when one is already running
+- **Model state detection** (backend) — probes the actual server instead of trusting in-memory state
+
+### Changed
+
+- `BackendControl` LLM action state expanded: `'idle' | 'starting' | 'stopping' | 'restarting'`
+- `ModelSelector` tracks switch phase (`'switching' | 'loading'`) for accurate status text
+- 10 new extension tests: `modelConfirmed` lifecycle (4), restart button (3), stop race condition (1), health polling after model switch (2)
+
 ## [Unreleased] — Sprint A: SSE Streaming + Exception Handlers + ChromaDB Warm-up
 
 ### Added

@@ -108,6 +108,16 @@ export const apiClient = {
     return resp.json() as Promise<{ status: string }>
   },
 
+  async llmRestart(): Promise<{ status: string; model: string }> {
+    const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
+    const resp = await fetch(`${base}/llm/restart`, { method: 'POST', headers })
+    if (!resp.ok) {
+      const error = await resp.json().catch(() => ({ detail: 'Failed to restart LLM server' }))
+      throw new ApiError(resp.status, error)
+    }
+    return resp.json() as Promise<{ status: string; model: string }>
+  },
+
   async models(): Promise<ModelsResponse> {
     const [base, headers] = await Promise.all([getBackendUrl(), buildHeaders()])
     const resp = await fetch(`${base}/models`, { headers })

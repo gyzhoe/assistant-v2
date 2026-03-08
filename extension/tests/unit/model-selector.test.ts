@@ -32,12 +32,13 @@ Element.prototype.scrollIntoView = vi.fn()
 
 const mockModels = vi.fn()
 const mockSwitchModel = vi.fn()
+const mockHealth = vi.fn()
 
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     models: (...args: unknown[]) => mockModels(...args),
     switchModel: (...args: unknown[]) => mockSwitchModel(...args),
-    health: vi.fn(),
+    health: (...args: unknown[]) => mockHealth(...args),
     generate: vi.fn(),
   },
   ApiError: class ApiError extends Error {
@@ -60,9 +61,11 @@ describe('ModelSelector', () => {
     vi.useFakeTimers()
     mockModels.mockResolvedValue({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3.5:9b' })
     mockSwitchModel.mockResolvedValue({ status: 'switching', model: 'qwen3:14b' })
+    mockHealth.mockResolvedValue({ status: 'ok', llm_reachable: true, version: '2.0.0' })
     useSidebarStore.setState({
       selectedModel: 'qwen3.5:9b',
       isModelSwitching: false,
+      modelConfirmed: false,
       llmReachable: true,
     })
   })
@@ -86,6 +89,50 @@ describe('ModelSelector', () => {
     expect(select.options).toHaveLength(2)
     expect(select.options[0].value).toBe('qwen3.5:9b')
     expect(select.options[1].value).toBe('qwen3:14b')
+  })
+
+  it('sets modelConfirmed to true after successful fetchModels', async () => {
+    const { render, act } = await import('@testing-library/react')
+    const React = await import('react')
+    const { ModelSelector } = await import('../../src/sidebar/components/ModelSelector')
+
+    await act(async () => {
+      render(React.createElement(ModelSelector))
+    })
+
+    expect(useSidebarStore.getState().modelConfirmed).toBe(true)
+  })
+
+  it('sets modelConfirmed to false when fetchModels fails', async () => {
+    mockModels.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+
+    const { render, act } = await import('@testing-library/react')
+    const React = await import('react')
+    const { ModelSelector } = await import('../../src/sidebar/components/ModelSelector')
+
+    await act(async () => {
+      render(React.createElement(ModelSelector))
+    })
+
+    expect(useSidebarStore.getState().modelConfirmed).toBe(false)
+  })
+
+  it('resets modelConfirmed when LLM goes offline', async () => {
+    const { render, act } = await import('@testing-library/react')
+    const React = await import('react')
+    const { ModelSelector } = await import('../../src/sidebar/components/ModelSelector')
+
+    await act(async () => {
+      render(React.createElement(ModelSelector))
+    })
+
+    expect(useSidebarStore.getState().modelConfirmed).toBe(true)
+
+    await act(async () => {
+      useSidebarStore.setState({ llmReachable: false })
+    })
+
+    expect(useSidebarStore.getState().modelConfirmed).toBe(false)
   })
 
   it('calls switchModel when user selects a different model', async () => {
@@ -160,11 +207,13 @@ describe('ModelSelector', () => {
     expect(screen.getByText(/Switching model/)).toBeTruthy()
   })
 
-  it('completes switch after polling confirms new model', async () => {
-    // After switch call, polling returns the new model
+  it('shows "Loading model..." after models endpoint confirms new model', async () => {
+    // First call: initial fetch. Second call: poll returns new model.
     mockModels
-      .mockResolvedValueOnce({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3.5:9b' }) // initial fetch
-      .mockResolvedValueOnce({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3:14b' }) // poll response
+      .mockResolvedValueOnce({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3.5:9b' })
+      .mockResolvedValueOnce({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3:14b' })
+    // Health not ready yet
+    mockHealth.mockResolvedValue({ status: 'ok', llm_reachable: false, version: '2.0.0' })
 
     const { render, screen, fireEvent, act } = await import('@testing-library/react')
     const React = await import('react')
@@ -178,13 +227,50 @@ describe('ModelSelector', () => {
       fireEvent.change(screen.getByLabelText('Select LLM model'), { target: { value: 'qwen3:14b' } })
     })
 
-    // Advance past the poll interval
+    // Advance past the model poll interval
     await act(async () => {
-      vi.advanceTimersByTime(2000)
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+
+    // Should now show "Loading model..." since models confirms but health is not ready
+    expect(screen.getByText(/Loading model/)).toBeTruthy()
+    expect(useSidebarStore.getState().isModelSwitching).toBe(true)
+  })
+
+  it('completes switch after polling confirms new model AND health is ok', async () => {
+    // After switch call, polling returns the new model
+    mockModels
+      .mockResolvedValueOnce({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3.5:9b' }) // initial fetch
+      .mockResolvedValueOnce({ models: ['qwen3.5:9b', 'qwen3:14b'], current: 'qwen3:14b' }) // poll response
+
+    // Health confirms LLM is ready
+    mockHealth.mockResolvedValue({ status: 'ok', llm_reachable: true, version: '2.0.0' })
+
+    const { render, screen, fireEvent, act } = await import('@testing-library/react')
+    const React = await import('react')
+    const { ModelSelector } = await import('../../src/sidebar/components/ModelSelector')
+
+    await act(async () => {
+      render(React.createElement(ModelSelector))
+    })
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Select LLM model'), { target: { value: 'qwen3:14b' } })
+    })
+
+    // Advance past the model poll interval
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+
+    // Advance past the health poll interval
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
     })
 
     expect(useSidebarStore.getState().isModelSwitching).toBe(false)
     expect(useSidebarStore.getState().selectedModel).toBe('qwen3:14b')
+    expect(useSidebarStore.getState().modelConfirmed).toBe(true)
   })
 
   it('reverts model on switchModel API error', async () => {

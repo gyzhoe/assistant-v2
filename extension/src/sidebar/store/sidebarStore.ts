@@ -49,10 +49,12 @@ interface SidebarState {
   settings: AppSettings
   settingsLoading: boolean
   isModelSwitching: boolean
+  modelConfirmed: boolean
   llmReachable: boolean
   chromaDocCounts: Record<string, number>
 
   setIsModelSwitching: (val: boolean) => void
+  setModelConfirmed: (val: boolean) => void
   setTicketData: (data: TicketData | null) => void
   setIsTicketPage: (val: boolean) => void
   setReply: (reply: string) => void
@@ -93,10 +95,12 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   settingsLoading: true,
   isModelSwitching: false,
+  modelConfirmed: false,
   llmReachable: false,
   chromaDocCounts: {},
 
   setIsModelSwitching: (val) => set({ isModelSwitching: val }),
+  setModelConfirmed: (val) => set({ modelConfirmed: val }),
   setTicketData: (data) => set({ ticketData: data }),
   setIsTicketPage: (val) => set({ isTicketPage: val }),
   setReply: (reply) => set({ reply }),
