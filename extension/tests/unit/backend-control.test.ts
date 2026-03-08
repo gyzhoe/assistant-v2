@@ -173,25 +173,7 @@ describe('BackendControl — native stop commands', () => {
     })
   })
 
-  it('stop LLM server calls sendNativeCommand first', async () => {
-    mockSendNativeCommand.mockResolvedValue({ ok: true, status: 'stopped' })
-
-    const { container } = await renderBackendControl()
-
-    const stopBtn = container.querySelector('button[aria-label="Stop LLM server"]') as HTMLButtonElement
-    expect(stopBtn).not.toBeNull()
-
-    await act(async () => {
-      stopBtn.click()
-    })
-
-    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
-    // Native succeeded — HTTP llmStop should NOT be called
-    expect(mockOllamaStop).not.toHaveBeenCalled()
-  })
-
-  it('stop LLM server falls back to HTTP when native fails', async () => {
-    mockSendNativeCommand.mockResolvedValue({ ok: false, error: 'not connected' })
+  it('stop LLM server calls llmStop HTTP first', async () => {
     mockOllamaStop.mockResolvedValue({ status: 'stopped' })
 
     const { container } = await renderBackendControl()
@@ -203,9 +185,28 @@ describe('BackendControl — native stop commands', () => {
       stopBtn.click()
     })
 
-    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
-    // Native failed — HTTP llmStop should be called as fallback
+    // HTTP llmStop is called first
     expect(mockOllamaStop).toHaveBeenCalled()
+    // Native should NOT be called when HTTP succeeds
+    expect(mockSendNativeCommand).not.toHaveBeenCalledWith('stop_llm')
+  })
+
+  it('stop LLM server falls back to native when HTTP fails', async () => {
+    mockOllamaStop.mockRejectedValue(new Error('Connection refused'))
+    mockSendNativeCommand.mockResolvedValue({ ok: true, status: 'stopped' })
+
+    const { container } = await renderBackendControl()
+
+    const stopBtn = container.querySelector('button[aria-label="Stop LLM server"]') as HTMLButtonElement
+    expect(stopBtn).not.toBeNull()
+
+    await act(async () => {
+      stopBtn.click()
+    })
+
+    // HTTP failed — native messaging should be called as fallback
+    expect(mockOllamaStop).toHaveBeenCalled()
+    expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
   })
 
   it('uses modelConfirmed for Model selected badge', async () => {
