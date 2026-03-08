@@ -34,7 +34,7 @@ Element.prototype.scrollIntoView = vi.fn()
 
 // --- Mock api-client module ---
 const mockShutdown = vi.fn().mockResolvedValue(undefined)
-const mockOllamaStop = vi.fn().mockResolvedValue({ status: 'stopped' })
+const mockLlmStop = vi.fn().mockResolvedValue({ status: 'stopped' })
 const mockLlmRestart = vi.fn().mockResolvedValue({ status: 'restarting', model: 'qwen3.5:9b' })
 const mockHealth = vi.fn()
 const mockSendNativeCommand = vi.fn()
@@ -47,7 +47,7 @@ vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
     health: (...args: unknown[]) => mockHealth(...args),
     shutdown: (...args: unknown[]) => mockShutdown(...args),
-    llmStop: (...args: unknown[]) => mockOllamaStop(...args),
+    llmStop: (...args: unknown[]) => mockLlmStop(...args),
     llmStart: vi.fn().mockResolvedValue({ status: 'started' }),
     llmRestart: (...args: unknown[]) => mockLlmRestart(...args),
     models: vi.fn().mockResolvedValue({ models: ['qwen3.5:9b'], current: 'qwen3.5:9b' }),
@@ -174,7 +174,7 @@ describe('BackendControl — native stop commands', () => {
   })
 
   it('stop LLM server calls llmStop HTTP first', async () => {
-    mockOllamaStop.mockResolvedValue({ status: 'stopped' })
+    mockLlmStop.mockResolvedValue({ status: 'stopped' })
 
     const { container } = await renderBackendControl()
 
@@ -186,13 +186,13 @@ describe('BackendControl — native stop commands', () => {
     })
 
     // HTTP llmStop is called first
-    expect(mockOllamaStop).toHaveBeenCalled()
+    expect(mockLlmStop).toHaveBeenCalled()
     // Native should NOT be called when HTTP succeeds
     expect(mockSendNativeCommand).not.toHaveBeenCalledWith('stop_llm')
   })
 
   it('stop LLM server falls back to native when HTTP fails', async () => {
-    mockOllamaStop.mockRejectedValue(new Error('Connection refused'))
+    mockLlmStop.mockRejectedValue(new Error('Connection refused'))
     mockSendNativeCommand.mockResolvedValue({ ok: true, status: 'stopped' })
 
     const { container } = await renderBackendControl()
@@ -205,7 +205,7 @@ describe('BackendControl — native stop commands', () => {
     })
 
     // HTTP failed — native messaging should be called as fallback
-    expect(mockOllamaStop).toHaveBeenCalled()
+    expect(mockLlmStop).toHaveBeenCalled()
     expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
   })
 
