@@ -932,7 +932,7 @@ List available GGUF models by scanning the `models/` directory.
 
 ```json
 {
-  "models": ["qwen3.5:9b", "llama3.2:3b"],
+  "models": ["qwen3.5:9b"],
   "current": "qwen3.5:9b"
 }
 ```
@@ -964,7 +964,7 @@ Switch the currently loaded GGUF model. Stops the running llama-server chat inst
 
 ```json
 {
-  "model": "llama3.2:3b"
+  "model": "qwen3.5:9b"
 }
 ```
 
@@ -979,7 +979,7 @@ Switch the currently loaded GGUF model. Stops the running llama-server chat inst
 ```json
 {
   "status": "switching",
-  "model": "llama3.2:3b"
+  "model": "qwen3.5:9b"
 }
 ```
 

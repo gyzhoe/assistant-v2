@@ -29,8 +29,8 @@ assignees: ''
 - OS: <!-- e.g. Windows 11 -->
 - Edge version: <!-- e.g. 121.0.0 -->
 - Extension version: <!-- e.g. 1.0.0 -->
-- Ollama version: <!-- e.g. 0.3.0 -->
-- Model: <!-- e.g. llama3.2:3b -->
+- llama-server build: <!-- e.g. b5437 -->
+- Model: <!-- e.g. qwen3.5:9b -->
 - Backend version: <!-- from GET /health -->
 
 ## Additional Context

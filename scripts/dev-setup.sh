@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dev-setup.sh — AI Helpdesk Assistant developer setup
-# Run this once after cloning to pull Ollama models and install all deps.
+# Run this once after cloning to install all deps and set up the dev environment.
 set -euo pipefail
 
 CYAN='\033[0;36m'
@@ -27,7 +27,6 @@ command -v node   >/dev/null 2>&1 || error "Node.js ≥20 not found. Install fro
 command -v npm    >/dev/null 2>&1 || error "npm not found"
 command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || error "Python 3.11+ not found"
 command -v uv     >/dev/null 2>&1 || error "uv not found. Install: pip install uv or curl -Ls https://astral.sh/uv/install.sh | sh"
-command -v ollama >/dev/null 2>&1 || error "Ollama not found. Install from https://ollama.com"
 command -v git    >/dev/null 2>&1 || error "git not found"
 
 NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
@@ -37,36 +36,22 @@ fi
 
 success "All prerequisites found"
 
-# ── Ollama models ─────────────────────────────────────────────────────────────
-info "Pulling Ollama models (this may take a few minutes)..."
-
-if ! ollama list 2>/dev/null | grep -q "qwen3.5:9b"; then
-  info "Pulling qwen3.5:9b..."
-  ollama pull qwen3.5:9b
-  success "qwen3.5:9b pulled"
-else
-  success "qwen3.5:9b already present"
-fi
-
-if ! ollama list 2>/dev/null | grep -q "nomic-embed-text"; then
-  info "Pulling nomic-embed-text..."
-  ollama pull nomic-embed-text
-  success "nomic-embed-text pulled"
-else
-  success "nomic-embed-text already present"
-fi
+# ── LLM setup ────────────────────────────────────────────────────────────────
+info "LLM setup: llama-server is bundled by the installer."
+info "For development, download GGUF models manually or run the installer."
+info "  LLM model:   Qwen3.5-9B-Q4_K_M.gguf → models/"
+info "  Embed model:  nomic-embed-text-v1.5.f16.gguf → models/"
+success "LLM setup instructions noted"
 
 # ── Extension dependencies ────────────────────────────────────────────────────
 info "Installing extension dependencies..."
-cd extension
 npm install
-cd ..
 success "Extension dependencies installed"
 
 # ── Backend dependencies ──────────────────────────────────────────────────────
 info "Installing backend Python dependencies..."
 cd backend
-uv sync --dev
+python -m uv sync --dev
 cd ..
 success "Backend dependencies installed"
 
@@ -86,15 +71,15 @@ echo "║              Setup Complete!                  ║"
 echo "╚═══════════════════════════════════════════════╝"
 echo ""
 echo "Next steps:"
-echo "  1. Start Ollama:         ollama serve"
-echo "  2. Start backend:        cd backend && uv run uvicorn app.main:app --port 8765 --reload"
-echo "  3. Build extension:      cd extension && npm run build"
+echo "  1. Start LLM:           llama-server -m models/Qwen3.5-9B-Q4_K_M.gguf --port 11435"
+echo "  2. Start backend:        cd backend && python -m uv run uvicorn app.main:app --port 8765 --reload"
+echo "  3. Build extension:      npm run build"
 echo "  4. Load in Edge:         edge://extensions → Load unpacked → select extension/dist/"
 echo "  5. Open a WHD ticket and press Alt+Shift+H to open the sidebar"
 echo ""
 echo "Ingest your data:"
 echo "  cd backend"
-echo "  uv run python -m ingestion.cli ingest-tickets <export.json>"
-echo "  uv run python -m ingestion.cli ingest-kb-html <./kb_articles/>"
-echo "  uv run python -m ingestion.cli status"
+echo "  python -m uv run python -m ingestion.cli ingest-tickets <export.json>"
+echo "  python -m uv run python -m ingestion.cli ingest-kb-html <./kb_articles/>"
+echo "  python -m uv run python -m ingestion.cli status"
 echo ""
