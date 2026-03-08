@@ -22,6 +22,21 @@ class LLMService:
         """Public accessor for the shared httpx client."""
         return self._client
 
+    @staticmethod
+    def _prepare_prompt(prompt: str, model: str) -> str:
+        """Append ``/no_think`` for Qwen3 models that have thinking enabled by default.
+
+        Qwen3 (e.g. ``qwen3:14b``) has ``thinking=1`` by default and wastes
+        tokens on hidden reasoning unless ``/no_think`` is appended.
+        Qwen3.5 (e.g. ``qwen3.5:9b``) has ``thinking=0`` by default and does
+        not need this suffix.
+        """
+        model_lower = model.lower()
+        # Match "qwen3:" but NOT "qwen3.5:" — Qwen3 has thinking on by default
+        if model_lower.startswith("qwen3:"):
+            return prompt + " /no_think"
+        return prompt
+
     async def generate(self, prompt: str, model: str) -> str:
         """Generate a completion with retry logic.
 
@@ -53,12 +68,13 @@ class LLMService:
 
     async def _generate_async(self, prompt: str, model: str) -> str:
         base_url = str(self._client.base_url)
+        prepared = self._prepare_prompt(prompt, model)
         try:
             resp = await self._client.post(
                 "/v1/chat/completions",
                 json={
                     "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": prepared}],
                     "stream": False,
                     "temperature": settings.llm_temperature,
                     "top_p": settings.llm_top_p,
@@ -96,13 +112,14 @@ class LLMService:
         on failure (same contract as ``generate``).
         """
         base_url = str(self._client.base_url)
+        prepared = self._prepare_prompt(prompt, model)
         try:
             async with self._client.stream(
                 "POST",
                 "/v1/chat/completions",
                 json={
                     "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": prepared}],
                     "stream": True,
                     "temperature": settings.llm_temperature,
                     "top_p": settings.llm_top_p,
