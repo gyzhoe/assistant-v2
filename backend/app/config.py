@@ -18,8 +18,6 @@ class Settings(BaseSettings):
     cors_origin: str = "chrome-extension://placeholder"
     default_model: str = "qwen3.5:9b"
     version: str = "2.0.0"
-    prompt_template_path: str | None = None
-
     # Enterprise security
     # Set API_TOKEN in .env to a long random secret (e.g. `openssl rand -hex 32`).
     # The extension must send this in the X-Extension-Token header.

@@ -92,56 +92,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # --- Model download service ---
     app.state.model_download_service = ModelDownloadService()
 
-    # --- LLM health probe ---
-    app.state.llm_reachable = False
-    try:
-        resp = await llm_client.get("/health", timeout=5.0)
-        app.state.llm_reachable = resp.status_code == 200
-    except Exception:
-        app.state.llm_reachable = False
-
-    # --- Embed health probe ---
-    app.state.embed_reachable = False
-    try:
-        resp = await embed_client.get("/health", timeout=5.0)
-        app.state.embed_reachable = resp.status_code == 200
-    except Exception:
-        app.state.embed_reachable = False
-
-    if app.state.llm_reachable:
-        logger.info("LLM server reachable at %s", settings.llm_base_url)
-        # Detect which model is actually loaded via /v1/models
+    # --- Startup health probes (log-only, not stored) ---
+    for label, client_obj, url in [
+        ("LLM", llm_client, settings.llm_base_url),
+        ("Embed", embed_client, settings.embed_base_url),
+    ]:
         try:
-            resp = await llm_client.get("/v1/models", timeout=5.0)
+            resp = await client_obj.get("/health", timeout=5.0)
             if resp.status_code == 200:
-                data = resp.json()
-                models_list = data.get("data", [])
-                if models_list:
-                    model_id: str = models_list[0].get("id", "")
-                    # model_id is typically the GGUF filename
-                    basename = model_id.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-                    detected = MODEL_DISPLAY_NAMES.get(
-                        model_id,
-                        MODEL_DISPLAY_NAMES.get(basename),
-                    )
-                    if detected:
-                        app.state.current_llm_model = detected
-                        logger.info("Detected loaded model: %s", detected)
-                    else:
-                        logger.debug(
-                            "Model ID '%s' not in MODEL_DISPLAY_NAMES, "
-                            "keeping default '%s'",
-                            model_id, settings.default_model,
-                        )
+                logger.info("%s server reachable at %s", label, url)
+            else:
+                logger.warning("%s server not reachable at %s", label, url)
         except Exception:
-            logger.debug("Could not probe /v1/models, using default model")
-    else:
-        logger.warning("LLM server not reachable at %s", settings.llm_base_url)
+            logger.warning("%s server not reachable at %s", label, url)
 
-    if app.state.embed_reachable:
-        logger.info("Embed server reachable at %s", settings.embed_base_url)
-    else:
-        logger.warning("Embed server not reachable at %s", settings.embed_base_url)
+    # Detect which model is actually loaded via /v1/models
+    try:
+        resp = await llm_client.get("/v1/models", timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            models_list = data.get("data", [])
+            if models_list:
+                model_id: str = models_list[0].get("id", "")
+                basename = model_id.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+                detected = MODEL_DISPLAY_NAMES.get(
+                    model_id,
+                    MODEL_DISPLAY_NAMES.get(basename),
+                )
+                if detected:
+                    app.state.current_llm_model = detected
+                    logger.info("Detected loaded model: %s", detected)
+                else:
+                    logger.debug(
+                        "Model ID '%s' not in MODEL_DISPLAY_NAMES, "
+                        "keeping default '%s'",
+                        model_id, settings.default_model,
+                    )
+    except Exception:
+        logger.debug("Could not probe /v1/models, using default model")
 
     # --- ChromaDB cold-start warm-up ---
     warmup_chromadb(app.state.chroma_client)

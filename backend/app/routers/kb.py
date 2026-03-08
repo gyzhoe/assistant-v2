@@ -188,13 +188,10 @@ async def _get_article_chunks(
     chroma_client: ClientAPI,
     article_id: str,
     include: list[Any] | None = None,
-) -> tuple[Any, list[str], list[dict[str, Any]]]:
+) -> tuple[Any, list[str], list[dict[str, Any]], Any]:
     """Fetch all chunks for an article; raise 404 if not found.
 
-    Returns (collection, chunk_ids, metadatas).
-    If *include* contains ``"documents"``, documents are available via
-    ``col.get`` results but not returned directly — callers that need
-    documents should use the returned collection to fetch them.
+    Returns (collection, chunk_ids, metadatas, raw_result).
     """
     try:
         col = await asyncio.to_thread(
@@ -221,9 +218,7 @@ async def _get_article_chunks(
             detail=f"Article not found: {article_id}",
         )
 
-    # Stash full result for callers that need documents
-    col._last_result = result  # type: ignore[attr-defined]
-    return col, ids, metadatas
+    return col, ids, metadatas, result
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -410,7 +405,7 @@ async def update_article(
     chroma_client = request.app.state.chroma_client
 
     # 1. Verify article exists and is manual
-    col, ids, metadatas = await _get_article_chunks(
+    col, ids, metadatas, _ = await _get_article_chunks(
         chroma_client, article_id,
     )
 
@@ -512,10 +507,9 @@ async def get_article(
     """Get article detail with all chunks."""
     chroma_client = request.app.state.chroma_client
 
-    col, ids, metadatas = await _get_article_chunks(
+    col, ids, metadatas, result = await _get_article_chunks(
         chroma_client, article_id, include=["documents", "metadatas"],
     )
-    result = col._last_result
     documents: list[str] = result.get("documents", [])
 
     # Build article metadata from first chunk
@@ -558,7 +552,7 @@ async def update_tags(
     """Update tags on all chunks of an article."""
     chroma_client = request.app.state.chroma_client
 
-    col, ids, metadatas = await _get_article_chunks(
+    col, ids, metadatas, _ = await _get_article_chunks(
         chroma_client, article_id,
     )
 
@@ -590,7 +584,7 @@ async def delete_article(
     """Delete all chunks belonging to an article."""
     chroma_client = request.app.state.chroma_client
 
-    col, ids, _ = await _get_article_chunks(chroma_client, article_id)
+    col, ids, _, _result = await _get_article_chunks(chroma_client, article_id)
 
     await asyncio.to_thread(col.delete, ids=ids)
     invalidate_article_cache()
