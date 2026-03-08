@@ -51,9 +51,6 @@ export const DEFAULT_SELECTORS = {
   techNotesFallbacks: ['textarea[name="techNote"]', '#techNotesDiv textarea'],
 } as const
 
-/** chrome.storage.sync key for selector overrides */
-export const STORAGE_KEY_SELECTOR_OVERRIDES = 'selectorOverrides'
-
 /** chrome.storage.sync key for app settings */
 export const STORAGE_KEY_SETTINGS = 'appSettings'
 
