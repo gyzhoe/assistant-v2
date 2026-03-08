@@ -5,6 +5,50 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Review Findings Sprint
+
+### Changed
+
+#### Track A — Backend Performance + Cleanup
+
+- **Eliminate redundant embedding in generate endpoint** — share the embed vector between RAG retrieval and few-shot lookup, removing a ~200-500ms duplicate embedding call per generation
+- **Parallelize /health/detail probes** — use `asyncio.gather` for LLM, embed, and ChromaDB health checks instead of sequential awaits
+- **Add asyncio.Lock mutex on process control endpoints** — prevent race conditions from concurrent `/llm/start`, `/llm/stop`, `/llm/switch`, `/llm/restart` calls
+- **Cache `detect_gpu_config()` result at module level** — avoid redundant GPU detection on every LLM start/switch/restart
+- **Gate `kill_legacy_ollama()` behind first-run flag** — skip Ollama cleanup on subsequent starts within the same process lifetime
+- **Add Content-Security-Policy header** — `SecurityHeadersMiddleware` now includes a CSP header for defense-in-depth
+- **Deduplicate `native_host.py`** — use `process_utils` path constants and `kill_pids()` instead of inline reimplementations
+- **Replace `assert isinstance()` with explicit type guards** — `EmbedService` now uses proper runtime type checks instead of assertions
+
+#### Track B — Frontend Streaming + UX
+
+- **Enable SSE streaming in sidebar** — tokens display incrementally instead of a 10-30s blind wait; uses the backend's existing `stream: true` endpoint
+- **Add contextual error titles to ErrorState component** — error banners now show situation-specific headings instead of generic "Error"
+- **Add arrow key navigation to Knowledge Base tabs** — keyboard users can navigate between tabs with left/right arrow keys per WAI-ARIA tabs pattern
+- **Add `:active` state to primary buttons** — buttons now have a pressed visual state for tactile feedback
+- **Add `.model-select-wrapper` class** — model selector dropdown has a dedicated CSS class for consistent styling
+- **Replace hardcoded `#c57600` with design token** — warning text now uses `var(--warn-text)` for theme consistency
+- **Add restart confirmation dialog** — LLM restart button shows a confirmation modal before proceeding
+
+#### Track C — Documentation
+
+- **Overhaul `api-contract.md` for v2.0.0** — document `/health` vs `/health/detail` split, `embed_reachable` field, SSE streaming protocol (4 event types), auth endpoints (`/auth/login`, `/auth/logout`, `/auth/check`), `notes` field in GenerateRequest, `model_info` in GET /models response, `POST /llm/restart` endpoint, `already_loaded` response from `/llm/switch`, update version to 2.0.0
+- **Document data-at-rest encryption recommendations** — new "Data at Rest" section covering ChromaDB disk storage and BitLocker/LUKS recommendations
+
+#### Track D — Error Standardization (planned)
+
+- **Standardize all error responses to `ErrorResponse(message, error_code)` format** — replace inconsistent `{"detail": ...}` patterns across all routers
+- **Fix `POST /feedback` to return `201 Created`** — currently returns 200 for resource creation
+- **Fix `POST /kb/articles` to return `201 Created`** — currently returns 200 for resource creation
+- **Break circular import in `APITokenMiddleware`** — move session validation import to module level
+- **Add typed `AppState` class for `app.state` services** — replace untyped attribute access with a proper typed class
+
+#### Track E — Test Quality (planned)
+
+- **Fix test isolation in `test_generate.py`** — use per-test `create_app()` instead of shared app fixture
+- **Deduplicate mock setup helpers across test files** — extract common mock patterns into shared test utilities
+- **Add retry logic and `_prepare_context` unit tests** — cover error paths and edge cases in generation pipeline
+
 ## [Unreleased] — Backend Cleanup
 
 ### Changed

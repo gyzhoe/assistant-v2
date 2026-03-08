@@ -1,6 +1,7 @@
 # API Contract — AI Helpdesk Assistant Backend
 
-Base URL: `http://localhost:8765`
+**Version:** 2.0.0
+**Base URL:** `http://localhost:8765`
 
 ## Table of Contents
 
@@ -16,36 +17,41 @@ Base URL: `http://localhost:8765`
 10. [Feedback Endpoints](#6-feedback-endpoints)
 11. [Settings / Config Endpoints](#7-settings--config-endpoints)
 12. [Model Download Endpoints](#8-model-download-endpoints)
-13. [Chrome Runtime Message Types](#chrome-runtime-message-types)
+13. [Auth Endpoints](#9-auth-endpoints)
+14. [Data at Rest](#data-at-rest)
+15. [Chrome Runtime Message Types](#chrome-runtime-message-types)
 
 ---
 
 ## Authentication
 
-The backend supports optional API token authentication via the `X-Extension-Token` header.
+The backend supports two authentication methods:
+
+1. **API token header** — `X-Extension-Token` header (used by the extension sidebar)
+2. **Session cookie** — `whd_session` HttpOnly cookie (used by the KB Management SPA)
 
 | Setting | Description |
 |---|---|
 | `API_TOKEN` env var | Shared secret. Leave empty (`""`) in dev to disable auth. |
 | Header name | `X-Extension-Token` |
-| Exempt paths | `/health`, `/docs`, `/openapi.json` |
+| Cookie name | `whd_session` |
+| Exempt paths | `/health`, `/docs`, `/openapi.json`, `/auth/*`, `/manage/*` |
 
-When `API_TOKEN` is set, all requests (except exempt paths) must include the token.
-Missing or invalid tokens return `401 Unauthorized`:
+When `API_TOKEN` is set, all requests (except exempt paths) must include either a valid token header or a valid session cookie. Missing or invalid credentials return `401 Unauthorized`:
 
 ```json
 {
-  "detail": "Unauthorized. Missing or invalid X-Extension-Token header."
+  "detail": "Unauthorized. Missing or invalid credentials."
 }
 ```
 
-Some destructive endpoints (`/shutdown`, `/llm/start`, `/llm/stop`) additionally enforce token auth via a per-route dependency, even if the global middleware would allow them.
+Some destructive endpoints (`/shutdown`, `/llm/start`, `/llm/stop`, `/llm/switch`, `/llm/restart`) additionally enforce token auth and localhost-only access via per-route dependencies.
 
 ---
 
 ## Rate Limiting
 
-In-process rate limiter applied per client IP. Only specific paths are rate-limited.
+In-process rate limiter applied per client IP. Only specific paths are rate-limited (POST only — GET/HEAD/OPTIONS pass through).
 
 | Path | Max requests per minute |
 |---|---|
@@ -99,7 +105,7 @@ The `Server` header is stripped from all responses.
 
 ### `GET /health`
 
-Returns the current status of all backend dependencies.
+Returns a minimal health status. Use `/health/detail` for full diagnostics.
 
 **Authentication:** Not required (exempt from token auth).
 
@@ -109,14 +115,33 @@ Returns the current status of all backend dependencies.
 
 ```json
 {
+  "status": "ok"
+}
+```
+
+---
+
+### `GET /health/detail`
+
+Returns detailed system health status including LLM server, embed server, and ChromaDB state.
+
+**Authentication:** Required (`X-Extension-Token` header).
+
+**Rate limit:** None.
+
+#### Response `200 OK`
+
+```json
+{
   "status": "ok",
   "llm_reachable": true,
+  "embed_reachable": true,
   "chroma_ready": true,
   "chroma_doc_counts": {
     "whd_tickets": 1432,
     "kb_articles": 87
   },
-  "version": "1.8.0"
+  "version": "2.0.0"
 }
 ```
 
@@ -124,11 +149,12 @@ Returns the current status of all backend dependencies.
 
 | Field | Type | Description |
 |---|---|---|
-| `status` | `"ok" \| "degraded"` | `"ok"` when both llama-server and ChromaDB are healthy |
-| `llm_reachable` | boolean | Whether llama-server responds at `/health` |
-| `chroma_ready` | boolean | Whether ChromaDB is initialized |
+| `status` | `"ok" \| "degraded"` | `"ok"` when LLM, embed, and ChromaDB are all healthy |
+| `llm_reachable` | boolean | Whether llama-server (LLM, port 11435) responds at `/health` |
+| `embed_reachable` | boolean | Whether llama-server (embed, port 11436) responds at `/health` |
+| `chroma_ready` | boolean | Whether ChromaDB is initialized and collections are accessible |
 | `chroma_doc_counts` | object | Document counts per collection (key = collection name) |
-| `version` | string | Backend version from config |
+| `version` | string | Backend version from config (currently `"2.0.0"`) |
 
 ---
 
@@ -136,7 +162,7 @@ Returns the current status of all backend dependencies.
 
 Gracefully shuts down the backend server after a 0.5-second delay.
 
-**Authentication:** Required (`X-Extension-Token` header, enforced even in dev mode when `API_TOKEN` is set).
+**Authentication:** Required (`X-Extension-Token` header, enforced even in dev mode when `API_TOKEN` is set). Localhost only.
 
 **Rate limit:** None.
 
@@ -153,14 +179,15 @@ Gracefully shuts down the backend server after a 0.5-second delay.
 | Status | Condition |
 |---|---|
 | `401 Unauthorized` | Missing or invalid token |
+| `403 Forbidden` | Request not from localhost |
 
 ---
 
 ### `POST /llm/start`
 
-Starts the llama-server process(es) as detached background processes. Returns immediately without waiting for llama-server to be fully ready.
+Starts the llama-server process(es) as detached background processes. Checks each server (LLM and embed) independently so a running server is not restarted. Returns immediately without waiting for llama-server to be fully ready.
 
-**Authentication:** Required (`X-Extension-Token` header).
+**Authentication:** Required (`X-Extension-Token` header). Localhost only.
 
 **Rate limit:** None.
 
@@ -185,14 +212,15 @@ Starts the llama-server process(es) as detached background processes. Returns im
 | Status | Condition |
 |---|---|
 | `401 Unauthorized` | Missing or invalid token |
+| `403 Forbidden` | Request not from localhost |
 
 ---
 
 ### `POST /llm/stop`
 
-Stops the llama-server process(es) (uses `taskkill` on Windows, `pkill` on other platforms).
+Stops the LLM server process on port 11435 only. The embed server on port 11436 is not affected.
 
-**Authentication:** Required (`X-Extension-Token` header).
+**Authentication:** Required (`X-Extension-Token` header). Localhost only.
 
 **Rate limit:** None.
 
@@ -209,6 +237,94 @@ Stops the llama-server process(es) (uses `taskkill` on Windows, `pkill` on other
 | Status | Condition |
 |---|---|
 | `401 Unauthorized` | Missing or invalid token |
+| `403 Forbidden` | Request not from localhost |
+
+---
+
+### `POST /llm/switch`
+
+Switch the currently loaded GGUF model. Stops the running llama-server chat instance on port 11435 and restarts it with the specified model. The embed server is not affected.
+
+Probes the running LLM server to detect state mismatches (e.g., if `app.state` says model A is loaded but the server is actually running model B) and self-corrects before comparing.
+
+**Authentication:** Required (`X-Extension-Token` header). Localhost only.
+
+**Rate limit:** None.
+
+#### Request Body
+
+```json
+{
+  "model": "qwen3.5:9b"
+}
+```
+
+#### Request fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `model` | string | yes | Display name of the GGUF model to load (1-100 chars) |
+
+#### Response `200 OK` — switching
+
+```json
+{
+  "status": "switching",
+  "model": "qwen3.5:9b"
+}
+```
+
+#### Response `200 OK` — already loaded
+
+When the requested model is already the active model:
+
+```json
+{
+  "status": "already_loaded",
+  "model": "qwen3.5:9b"
+}
+```
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `401 Unauthorized` | Missing or invalid token |
+| `403 Forbidden` | Request not from localhost |
+| `404 Not Found` | Unknown model name or GGUF file not found in models directory |
+
+---
+
+### `POST /llm/restart`
+
+Restart the LLM server on port 11435 with the current model. Kills the existing LLM process, waits for the port to free (polls up to ~4 seconds), then starts a new instance. The embed server on port 11436 is not affected.
+
+**Authentication:** Required (`X-Extension-Token` header). Localhost only.
+
+**Rate limit:** None.
+
+#### Response `200 OK`
+
+```json
+{
+  "status": "restarting",
+  "model": "qwen3.5:9b"
+}
+```
+
+#### Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `status` | string | Always `"restarting"` |
+| `model` | string | The model being restarted (current model display name) |
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `401 Unauthorized` | Missing or invalid token |
+| `403 Forbidden` | Request not from localhost |
 
 ---
 
@@ -216,7 +332,7 @@ Stops the llama-server process(es) (uses `taskkill` on Windows, `pkill` on other
 
 ### `POST /generate`
 
-Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates a helpdesk reply using the local LLM.
+Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates a helpdesk reply using the local LLM. Supports both JSON and SSE streaming responses.
 
 **Authentication:** Required when `API_TOKEN` is configured.
 
@@ -237,7 +353,8 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
   "include_web_context": true,
   "prompt_suffix": "",
   "custom_fields": {},
-  "pinned_article_ids": []
+  "pinned_article_ids": [],
+  "notes": []
 }
 ```
 
@@ -252,13 +369,44 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 | `status` | string | no | `""` | Ticket status (max 200 chars) |
 | `model` | string | no | `"qwen3.5:9b"` | GGUF model to use (max 100 chars) |
 | `max_context_docs` | integer | no | `5` | Max RAG documents to include (1-20) |
-| `stream` | boolean | no | `false` | Reserved for future streaming support |
+| `stream` | boolean | no | `false` | When `true`, returns SSE streaming response (see [SSE Streaming Protocol](#sse-streaming-protocol)) |
 | `include_web_context` | boolean | no | `true` | Include Microsoft Learn search results as additional context |
 | `prompt_suffix` | string | no | `""` | Custom instructions appended to the prompt (max 2,000 chars) |
 | `custom_fields` | object | no | `{}` | Key-value pairs for custom ticket fields. Max 10 keys; key max 100 chars; value max 500 chars. Control characters are stripped. |
 | `pinned_article_ids` | string[] | no | `[]` | KB article IDs to always include as context (max 10 items, each max 200 chars) |
+| `notes` | NoteItem[] | no | `[]` | Ticket conversation notes (max 50 items). See [NoteItem schema](#noteitem-schema). |
 
-#### Response `200 OK`
+#### NoteItem schema
+
+Each note represents a message in the ticket conversation history. Notes are reversed to chronological order (oldest first) and capped at 10 most recent for the LLM prompt.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `author` | string | no | `""` | Note author name (max 200 chars) |
+| `text` | string | no | `""` | Note content (max 4,000 chars) |
+| `type` | string | no | `"client"` | Note type: `"client"`, `"tech_visible"`, or `"tech_internal"` |
+| `date` | string | no | `""` | ISO 8601 timestamp (max 50 chars) |
+| `note_id` | string | no | `""` | WHD note identifier (max 50 chars) |
+| `time_spent` | string | no | `""` | Time spent on this note entry (max 50 chars) |
+
+Example:
+
+```json
+{
+  "notes": [
+    {
+      "author": "John",
+      "text": "I tried restarting the computer but the issue persists.",
+      "type": "client",
+      "date": "2024-01-15T10:30:00",
+      "note_id": "12345",
+      "time_spent": "0:15"
+    }
+  ]
+}
+```
+
+#### Response `200 OK` (non-streaming: `stream: false`)
 
 ```json
 {
@@ -279,7 +427,7 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 }
 ```
 
-#### Response fields
+#### Response fields (non-streaming)
 
 | Field | Type | Description |
 |---|---|---|
@@ -297,14 +445,44 @@ Retrieves RAG context (ChromaDB + optional Microsoft Learn search) and generates
 | `score` | float | Similarity score (0.0 - 1.0) |
 | `metadata` | object | Source-specific metadata (article_id, title, etc.) |
 
-#### Error responses
+#### SSE Streaming Protocol
+
+When `stream: true`, the endpoint returns a `text/event-stream` response. Each event is a JSON object on a `data:` line, followed by two newlines:
+
+```
+data: {"type": "meta", ...}\n\n
+data: {"type": "token", ...}\n\n
+data: {"type": "token", ...}\n\n
+data: {"type": "done", ...}\n\n
+```
+
+**Event types (in order of appearance):**
+
+| Event | Payload | Description |
+|---|---|---|
+| `meta` | `{"type": "meta", "context_docs": [...]}` | First event. Contains the RAG context documents used for generation. |
+| `token` | `{"type": "token", "content": "word "}` | Repeated. Each event contains one or more tokens of generated text. |
+| `error` | `{"type": "error", "error_code": "...", "message": "..."}` | Sent if an error occurs mid-stream. Terminates the stream. Error codes: `LLM_DOWN`, `MODEL_ERROR`, `INTERNAL_ERROR`. |
+| `done` | `{"type": "done", "latency_ms": 1234}` | Final event. Indicates generation completed successfully. |
+
+**Response headers for streaming:**
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `text/event-stream` |
+| `Cache-Control` | `no-cache` |
+| `X-Accel-Buffering` | `no` |
+
+If context preparation fails before streaming starts (e.g., LLM/embed server down), the response still uses SSE format but contains only a single `error` event.
+
+#### Error responses (non-streaming)
 
 | Status | Condition | Body |
 |---|---|---|
 | `401 Unauthorized` | Missing/invalid token | `{"detail": "Unauthorized..."}` |
 | `422 Unprocessable Entity` | Validation error | Pydantic validation detail array |
 | `429 Too Many Requests` | Rate limit exceeded | `{"detail": "Rate limit exceeded...", "error_code": "RATE_LIMITED"}` |
-| `503 Service Unavailable` | LLM server unreachable | `{"detail": {"message": "...", "error_code": "LLM_DOWN"}}` |
+| `503 Service Unavailable` | LLM server unreachable | `{"message": "...", "error_code": "LLM_DOWN"}` |
 
 ---
 
@@ -325,7 +503,7 @@ List KB articles with pagination, search, and source type filtering.
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `page` | integer | no | `1` | Page number |
-| `page_size` | integer | no | `20` | Articles per page |
+| `page_size` | integer | no | `20` | Articles per page (1-100) |
 | `search` | string | no | `null` | Case-insensitive title search |
 | `source_type` | string | no | `null` | Filter by source type (e.g., `"html"`, `"pdf"`, `"manual"`, `"url"`) |
 
@@ -428,7 +606,8 @@ Create a new KB article from markdown content. The article is chunked by markdow
 | `422 Unprocessable Entity` | Validation error (empty title/content, invalid tags) |
 | `422 Unprocessable Entity` | No content to ingest after processing |
 | `500 Internal Server Error` | Unexpected error during creation |
-| `503 Service Unavailable` | LLM server unreachable for embedding |
+| `502 Bad Gateway` | LLM model error during embedding |
+| `503 Service Unavailable` | Embed server unreachable |
 
 ---
 
@@ -444,7 +623,7 @@ Get full article detail including all chunks.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `article_id` | string | Article identifier |
+| `article_id` | string | Article identifier (pattern: `^[a-zA-Z0-9_-]{1,64}$`) |
 
 #### Response `200 OK`
 
@@ -517,7 +696,7 @@ Update the title, content, and tags of a manual KB article. The article is re-ch
 
 | Parameter | Type | Description |
 |---|---|---|
-| `article_id` | string | Article identifier |
+| `article_id` | string | Article identifier (pattern: `^[a-zA-Z0-9_-]{1,64}$`) |
 
 #### Request Body
 
@@ -566,7 +745,8 @@ Update the title, content, and tags of a manual KB article. The article is re-ch
 | `409 Conflict` | Another ingestion is already in progress |
 | `422 Unprocessable Entity` | Validation error or no content after processing |
 | `500 Internal Server Error` | Unexpected error |
-| `503 Service Unavailable` | LLM server unreachable for embedding |
+| `502 Bad Gateway` | LLM model error during embedding |
+| `503 Service Unavailable` | Embed server unreachable |
 
 ---
 
@@ -582,7 +762,7 @@ Update tags on all chunks of an article. This is a lightweight operation that do
 
 | Parameter | Type | Description |
 |---|---|---|
-| `article_id` | string | Article identifier |
+| `article_id` | string | Article identifier (pattern: `^[a-zA-Z0-9_-]{1,64}$`) |
 
 #### Request Body
 
@@ -637,7 +817,7 @@ Delete all chunks belonging to an article from ChromaDB.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `article_id` | string | Article identifier |
+| `article_id` | string | Article identifier (pattern: `^[a-zA-Z0-9_-]{1,64}$`) |
 
 #### Response `200 OK`
 
@@ -712,7 +892,8 @@ Upload a single file for ingestion into ChromaDB. Accepts `multipart/form-data`.
 | `413 Payload Too Large` | File exceeds `MAX_UPLOAD_BYTES` (50 MB default) |
 | `422 Unprocessable Entity` | Unsupported extension, no filename, empty file, or corrupt content |
 | `500 Internal Server Error` | Unexpected error during ingestion |
-| `503 Service Unavailable` | LLM server unreachable for embedding |
+| `502 Bad Gateway` | LLM model error during embedding |
+| `503 Service Unavailable` | Embed server unreachable |
 
 ---
 
@@ -770,7 +951,8 @@ Fetch a URL server-side, extract text content, chunk it, and ingest into ChromaD
 | `413 Payload Too Large` | Response exceeds 5 MB |
 | `422 Unprocessable Entity` | SSRF violation, unsupported Content-Type, invalid URL, or fetch failure |
 | `500 Internal Server Error` | Unexpected error during URL ingestion |
-| `503 Service Unavailable` | LLM server unreachable for embedding |
+| `502 Bad Gateway` | LLM model error during embedding |
+| `503 Service Unavailable` | Embed server unreachable |
 
 #### SSRF prevention
 
@@ -877,7 +1059,7 @@ Return KB collection statistics.
 
 ### `POST /feedback`
 
-Store a user's rating (good/bad) for a generated reply. Rated replies are embedded and stored in a separate `rated_replies` ChromaDB collection, enabling dynamic few-shot prompting for future generations.
+Store a user's rating (good/bad) for a generated reply. Rated replies are embedded and stored in a `rated_replies` ChromaDB collection, enabling dynamic few-shot prompting for future generations.
 
 **Authentication:** Required when `API_TOKEN` is configured.
 
@@ -905,6 +1087,43 @@ Store a user's rating (good/bad) for a generated reply. Rated replies are embedd
 | `reply` | string | yes | — | The generated reply text (max 4,000 chars) |
 | `rating` | string | yes | — | `"good"` or `"bad"` |
 
+#### Response `200 OK`
+
+```json
+{
+  "id": "rated_a1b2c3d4e5f67890abcdef1234567890"
+}
+```
+
+#### Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique document ID in the rated_replies collection (format: `rated_{hex}`) |
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `422 Unprocessable Entity` | Validation error (missing required field, invalid rating value) |
+| `503 Service Unavailable` | Embed server/ChromaDB unavailable |
+
+---
+
+### `DELETE /feedback/{doc_id}`
+
+Delete a rated reply from the `rated_replies` ChromaDB collection.
+
+**Authentication:** Required when `API_TOKEN` is configured.
+
+**Rate limit:** None.
+
+#### Path parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `doc_id` | string | Rated reply document ID (pattern: `^rated_[a-f0-9]{32}$`) |
+
 #### Response `204 No Content`
 
 Empty body on success.
@@ -913,8 +1132,8 @@ Empty body on success.
 
 | Status | Condition |
 |---|---|
-| `422 Unprocessable Entity` | Validation error (missing required field, invalid rating value) |
-| `503 Service Unavailable` | LLM server/ChromaDB unavailable for embedding |
+| `404 Not Found` | Document does not exist |
+| `503 Service Unavailable` | ChromaDB unavailable |
 
 ---
 
@@ -922,7 +1141,7 @@ Empty body on success.
 
 ### `GET /models`
 
-List available GGUF models by scanning the `models/` directory.
+List available GGUF models by scanning the `models/` directory. Excludes embed models (identified by filename prefix). Includes detailed model information.
 
 **Authentication:** Required when `API_TOKEN` is configured.
 
@@ -933,7 +1152,15 @@ List available GGUF models by scanning the `models/` directory.
 ```json
 {
   "models": ["qwen3.5:9b"],
-  "current": "qwen3.5:9b"
+  "current": "qwen3.5:9b",
+  "model_info": {
+    "qwen3.5:9b": {
+      "downloaded": true,
+      "size_bytes": 5368709120,
+      "description": "~5.3 GB",
+      "gguf_name": "Qwen3.5-9B-Q4_K_M.gguf"
+    }
+  }
 }
 ```
 
@@ -941,54 +1168,31 @@ List available GGUF models by scanning the `models/` directory.
 
 | Field | Type | Description |
 |---|---|---|
-| `models` | string[] | List of available GGUF model names |
-| `current` | string | Currently loaded model name |
+| `models` | string[] | List of available GGUF model display names |
+| `current` | string | Currently loaded model display name |
+| `model_info` | object | Detailed info per model (see below) |
+
+**ModelInfo schema (per model key):**
+
+| Field | Type | Description |
+|---|---|---|
+| `downloaded` | boolean | Whether the GGUF file exists on disk |
+| `size_bytes` | integer \| null | File size in bytes (null if not downloaded) |
+| `description` | string | Human-readable size description |
+| `gguf_name` | string | GGUF filename on disk |
 
 #### Error responses
 
 | Status | Condition | Body |
 |---|---|---|
-| `503 Service Unavailable` | Cannot scan models directory | `{"detail": {"message": "Cannot list models.", "error_code": "LLM_DOWN"}}` |
+| `502 Bad Gateway` | LLM server returned an HTTP error | `{"detail": {"message": "LLM server returned HTTP ...", "error_code": "MODEL_ERROR"}}` |
+| `503 Service Unavailable` | Cannot reach LLM server | `{"detail": {"message": "Cannot reach LLM server.", "error_code": "LLM_DOWN"}}` |
 
 ---
 
 ### `POST /llm/switch`
 
-Switch the currently loaded GGUF model. Stops the running llama-server chat instance and restarts it with the specified model.
-
-**Authentication:** Required (`X-Extension-Token` header).
-
-**Rate limit:** None.
-
-#### Request Body
-
-```json
-{
-  "model": "qwen3.5:9b"
-}
-```
-
-#### Request fields
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `model` | string | yes | Name of the GGUF model to load |
-
-#### Response `200 OK`
-
-```json
-{
-  "status": "switching",
-  "model": "qwen3.5:9b"
-}
-```
-
-#### Error responses
-
-| Status | Condition |
-|---|---|
-| `401 Unauthorized` | Missing or invalid token |
-| `404 Not Found` | Model GGUF file not found in models directory |
+See [POST /llm/switch](#post-llmswitch) in the Health / Status section above.
 
 ---
 
@@ -1016,12 +1220,21 @@ Start a background download of one or all GGUF models from HuggingFace.
 |---|---|---|---|
 | `models` | string[] | no | List of GGUF filenames to download. Empty list downloads all missing non-embed models. |
 
-#### Response `200 OK`
+#### Response `200 OK` — started
 
 ```json
 {
   "status": "started",
   "models": ["Qwen3.5-9B-Q4_K_M.gguf"]
+}
+```
+
+#### Response `200 OK` — all downloaded
+
+```json
+{
+  "status": "all_downloaded",
+  "models": []
 }
 ```
 
@@ -1086,13 +1299,118 @@ Cancel an in-flight model download.
 }
 ```
 
+Returns `{"status": "not_downloading"}` if no download is active (not an error, HTTP 200).
+
 #### Error responses
 
 | Status | Condition |
 |---|---|
 | `401 Unauthorized` | Missing or invalid token |
 
-Returns `{"status": "not_downloading"}` if no download is active (not an error, HTTP 200).
+---
+
+## 9. Auth Endpoints
+
+Cookie-based session authentication for the KB Management SPA. The extension sidebar continues to use the `X-Extension-Token` header.
+
+All auth endpoints are exempt from the API token middleware.
+
+### `POST /auth/login`
+
+Exchange an API token for an HttpOnly session cookie.
+
+**Authentication:** Not required (this IS the authentication endpoint).
+
+**Rate limit:** None.
+
+#### Request Body
+
+```json
+{
+  "token": "your-api-token-here"
+}
+```
+
+#### Request fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | no | API token. Not required for localhost connections or when no `API_TOKEN` is configured. |
+
+#### Response `200 OK`
+
+```json
+{
+  "authenticated": true
+}
+```
+
+**Set-Cookie headers:**
+
+| Cookie | Properties |
+|---|---|
+| `whd_session` | HttpOnly, SameSite=Strict, Path=/, max-age=86400 (24h) |
+| `whd_csrf` | SameSite=Strict, Path=/, max-age=86400 (readable by JavaScript for CSRF protection) |
+
+#### Error responses
+
+| Status | Condition |
+|---|---|
+| `401 Unauthorized` | Invalid API token (non-localhost request with wrong/missing token) |
+| `422 Unprocessable Entity` | Request body is not valid JSON |
+
+---
+
+### `POST /auth/logout`
+
+Clear the session cookie and remove the session from the store.
+
+**Authentication:** Via session cookie.
+
+**Rate limit:** None.
+
+#### Response `200 OK`
+
+```json
+{
+  "authenticated": false
+}
+```
+
+Deletes both `whd_session` and `whd_csrf` cookies.
+
+---
+
+### `GET /auth/check`
+
+Validate whether the current session cookie is valid.
+
+**Authentication:** Via session cookie.
+
+**Rate limit:** None.
+
+#### Response `200 OK`
+
+```json
+{
+  "authenticated": true
+}
+```
+
+Returns `{"authenticated": false}` if no session cookie is present or the session has expired.
+
+---
+
+## Data at Rest
+
+ChromaDB stores vector embeddings and document text on disk in the directory specified by the `CHROMA_PATH` setting (default: `./chroma_data`). This data is **not encrypted** by the application.
+
+**Recommendations:**
+
+- Enable **BitLocker** (Windows) or **LUKS** (Linux) on the volume containing the ChromaDB data directory to encrypt data at rest.
+- The application itself does not implement data-at-rest encryption — rely on OS-level full-disk encryption.
+- This is an acceptable security posture for the localhost-only deployment model where physical access to the machine implies access to the data regardless.
+- For network-exposed deployments, ensure the data volume is encrypted and access is restricted to authorized users.
 
 ---
 
@@ -1100,7 +1418,7 @@ Returns `{"status": "not_downloading"}` if no download is active (not an error, 
 
 The backend serves a static KB management SPA from `static/manage/` when the directory exists. This is an HTML SPA served with `StaticFiles(html=True)`, not an API endpoint.
 
-**Authentication:** Not subject to API token middleware (static file serving).
+**Authentication:** Not subject to API token middleware (static file serving). The SPA itself uses cookie-based session auth via `/auth/login`.
 
 **Note:** This mount is registered after all API routes, so `/kb/*` API endpoints take priority.
 
