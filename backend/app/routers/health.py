@@ -1,12 +1,9 @@
 import asyncio
 import logging
 import os
-import re
 import secrets
 import signal
 import subprocess
-import sys
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
@@ -14,25 +11,27 @@ from fastapi.security import APIKeyHeader
 from app.config import settings
 from app.constants import MODEL_DISPLAY_NAMES, MODEL_GGUF_FILES
 from app.models.request_models import SwitchModelRequest
+from app.process_utils import (
+    CREATION_FLAGS,
+    EMBED_GGUF_FILE,
+    EMBED_PORT,
+    LLM_PORT,
+    MODELS_DIR,
+    detect_gpu_config,
+    is_port_listening,
+    kill_legacy_ollama,
+    kill_pids_on_port,
+    resolve_llama_exe,
+)
 from app.services.audit import audit_log
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
-# Derive app install directory (backend/ -> app root) for bundled llama-server path.
-_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-_APP_DIR = _BACKEND_DIR.parent
-_BUNDLED_LLAMA_SERVER = _APP_DIR / "tools" / "llama-server.exe"
-_MODELS_DIR = _APP_DIR / "models"
-
 _token_header = APIKeyHeader(name="X-Extension-Token", auto_error=False)
 
 _LOCALHOST_HOSTS = {"127.0.0.1", "::1"}
-
-# Ports for llama-server instances
-_LLM_PORT = 11435
-_EMBED_PORT = 11436
 
 
 async def _require_token(token: str | None = Depends(_token_header)) -> None:
@@ -49,70 +48,6 @@ def _require_localhost(request: Request) -> None:
     client = request.client
     if client is None or client.host not in _LOCALHOST_HOSTS:
         raise HTTPException(status_code=403, detail="Process control is only available from localhost.")
-
-
-def _find_pids_on_port(port: int) -> list[int]:
-    """Parse ``netstat -ano -p TCP`` to find PIDs listening on *port*.
-
-    Returns an empty list if netstat is unavailable or no process is listening.
-    """
-    try:
-        output = subprocess.check_output(
-            ["netstat", "-ano", "-p", "TCP"],
-            text=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except Exception:
-        return []
-
-    pids: set[int] = set()
-    pattern = re.compile(rf":\s*{port}\s+.*LISTENING\s+(\d+)", re.IGNORECASE)
-    for line in output.splitlines():
-        m = pattern.search(line)
-        if m:
-            pid = int(m.group(1))
-            if pid != 0:
-                pids.add(pid)
-    return sorted(pids)
-
-
-def _is_port_listening(port: int) -> bool:
-    """Check if any process is listening on the given port."""
-    return len(_find_pids_on_port(port)) > 0
-
-
-async def _kill_pids_on_port(port: int) -> list[int]:
-    """Kill all processes listening on *port*. Returns the killed PIDs."""
-    pids = await asyncio.to_thread(_find_pids_on_port, port)
-    creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    for pid in pids:
-        try:
-            await asyncio.to_thread(
-                subprocess.run,
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creation_flags,
-                check=False,
-            )
-        except Exception:
-            logger.warning("Failed to kill PID %d on port %d", pid, port)
-    return pids
-
-
-async def _kill_legacy_ollama() -> None:
-    """Kill leftover Ollama processes to avoid port conflicts on upgrade."""
-    if sys.platform == "win32":
-        for exe in ("ollama.exe", "ollama_llama_server.exe"):
-            await asyncio.to_thread(
-                subprocess.run,
-                ["taskkill", "/IM", exe, "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-    else:
-        await asyncio.to_thread(subprocess.run, ["pkill", "-f", "ollama"], check=False)
 
 
 @router.get("/health")
@@ -197,26 +132,21 @@ async def start_llm(request: Request) -> dict[str, str]:
         pass
 
     # Check if embed server is already listening
-    embed_running = await asyncio.to_thread(_is_port_listening, _EMBED_PORT)
+    embed_running = await asyncio.to_thread(is_port_listening, EMBED_PORT)
 
     if llm_running and embed_running:
         return {"status": "already_running"}
 
     # Kill any leftover Ollama processes to avoid port conflicts on upgrade
-    await _kill_legacy_ollama()
+    await asyncio.to_thread(kill_legacy_ollama)
 
-    llama_exe = (
-        str(_BUNDLED_LLAMA_SERVER)
-        if _BUNDLED_LLAMA_SERVER.exists()
-        else "llama-server"
-    )
-
-    creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    llama_exe = resolve_llama_exe()
+    n_gpu_layers, ctx_size = await asyncio.to_thread(detect_gpu_config)
 
     if not llm_running:
         # Kill stale process on LLM port if any
-        if await asyncio.to_thread(_is_port_listening, _LLM_PORT):
-            await _kill_pids_on_port(_LLM_PORT)
+        if await asyncio.to_thread(is_port_listening, LLM_PORT):
+            await asyncio.to_thread(kill_pids_on_port, LLM_PORT)
             await asyncio.sleep(0.3)
 
         # Start LLM server — resolve GGUF from current model or default
@@ -227,38 +157,38 @@ async def start_llm(request: Request) -> dict[str, str]:
             current_display, MODEL_GGUF_FILES.get(settings.default_model, ""),
         )
         llm_model = (
-            _MODELS_DIR / gguf_name if gguf_name
-            else _MODELS_DIR / "Qwen3.5-9B-Q4_K_M.gguf"
+            MODELS_DIR / gguf_name if gguf_name
+            else MODELS_DIR / MODEL_GGUF_FILES[settings.default_model]
         )
         subprocess.Popen(
             [
                 llama_exe, "-m", str(llm_model),
-                "--port", str(_LLM_PORT),
-                "--n-gpu-layers", "-1",
-                "--ctx-size", "8192",
+                "--port", str(LLM_PORT),
+                "--n-gpu-layers", n_gpu_layers,
+                "--ctx-size", ctx_size,
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=creation_flags,
+            creationflags=CREATION_FLAGS,
         )
 
     if not embed_running:
         # Kill stale process on embed port if any
-        if await asyncio.to_thread(_is_port_listening, _EMBED_PORT):
-            await _kill_pids_on_port(_EMBED_PORT)
+        if await asyncio.to_thread(is_port_listening, EMBED_PORT):
+            await asyncio.to_thread(kill_pids_on_port, EMBED_PORT)
             await asyncio.sleep(0.3)
 
-        embed_model = _MODELS_DIR / "nomic-embed-text-v1.5.f16.gguf"
+        embed_model = MODELS_DIR / EMBED_GGUF_FILE
         subprocess.Popen(
             [
                 llama_exe, "-m", str(embed_model),
-                "--port", str(_EMBED_PORT),
+                "--port", str(EMBED_PORT),
                 "--embedding",
-                "--n-gpu-layers", "-1",
+                "--n-gpu-layers", n_gpu_layers,
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=creation_flags,
+            creationflags=CREATION_FLAGS,
         )
 
     return {"status": "starting"}
@@ -267,7 +197,7 @@ async def start_llm(request: Request) -> dict[str, str]:
 @router.post("/llm/stop", dependencies=[Depends(_require_token), Depends(_require_localhost)])
 async def stop_llm(request: Request) -> dict[str, str]:
     """Stop the LLM server on port 11435 only. Leaves embed server alive."""
-    killed = await _kill_pids_on_port(_LLM_PORT)
+    killed = await asyncio.to_thread(kill_pids_on_port, LLM_PORT)
     if killed:
         logger.info("Stopped LLM server (PIDs: %s)", killed)
     return {"status": "stopping"}
@@ -300,30 +230,31 @@ async def switch_llm(request: Request, body: SwitchModelRequest) -> dict[str, st
     gguf_name = MODEL_GGUF_FILES.get(display_name)
     if not gguf_name:
         raise HTTPException(status_code=404, detail=f"Unknown model: {display_name}")
-    gguf_path = _MODELS_DIR / gguf_name
+    gguf_path = MODELS_DIR / gguf_name
     if not gguf_path.is_file():
         raise HTTPException(status_code=404, detail=f"Model file not found: {gguf_name}")
 
     # Kill only the LLM server on port 11435 — leave embed server alone
-    await _kill_pids_on_port(_LLM_PORT)
+    await asyncio.to_thread(kill_pids_on_port, LLM_PORT)
 
     # Brief pause to let the port free up
     await asyncio.sleep(0.5)
 
-    # Start llama-server with the new model
-    llama_exe = str(_BUNDLED_LLAMA_SERVER) if _BUNDLED_LLAMA_SERVER.exists() else "llama-server"
-    creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    # Auto-tune GPU settings
+    llama_exe = resolve_llama_exe()
+    n_gpu_layers, ctx_size = await asyncio.to_thread(detect_gpu_config)
 
+    # Start llama-server with the new model
     subprocess.Popen(
         [
             llama_exe, "-m", str(gguf_path),
-            "--port", str(_LLM_PORT),
-            "--n-gpu-layers", "-1",
-            "--ctx-size", "8192",
+            "--port", str(LLM_PORT),
+            "--n-gpu-layers", n_gpu_layers,
+            "--ctx-size", ctx_size,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        creationflags=creation_flags,
+        creationflags=CREATION_FLAGS,
     )
 
     # Update model state AFTER starting the new server
@@ -374,32 +305,32 @@ async def restart_llm(request: Request) -> dict[str, str]:
         current_display, MODEL_GGUF_FILES.get(settings.default_model, ""),
     )
     gguf_path = (
-        _MODELS_DIR / gguf_name if gguf_name
-        else _MODELS_DIR / "Qwen3.5-9B-Q4_K_M.gguf"
+        MODELS_DIR / gguf_name if gguf_name
+        else MODELS_DIR / "Qwen3.5-9B-Q4_K_M.gguf"
     )
 
     # Kill the LLM server on port 11435
-    await _kill_pids_on_port(_LLM_PORT)
+    await asyncio.to_thread(kill_pids_on_port, LLM_PORT)
 
     # Wait for port to free (poll with timeout)
     for _ in range(20):  # ~4 seconds max
-        if not await asyncio.to_thread(_is_port_listening, _LLM_PORT):
+        if not await asyncio.to_thread(is_port_listening, LLM_PORT):
             break
         await asyncio.sleep(0.2)
 
-    llama_exe = str(_BUNDLED_LLAMA_SERVER) if _BUNDLED_LLAMA_SERVER.exists() else "llama-server"
-    creation_flags: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    llama_exe = resolve_llama_exe()
+    n_gpu_layers, ctx_size = await asyncio.to_thread(detect_gpu_config)
 
     subprocess.Popen(
         [
             llama_exe, "-m", str(gguf_path),
-            "--port", str(_LLM_PORT),
-            "--n-gpu-layers", "-1",
-            "--ctx-size", "8192",
+            "--port", str(LLM_PORT),
+            "--n-gpu-layers", n_gpu_layers,
+            "--ctx-size", ctx_size,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        creationflags=creation_flags,
+        creationflags=CREATION_FLAGS,
     )
 
     logger.info("Restarting LLM server with model %s", current_display)

@@ -24,10 +24,6 @@ def setup_app_state(app: Any) -> None:
 
     if not hasattr(app.state, "chroma_client"):
         app.state.chroma_client = MagicMock()
-    if not hasattr(app.state, "llm_reachable"):
-        app.state.llm_reachable = False
-    if not hasattr(app.state, "embed_reachable"):
-        app.state.embed_reachable = False
     if not hasattr(app.state, "current_llm_model"):
         app.state.current_llm_model = "qwen3.5:9b"
 

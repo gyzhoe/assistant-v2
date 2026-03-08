@@ -71,7 +71,7 @@ class TestGetToken:
         assert "not found" in result["error"]
 
 
-# --- netstat output samples for _find_pids_on_port tests ---
+# --- netstat output samples for find_pids_on_port tests ---
 
 NETSTAT_SAMPLE = """\
 Active Connections
@@ -94,60 +94,66 @@ Active Connections
 
 class TestFindPidsOnPort:
     def test_finds_listening_pid(self):
-        with patch("native_host.subprocess.check_output", return_value=NETSTAT_SAMPLE):
-            pids = native_host._find_pids_on_port(8765)
+        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+            from app.process_utils import find_pids_on_port
+            pids = find_pids_on_port(8765)
         assert pids == [5432]
 
     def test_finds_multiple_pids(self):
-        with patch("native_host.subprocess.check_output", return_value=NETSTAT_MULTI_PID):
-            pids = native_host._find_pids_on_port(8765)
+        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_MULTI_PID):
+            from app.process_utils import find_pids_on_port
+            pids = find_pids_on_port(8765)
         assert pids == [5432, 9999]
 
     def test_empty_output(self):
-        with patch("native_host.subprocess.check_output", return_value=""):
-            pids = native_host._find_pids_on_port(8765)
+        with patch("app.process_utils.subprocess.check_output", return_value=""):
+            from app.process_utils import find_pids_on_port
+            pids = find_pids_on_port(8765)
         assert pids == []
 
     def test_no_match_on_different_port(self):
-        with patch("native_host.subprocess.check_output", return_value=NETSTAT_SAMPLE):
-            pids = native_host._find_pids_on_port(9999)
+        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+            from app.process_utils import find_pids_on_port
+            pids = find_pids_on_port(9999)
         assert pids == []
 
     def test_returns_empty_on_subprocess_error(self):
-        with patch("native_host.subprocess.check_output", side_effect=OSError("fail")):
-            pids = native_host._find_pids_on_port(8765)
+        with patch("app.process_utils.subprocess.check_output", side_effect=OSError("fail")):
+            from app.process_utils import find_pids_on_port
+            pids = find_pids_on_port(8765)
         assert pids == []
 
 
 class TestKillLlm:
     def test_kills_by_port_not_image_name(self):
-        """_kill_llm uses port-targeted kill, not taskkill /IM."""
+        """kill_llama_server uses port-targeted kill, not taskkill /IM."""
         with (
-            patch("native_host._find_pids_on_port") as mock_find,
-            patch("native_host._kill_pids") as mock_kill,
+            patch("app.process_utils.find_pids_on_port") as mock_find,
+            patch("app.process_utils.kill_pids") as mock_kill,
         ):
             mock_find.side_effect = lambda port: {11435: [100], 11436: [200]}[port]
-            native_host._kill_llm()
+            native_host.kill_llama_server()
 
         # Called for both ports
         assert mock_find.call_count == 2
         mock_kill.assert_called_once_with([100, 200])
 
     def test_no_pids_found(self):
-        """_kill_llm handles case where no PIDs are on the ports."""
+        """kill_llama_server handles case where no PIDs are on the ports."""
         with (
-            patch("native_host._find_pids_on_port", return_value=[]),
-            patch("native_host._kill_pids") as mock_kill,
+            patch("app.process_utils.find_pids_on_port", return_value=[]),
+            patch("app.process_utils.kill_pids") as mock_kill,
         ):
-            native_host._kill_llm()
+            native_host.kill_llama_server()
 
         mock_kill.assert_not_called()
 
 
 class TestKillPids:
     def test_kills_each_pid(self):
-        with patch("native_host.subprocess.run") as mock_run:
-            native_host._kill_pids([100, 200])
+        with patch("app.process_utils.subprocess.run") as mock_run:
+            from app.process_utils import kill_pids
+            kill_pids([100, 200])
 
         assert mock_run.call_count == 2
         calls = [c[0][0] for c in mock_run.call_args_list]
@@ -158,14 +164,12 @@ class TestKillPids:
 class TestStopBackend:
     def test_kills_found_pids_and_llm(self):
         with (
-            patch("native_host._find_pids_on_port") as mock_find,
+            patch("native_host.find_pids_on_port") as mock_find,
             patch("native_host.subprocess.run") as mock_run,
-            patch("native_host._kill_pids") as mock_kill_pids,
+            patch("native_host.kill_llama_server") as mock_kill_llm,
         ):
-            # First call for port 8765, then for 11435, then for 11436
-            mock_find.side_effect = lambda port: {
-                8765: [5432], 11435: [100], 11436: [200],
-            }.get(port, [])
+            # First call for port 8765
+            mock_find.return_value = [5432]
             result = native_host.stop_backend()
 
         assert result["ok"] is True
@@ -174,38 +178,33 @@ class TestStopBackend:
         assert result["llm_stopped"] is True
         # Backend PID killed via subprocess.run
         assert mock_run.call_count == 1
-        # LLM PIDs killed via _kill_pids
-        mock_kill_pids.assert_called_once_with([100, 200])
+        # LLM killed via kill_llama_server
+        mock_kill_llm.assert_called_once()
 
     def test_still_kills_llm_when_no_backend_pids(self):
         with (
-            patch("native_host._find_pids_on_port") as mock_find,
-            patch("native_host.subprocess.run"),
-            patch("native_host._kill_pids") as mock_kill_pids,
+            patch("native_host.find_pids_on_port", return_value=[]),
+            patch("native_host.subprocess.run") as mock_run,
+            patch("native_host.kill_llama_server") as mock_kill_llm,
         ):
-            mock_find.side_effect = lambda port: {
-                8765: [], 11435: [100], 11436: [],
-            }.get(port, [])
             result = native_host.stop_backend()
 
         assert result["ok"] is True
         assert result["status"] == "stopped"
         assert result["pids"] == []
         assert result["llm_stopped"] is True
-        mock_kill_pids.assert_called_once_with([100])
+        # No backend PID kills
+        assert mock_run.call_count == 0
+        mock_kill_llm.assert_called_once()
 
 
 class TestStopLlm:
-    def test_kills_llama_server_by_port(self):
-        with (
-            patch("native_host._find_pids_on_port") as mock_find,
-            patch("native_host._kill_pids") as mock_kill,
-        ):
-            mock_find.side_effect = lambda port: {11435: [100], 11436: [200]}[port]
+    def test_kills_llama_server(self):
+        with patch("native_host.kill_llama_server") as mock_kill:
             result = native_host.stop_llm()
 
         assert result == {"ok": True, "status": "stopped"}
-        mock_kill.assert_called_once_with([100, 200])
+        mock_kill.assert_called_once()
 
 
 class TestStartBackend:
@@ -217,7 +216,7 @@ class TestStartBackend:
 
         with (
             patch("native_host.BACKEND_DIR", str(env_dir)),
-            patch("native_host._is_port_listening") as mock_port,
+            patch("native_host.is_port_listening") as mock_port,
         ):
             mock_port.return_value = True
             result = native_host.start_backend()
@@ -233,8 +232,8 @@ class TestStartBackend:
 
         with (
             patch("native_host.BACKEND_DIR", str(env_dir)),
-            patch("native_host._is_port_listening", return_value=False),
-            patch("native_host._kill_legacy_ollama"),
+            patch("native_host.is_port_listening", return_value=False),
+            patch("native_host.kill_legacy_ollama"),
             patch("native_host._start_llama_servers", return_value=False),
             patch("native_host.subprocess.Popen") as mock_popen,
         ):
@@ -249,8 +248,8 @@ class TestStartLlm:
     def test_returns_already_running_when_both_servers_up(self):
         """start_llm returns already_running when both ports are listening."""
         with (
-            patch("native_host._kill_legacy_ollama"),
-            patch("native_host._is_port_listening") as mock_port,
+            patch("native_host.kill_legacy_ollama"),
+            patch("native_host.is_port_listening") as mock_port,
         ):
             mock_port.side_effect = lambda port: port in (11435, 11436)
             result = native_host.start_llm()
@@ -261,8 +260,8 @@ class TestStartLlm:
     def test_starts_only_missing_servers(self):
         """start_llm passes skip flags when one server is already running."""
         with (
-            patch("native_host._kill_legacy_ollama"),
-            patch("native_host._is_port_listening") as mock_port,
+            patch("native_host.kill_legacy_ollama"),
+            patch("native_host.is_port_listening") as mock_port,
             patch("native_host._start_llama_servers", return_value=True) as mock_start,
         ):
             # LLM running, embed not

@@ -11,19 +11,14 @@ from httpx import ASGITransport, AsyncClient
 from starlette.datastructures import Address
 
 from app.main import create_app
-from app.routers.health import (
-    _find_pids_on_port,
-    _is_port_listening,
-    _require_localhost,
-)
+from app.process_utils import find_pids_on_port, is_port_listening
+from app.routers.health import _require_localhost
 from tests.helpers import setup_app_state
 
 
 def _make_client() -> AsyncClient:
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.llm_reachable = False
-    app.state.embed_reachable = False
     setup_app_state(app)
     return AsyncClient(
         transport=ASGITransport(app=app),
@@ -31,7 +26,7 @@ def _make_client() -> AsyncClient:
     )
 
 
-# ── GET /health (public, minimal) ──────────────────────────────────
+# -- GET /health (public, minimal) ------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -54,7 +49,7 @@ async def test_health_returns_minimal_response(client: AsyncClient) -> None:
     assert "chroma_ready" not in data
 
 
-# ── GET /health/detail (token-gated) ───────────────────────────────
+# -- GET /health/detail (token-gated) ---------------------------------------
 
 
 @pytest.mark.asyncio
@@ -104,7 +99,7 @@ async def test_health_degraded_when_llm_down(client: AsyncClient) -> None:
     assert isinstance(data["llm_reachable"], bool)
 
 
-# ── _require_localhost helper ───────────────────────────────────────
+# -- _require_localhost helper -----------------------------------------------
 
 
 def test_require_localhost_allows_127_0_0_1() -> None:
@@ -145,7 +140,7 @@ def test_require_localhost_blocks_remote_loopback_look_alike() -> None:
     assert exc_info.value.status_code == 403
 
 
-# ── _find_pids_on_port / _is_port_listening ────────────────────────
+# -- find_pids_on_port / is_port_listening -----------------------------------
 
 
 NETSTAT_SAMPLE = """\
@@ -159,34 +154,34 @@ Active Connections
 
 
 def test_find_pids_on_port_finds_listening_pid() -> None:
-    with patch("app.routers.health.subprocess.check_output", return_value=NETSTAT_SAMPLE):
-        pids = _find_pids_on_port(11435)
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+        pids = find_pids_on_port(11435)
     assert pids == [5432]
 
 
 def test_find_pids_on_port_no_match() -> None:
-    with patch("app.routers.health.subprocess.check_output", return_value=NETSTAT_SAMPLE):
-        pids = _find_pids_on_port(9999)
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+        pids = find_pids_on_port(9999)
     assert pids == []
 
 
 def test_find_pids_on_port_subprocess_error() -> None:
-    with patch("app.routers.health.subprocess.check_output", side_effect=OSError("fail")):
-        pids = _find_pids_on_port(11435)
+    with patch("app.process_utils.subprocess.check_output", side_effect=OSError("fail")):
+        pids = find_pids_on_port(11435)
     assert pids == []
 
 
 def test_is_port_listening_true() -> None:
-    with patch("app.routers.health._find_pids_on_port", return_value=[5432]):
-        assert _is_port_listening(11435) is True
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+        assert is_port_listening(11435) is True
 
 
 def test_is_port_listening_false() -> None:
-    with patch("app.routers.health._find_pids_on_port", return_value=[]):
-        assert _is_port_listening(11435) is False
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+        assert is_port_listening(9999) is False
 
 
-# ── Process-control endpoints: smoke tests with mock localhost ──────
+# -- Process-control endpoints: smoke tests with mock localhost --------------
 
 
 @pytest.mark.asyncio
@@ -204,8 +199,6 @@ async def test_llm_start_returns_already_running_when_both_up() -> None:
     """POST /llm/start returns already_running when both servers are up."""
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.llm_reachable = False
-    app.state.embed_reachable = False
     setup_app_state(app)
 
     mock_resp = MagicMock()
@@ -216,7 +209,7 @@ async def test_llm_start_returns_already_running_when_both_up() -> None:
         transport=ASGITransport(app=app),
         base_url="http://testserver",
     ) as ac:
-        with patch("app.routers.health._is_port_listening", return_value=True):
+        with patch("app.routers.health.is_port_listening", return_value=True):
             response = await ac.post("/llm/start")
     assert response.status_code == 200
     assert response.json()["status"] == "already_running"
@@ -227,8 +220,6 @@ async def test_llm_start_starts_only_embed_when_llm_up() -> None:
     """POST /llm/start skips LLM start if healthy, starts embed if not listening."""
     app = create_app()
     app.state.chroma_client = MagicMock()
-    app.state.llm_reachable = False
-    app.state.embed_reachable = False
     setup_app_state(app)
 
     # LLM health check returns 200 (running)
@@ -241,13 +232,13 @@ async def test_llm_start_starts_only_embed_when_llm_up() -> None:
         base_url="http://testserver",
     ) as ac:
         with (
-            patch("app.routers.health._is_port_listening", return_value=False),
-            patch("app.routers.health._kill_legacy_ollama", new_callable=AsyncMock),
+            patch("app.routers.health.is_port_listening", return_value=False),
+            patch("app.routers.health.kill_legacy_ollama"),
             patch("app.routers.health.subprocess.Popen") as mock_popen,
-            patch("app.routers.health._BUNDLED_LLAMA_SERVER") as mock_exe,
-            patch("app.routers.health._MODELS_DIR") as mock_dir,
+            patch("app.routers.health.resolve_llama_exe", return_value="llama-server"),
+            patch("app.routers.health.detect_gpu_config", return_value=("-1", "8192")),
+            patch("app.routers.health.MODELS_DIR") as mock_dir,
         ):
-            mock_exe.exists.return_value = False
             mock_gguf = MagicMock()
             mock_dir.__truediv__ = MagicMock(return_value=mock_gguf)
             response = await ac.post("/llm/start")
@@ -264,7 +255,7 @@ async def test_llm_start_starts_only_embed_when_llm_up() -> None:
 async def test_llm_stop_returns_200() -> None:
     """POST /llm/stop uses port-targeted kill."""
     async with _make_client() as ac:
-        with patch("app.routers.health._kill_pids_on_port", new_callable=AsyncMock, return_value=[]):
+        with patch("app.routers.health.kill_pids_on_port", return_value=[]):
             response = await ac.post("/llm/stop")
     assert response.status_code == 200
     assert response.json() == {"status": "stopping"}
@@ -272,11 +263,10 @@ async def test_llm_stop_returns_200() -> None:
 
 @pytest.mark.asyncio
 async def test_llm_stop_kills_only_llm_port() -> None:
-    """POST /llm/stop should call _kill_pids_on_port with LLM port only."""
+    """POST /llm/stop should call kill_pids_on_port with LLM port only."""
     async with _make_client() as ac:
         with patch(
-            "app.routers.health._kill_pids_on_port",
-            new_callable=AsyncMock,
+            "app.routers.health.kill_pids_on_port",
             return_value=[1234],
         ) as mock_kill:
             response = await ac.post("/llm/stop")
@@ -285,7 +275,7 @@ async def test_llm_stop_kills_only_llm_port() -> None:
     mock_kill.assert_called_once_with(11435)
 
 
-# ── POST /llm/switch ─────────────────────────────────────────────
+# -- POST /llm/switch -------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -300,14 +290,14 @@ async def test_llm_switch_valid_model() -> None:
         base_url="http://testserver",
     ) as ac:
         with (
-            patch("app.routers.health._kill_pids_on_port", new_callable=AsyncMock, return_value=[]),
+            patch("app.routers.health.kill_pids_on_port", return_value=[]),
             patch("app.routers.health._probe_loaded_model", new_callable=AsyncMock, return_value=None),
             patch("app.routers.health.subprocess.Popen"),
-            patch("app.routers.health._MODELS_DIR") as mock_dir,
-            patch("app.routers.health._BUNDLED_LLAMA_SERVER") as mock_exe,
+            patch("app.routers.health.MODELS_DIR") as mock_dir,
+            patch("app.routers.health.resolve_llama_exe", return_value="llama-server"),
+            patch("app.routers.health.detect_gpu_config", return_value=("-1", "8192")),
             patch("app.routers.health.asyncio.sleep", new_callable=AsyncMock),
         ):
-            mock_exe.exists.return_value = False
             mock_gguf = MagicMock()
             mock_gguf.is_file.return_value = True
             mock_dir.__truediv__ = MagicMock(return_value=mock_gguf)
@@ -388,30 +378,29 @@ async def test_llm_switch_no_embed_restart() -> None:
     ) as ac:
         with (
             patch(
-                "app.routers.health._kill_pids_on_port",
-                new_callable=AsyncMock,
+                "app.routers.health.kill_pids_on_port",
                 return_value=[],
             ) as mock_kill,
             patch("app.routers.health._probe_loaded_model", new_callable=AsyncMock, return_value=None),
             patch("app.routers.health.subprocess.Popen") as mock_popen,
-            patch("app.routers.health._MODELS_DIR") as mock_dir,
-            patch("app.routers.health._BUNDLED_LLAMA_SERVER") as mock_exe,
+            patch("app.routers.health.MODELS_DIR") as mock_dir,
+            patch("app.routers.health.resolve_llama_exe", return_value="llama-server"),
+            patch("app.routers.health.detect_gpu_config", return_value=("-1", "8192")),
             patch("app.routers.health.asyncio.sleep", new_callable=AsyncMock),
         ):
-            mock_exe.exists.return_value = False
             mock_gguf = MagicMock()
             mock_gguf.is_file.return_value = True
             mock_dir.__truediv__ = MagicMock(return_value=mock_gguf)
             response = await ac.post("/llm/switch", json={"model": "qwen3:14b"})
 
     assert response.status_code == 200
-    # _kill_pids_on_port called only for LLM port
+    # kill_pids_on_port called only for LLM port
     mock_kill.assert_called_once_with(11435)
     # Only one Popen (LLM server), NOT two (no embed server restart)
     assert mock_popen.call_count == 1
 
 
-# ── POST /llm/restart ──────────────────────────────────────────────
+# -- POST /llm/restart ------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -426,13 +415,13 @@ async def test_llm_restart_returns_200() -> None:
         base_url="http://testserver",
     ) as ac:
         with (
-            patch("app.routers.health._kill_pids_on_port", new_callable=AsyncMock, return_value=[1234]),
-            patch("app.routers.health._is_port_listening", return_value=False),
+            patch("app.routers.health.kill_pids_on_port", return_value=[1234]),
+            patch("app.routers.health.is_port_listening", return_value=False),
             patch("app.routers.health.subprocess.Popen") as mock_popen,
-            patch("app.routers.health._BUNDLED_LLAMA_SERVER") as mock_exe,
-            patch("app.routers.health._MODELS_DIR") as mock_dir,
+            patch("app.routers.health.resolve_llama_exe", return_value="llama-server"),
+            patch("app.routers.health.detect_gpu_config", return_value=("-1", "8192")),
+            patch("app.routers.health.MODELS_DIR") as mock_dir,
         ):
-            mock_exe.exists.return_value = False
             mock_gguf = MagicMock()
             mock_dir.__truediv__ = MagicMock(return_value=mock_gguf)
             response = await ac.post("/llm/restart")
@@ -458,14 +447,14 @@ async def test_llm_restart_waits_for_port_free() -> None:
         base_url="http://testserver",
     ) as ac:
         with (
-            patch("app.routers.health._kill_pids_on_port", new_callable=AsyncMock, return_value=[1234]),
-            patch("app.routers.health._is_port_listening", side_effect=port_check_results),
+            patch("app.routers.health.kill_pids_on_port", return_value=[1234]),
+            patch("app.routers.health.is_port_listening", side_effect=port_check_results),
             patch("app.routers.health.subprocess.Popen"),
-            patch("app.routers.health._BUNDLED_LLAMA_SERVER") as mock_exe,
-            patch("app.routers.health._MODELS_DIR") as mock_dir,
+            patch("app.routers.health.resolve_llama_exe", return_value="llama-server"),
+            patch("app.routers.health.detect_gpu_config", return_value=("-1", "8192")),
+            patch("app.routers.health.MODELS_DIR") as mock_dir,
             patch("app.routers.health.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
         ):
-            mock_exe.exists.return_value = False
             mock_gguf = MagicMock()
             mock_dir.__truediv__ = MagicMock(return_value=mock_gguf)
             response = await ac.post("/llm/restart")

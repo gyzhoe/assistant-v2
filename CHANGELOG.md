@@ -5,6 +5,24 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Backend Cleanup
+
+### Changed
+
+- **Extract `process_utils.py` shared module** — deduplicate process management code between `native_host.py` and `health.py`: port constants (`LLM_PORT`, `EMBED_PORT`, `BACKEND_PORT`), path helpers (`APP_DIR`, `MODELS_DIR`, `BUNDLED_LLAMA_SERVER`), PID helpers (`find_pids_on_port`, `is_port_listening`, `kill_pids_on_port`), `kill_legacy_ollama`, `kill_llama_server`, `CREATION_FLAGS`, `EMBED_GGUF_FILE`
+- **Share GPU auto-tune** — `detect_gpu_config()` moved to `process_utils.py`; `health.py` endpoints (`/llm/start`, `/llm/switch`, `/llm/restart`) now use auto-tuned `--n-gpu-layers` and `--ctx-size` instead of hardcoded `-1` and `8192`
+- **Fix hardcoded model filenames** — `health.py` resolves GGUF filenames via `MODEL_GGUF_FILES` mapping and `EMBED_GGUF_FILE` constant instead of hardcoded strings; `native_host.py` uses same constants
+- **Startup health probes are log-only** — removed write-only `app.state.llm_reachable` and `app.state.embed_reachable` (health_detail does live probes, stored state was stale immediately)
+
+### Removed
+
+- `config.py`: unused `prompt_template_path` setting
+- `kb.py`: `col._last_result` monkey-patch hack — `_get_article_chunks` now returns the raw ChromaDB result directly as a 4th tuple element
+
+### Fixed
+
+- `health.py`: removed duplicate `creation_flags` local variable (module-level `CREATION_FLAGS` from `process_utils` used instead)
+
 ## [Unreleased] — Process Management Fixes + Docs Cleanup
 
 ### Added
