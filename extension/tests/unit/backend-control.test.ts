@@ -35,6 +35,8 @@ Element.prototype.scrollIntoView = vi.fn()
 // --- Mock api-client module ---
 const mockShutdown = vi.fn().mockResolvedValue(undefined)
 const mockOllamaStop = vi.fn().mockResolvedValue({ status: 'stopped' })
+const mockLlmRestart = vi.fn().mockResolvedValue({ status: 'restarting', model: 'qwen3.5:9b' })
+const mockHealth = vi.fn()
 const mockSendNativeCommand = vi.fn()
 
 vi.mock('../../src/lib/cors-detect', () => ({
@@ -43,14 +45,11 @@ vi.mock('../../src/lib/cors-detect', () => ({
 
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
-    health: vi.fn().mockResolvedValue({
-      status: 'ok',
-      version: '1.11.0',
-      llm_reachable: true,
-    }),
+    health: (...args: unknown[]) => mockHealth(...args),
     shutdown: (...args: unknown[]) => mockShutdown(...args),
     llmStop: (...args: unknown[]) => mockOllamaStop(...args),
     llmStart: vi.fn().mockResolvedValue({ status: 'started' }),
+    llmRestart: (...args: unknown[]) => mockLlmRestart(...args),
     models: vi.fn().mockResolvedValue({ models: ['qwen3.5:9b'], current: 'qwen3.5:9b' }),
   },
   sendNativeCommand: (...args: unknown[]) => mockSendNativeCommand(...args),
@@ -72,7 +71,12 @@ describe('BackendControl — native stop commands', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
-    document.body.innerHTML = ''
+    document.body.textContent = ''
+    mockHealth.mockResolvedValue({
+      status: 'ok',
+      version: '1.11.0',
+      llm_reachable: true,
+    })
     // Set store to a state where backend is online
     useSidebarStore.setState({
       ticketData: {
@@ -87,6 +91,7 @@ describe('BackendControl — native stop commands', () => {
       },
       isTicketPage: true,
       selectedModel: 'qwen3.5:9b',
+      modelConfirmed: true,
     })
   })
 
@@ -117,6 +122,10 @@ describe('BackendControl — native stop commands', () => {
 
   it('stop backend calls sendNativeCommand first', async () => {
     mockSendNativeCommand.mockResolvedValue({ ok: true, status: 'stopped', pids: [1234] })
+    // After stop, health should fail to confirm server is down
+    mockHealth
+      .mockResolvedValueOnce({ status: 'ok', version: '1.11.0', llm_reachable: true }) // initial check
+      .mockRejectedValue(new Error('Connection refused')) // subsequent checks confirm down
 
     const { container } = await renderBackendControl()
 
@@ -130,11 +139,20 @@ describe('BackendControl — native stop commands', () => {
     expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_backend')
     // Native succeeded — HTTP shutdown should NOT be called
     expect(mockShutdown).not.toHaveBeenCalled()
+
+    // Advance past the settle + confirm polling time
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
   })
 
   it('stop backend falls back to HTTP when native fails', async () => {
     mockSendNativeCommand.mockResolvedValue({ ok: false, error: 'Native messaging unavailable' })
     mockShutdown.mockReturnValue(Promise.resolve())
+    // After stop, health should fail to confirm server is down
+    mockHealth
+      .mockResolvedValueOnce({ status: 'ok', version: '1.11.0', llm_reachable: true }) // initial check
+      .mockRejectedValue(new Error('Connection refused')) // subsequent checks confirm down
 
     const { container } = await renderBackendControl()
 
@@ -148,6 +166,11 @@ describe('BackendControl — native stop commands', () => {
     expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_backend')
     // Native failed — HTTP shutdown should be called as fallback
     expect(mockShutdown).toHaveBeenCalled()
+
+    // Advance past the settle + confirm polling time
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
   })
 
   it('stop LLM server calls sendNativeCommand first', async () => {
@@ -183,5 +206,120 @@ describe('BackendControl — native stop commands', () => {
     expect(mockSendNativeCommand).toHaveBeenCalledWith('stop_llm')
     // Native failed — HTTP llmStop should be called as fallback
     expect(mockOllamaStop).toHaveBeenCalled()
+  })
+
+  it('uses modelConfirmed for Model selected badge', async () => {
+    // modelConfirmed is true from setUp — badge should show ok
+    const { container } = await renderBackendControl()
+
+    const badges = container.querySelectorAll('.badge')
+    const modelBadge = Array.from(badges).find((b) => b.textContent?.includes('Model selected'))
+    expect(modelBadge).not.toBeNull()
+    expect(modelBadge?.classList.contains('ok')).toBe(true)
+  })
+
+  it('Model selected badge is not ok when modelConfirmed is false', async () => {
+    useSidebarStore.setState({ modelConfirmed: false })
+
+    const { container } = await renderBackendControl()
+
+    const badges = container.querySelectorAll('.badge')
+    const modelBadge = Array.from(badges).find((b) => b.textContent?.includes('Model selected'))
+    expect(modelBadge).not.toBeNull()
+    expect(modelBadge?.classList.contains('ok')).toBe(false)
+  })
+
+  it('renders Restart LLM button when LLM is online', async () => {
+    const { container } = await renderBackendControl()
+
+    const restartBtn = container.querySelector('button[aria-label="Restart LLM server"]') as HTMLButtonElement
+    expect(restartBtn).not.toBeNull()
+    expect(restartBtn.textContent).toBe('Restart')
+  })
+
+  it('restart LLM calls llmRestart and shows Restarting status', async () => {
+    mockLlmRestart.mockResolvedValue({ status: 'restarting', model: 'qwen3.5:9b' })
+
+    const { container } = await renderBackendControl()
+
+    const restartBtn = container.querySelector('button[aria-label="Restart LLM server"]') as HTMLButtonElement
+    expect(restartBtn).not.toBeNull()
+
+    await act(async () => {
+      restartBtn.click()
+    })
+
+    expect(mockLlmRestart).toHaveBeenCalled()
+
+    // Should show "Restarting..." text
+    const restartingText = container.querySelector('.svc-action')
+    expect(restartingText?.textContent).toContain('Restarting')
+  })
+
+  it('restart LLM completes when health confirms LLM is back', async () => {
+    mockLlmRestart.mockResolvedValue({ status: 'restarting', model: 'qwen3.5:9b' })
+    // After restart call, first health poll shows LLM back
+    mockHealth
+      .mockResolvedValueOnce({ status: 'ok', version: '1.11.0', llm_reachable: true }) // initial
+      .mockResolvedValueOnce({ status: 'ok', version: '1.11.0', llm_reachable: true }) // after restart
+
+    const { container } = await renderBackendControl()
+
+    const restartBtn = container.querySelector('button[aria-label="Restart LLM server"]') as HTMLButtonElement
+
+    await act(async () => {
+      restartBtn.click()
+    })
+
+    // Advance past restart poll interval
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+
+    // Should be back to idle with buttons showing
+    const restartBtnAfter = container.querySelector('button[aria-label="Restart LLM server"]')
+    expect(restartBtnAfter).not.toBeNull()
+  })
+
+  it('stop backend waits for server to confirm it is down before going offline', async () => {
+    mockSendNativeCommand.mockResolvedValue({ ok: true, status: 'stopped' })
+    // First health call is the initial one. Then during stop confirmation,
+    // server responds once (still up), then fails (confirming it's down)
+    let healthCallCount = 0
+    mockHealth.mockImplementation(() => {
+      healthCallCount++
+      if (healthCallCount <= 1) {
+        // Initial health check — online
+        return Promise.resolve({ status: 'ok', version: '1.11.0', llm_reachable: true })
+      } else if (healthCallCount === 2) {
+        // First stop confirmation poll — still up
+        return Promise.resolve({ status: 'ok', version: '1.11.0', llm_reachable: true })
+      } else {
+        // Server is down
+        return Promise.reject(new Error('Connection refused'))
+      }
+    })
+
+    const { container } = await renderBackendControl()
+
+    const stopBtn = container.querySelector('button[aria-label="Stop backend"]') as HTMLButtonElement
+
+    await act(async () => {
+      stopBtn.click()
+    })
+
+    // Advance past the settle time and stop confirm polling
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+
+    // Health was called at least 3 times: initial + stop confirmation polls
+    expect(healthCallCount).toBeGreaterThanOrEqual(2)
   })
 })

@@ -15,6 +15,9 @@ const SWITCH_POLL_INTERVAL_MS = 2000
 /** Maximum time to wait for a model switch before giving up */
 const SWITCH_TIMEOUT_MS = 60000
 
+/** Polling interval while waiting for LLM health after model switch */
+const HEALTH_POLL_INTERVAL_MS = 2000
+
 function modelTitle(name: string): string {
   return MODEL_DESCRIPTIONS[name] ?? name
 }
@@ -24,11 +27,13 @@ export function ModelSelector(): React.ReactElement {
   const setSelectedModel = useSidebarStore((s) => s.setSelectedModel)
   const isModelSwitching = useSidebarStore((s) => s.isModelSwitching)
   const setIsModelSwitching = useSidebarStore((s) => s.setIsModelSwitching)
+  const setModelConfirmed = useSidebarStore((s) => s.setModelConfirmed)
   const llmReachable = useSidebarStore((s) => s.llmReachable)
   const [models, setModels] = useState<string[]>([DEFAULT_MODEL])
   const [currentModel, setCurrentModel] = useState<string>(DEFAULT_MODEL)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [switchError, setSwitchError] = useState<string | null>(null)
+  const [switchPhase, setSwitchPhase] = useState<'switching' | 'loading' | null>(null)
   const prevLlmRef = useRef(llmReachable)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -45,9 +50,11 @@ export function ModelSelector(): React.ReactElement {
       if (data.models.length > 0) {
         setModels(data.models)
         setCurrentModel(data.current)
+        setModelConfirmed(true)
         setFetchError(null)
       }
     }).catch((err: unknown) => {
+      setModelConfirmed(false)
       if (err instanceof ApiError) {
         const body = err.body as Record<string, unknown>
         if (body?.['error_code'] === 'LLM_DOWN') {
@@ -62,7 +69,7 @@ export function ModelSelector(): React.ReactElement {
         setFetchError('Could not fetch models')
       }
     })
-  }, [])
+  }, [setModelConfirmed])
 
   useEffect(() => {
     fetchModels()
@@ -75,6 +82,13 @@ export function ModelSelector(): React.ReactElement {
     }
     prevLlmRef.current = llmReachable
   }, [llmReachable, fetchModels])
+
+  // Reset modelConfirmed when LLM goes offline
+  useEffect(() => {
+    if (!llmReachable) {
+      setModelConfirmed(false)
+    }
+  }, [llmReachable, setModelConfirmed])
 
   // Re-fetch models when the document becomes visible (e.g. after backend reconnect)
   useEffect(() => {
@@ -100,39 +114,67 @@ export function ModelSelector(): React.ReactElement {
     setSelectedModel(newModel)
     setSwitchError(null)
     setIsModelSwitching(true)
+    setSwitchPhase('switching')
 
     apiClient.switchModel(newModel).then(() => {
-      // Switch initiated — poll until LLM is ready with the new model
+      // Switch initiated — poll until /models confirms the new model
       const startTime = Date.now()
 
-      const poll = () => {
+      const pollModels = () => {
         if (Date.now() - startTime > SWITCH_TIMEOUT_MS) {
           setIsModelSwitching(false)
+          setSwitchPhase(null)
           setSwitchError('Switch timed out — LLM may still be loading')
           setSelectedModel(previousModel)
+          setModelConfirmed(false)
           return
         }
 
         apiClient.models().then((data) => {
           if (data.current === newModel) {
-            // Switch complete
+            // Model endpoint confirms the switch — now verify LLM health
             setModels(data.models)
             setCurrentModel(data.current)
-            setIsModelSwitching(false)
-            setSwitchError(null)
+            setSwitchPhase('loading')
+
+            const pollHealth = () => {
+              if (Date.now() - startTime > SWITCH_TIMEOUT_MS) {
+                setIsModelSwitching(false)
+                setSwitchPhase(null)
+                setSwitchError('Model loaded but LLM health check timed out')
+                setModelConfirmed(false)
+                return
+              }
+
+              apiClient.health().then((h) => {
+                if (h.llm_reachable) {
+                  setIsModelSwitching(false)
+                  setSwitchPhase(null)
+                  setSwitchError(null)
+                  setModelConfirmed(true)
+                } else {
+                  pollTimerRef.current = setTimeout(pollHealth, HEALTH_POLL_INTERVAL_MS)
+                }
+              }).catch(() => {
+                pollTimerRef.current = setTimeout(pollHealth, HEALTH_POLL_INTERVAL_MS)
+              })
+            }
+
+            pollTimerRef.current = setTimeout(pollHealth, HEALTH_POLL_INTERVAL_MS)
           } else {
             // Still switching — poll again
-            pollTimerRef.current = setTimeout(poll, SWITCH_POLL_INTERVAL_MS)
+            pollTimerRef.current = setTimeout(pollModels, SWITCH_POLL_INTERVAL_MS)
           }
         }).catch(() => {
           // Backend temporarily unreachable during restart — keep polling
-          pollTimerRef.current = setTimeout(poll, SWITCH_POLL_INTERVAL_MS)
+          pollTimerRef.current = setTimeout(pollModels, SWITCH_POLL_INTERVAL_MS)
         })
       }
 
-      pollTimerRef.current = setTimeout(poll, SWITCH_POLL_INTERVAL_MS)
+      pollTimerRef.current = setTimeout(pollModels, SWITCH_POLL_INTERVAL_MS)
     }).catch((err: unknown) => {
       setIsModelSwitching(false)
+      setSwitchPhase(null)
       setSelectedModel(previousModel)
       if (err instanceof ApiError) {
         const body = err.body as Record<string, unknown>
@@ -143,7 +185,11 @@ export function ModelSelector(): React.ReactElement {
         setSwitchError('Failed to switch model')
       }
     })
-  }, [currentModel, selectedModel, setSelectedModel, setIsModelSwitching])
+  }, [currentModel, selectedModel, setSelectedModel, setIsModelSwitching, setModelConfirmed])
+
+  const switchStatusText = switchPhase === 'loading'
+    ? 'Loading model\u2026'
+    : 'Switching model\u2026'
 
   return (
     <div className="control-row">
@@ -163,7 +209,7 @@ export function ModelSelector(): React.ReactElement {
         </select>
         {isModelSwitching && (
           <span className="support-text switch-status" aria-live="polite">
-            Switching model\u2026
+            {switchStatusText}
           </span>
         )}
       </div>

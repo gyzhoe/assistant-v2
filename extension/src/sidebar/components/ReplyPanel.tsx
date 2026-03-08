@@ -118,43 +118,6 @@ export function ReplyPanel(): React.ReactElement {
         <h2 className="section-heading">Draft output</h2>
         {isGenerating && !reply && <SkeletonLoader />}
 
-        {isGenerating && reply && (
-          <div className="draft-panel">
-            <div className="draft-header">
-              <span className="draft-label">Generating...</span>
-              <div className="draft-actions">
-                <button
-                  type="button"
-                  className="secondary-btn draft-toggle"
-                  disabled
-                  aria-label="Copy reply to clipboard"
-                  title="Copy reply to clipboard"
-                >
-                  <CopyIcon />
-                </button>
-                <button
-                  type="button"
-                  className="secondary-btn draft-toggle"
-                  disabled
-                  aria-label="Edit reply"
-                >
-                  Edit
-                </button>
-              </div>
-            </div>
-            <div
-              className="reply-box"
-              role="log"
-              aria-live="polite"
-              aria-label="Reply being generated"
-            >
-              {reply}<span className="streaming-cursor" aria-hidden="true" />
-            </div>
-            {/* InsertButton self-disables via its own isGenerating check */}
-            <InsertButton />
-          </div>
-        )}
-
         {!isGenerating && !reply && (
           <div className="reply-box">
             <span className="reply-placeholder">
