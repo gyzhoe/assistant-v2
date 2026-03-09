@@ -26,6 +26,10 @@ in place and the steps required to harden the deployment.
 | Security headers | Enforced | `X-Content-Type-Options`, `X-Frame-Options`, `Cache-Control: no-store`, `Referrer-Policy` |
 | No secrets in code | Enforced | `.env` gitignored; all config via `pydantic-settings` |
 | Content script XSS | Enforced | No `eval()`, no `innerHTML` with untrusted content |
+| HttpOnly cookie sessions | Enforced | `whd_session` cookie (SameSite=Strict, 24h expiry) for KB Management SPA auth |
+| CSRF protection | Enforced | State-changing endpoints require valid CSRF token; pure ASGI middleware |
+| SHA-256 model verification | Enforced | GGUF model downloads verified against expected SHA-256 hash before use |
+| Audit logging | Enforced | Structured JSON logging for login, logout, delete, shutdown — timestamp, client IP, outcome |
 | Extension host permissions | Minimal | Only `http://localhost:8765/*` |
 
 ---
@@ -68,7 +72,7 @@ The backend should bind to `127.0.0.1` only — never `0.0.0.0` in production:
 uvicorn app.main:app --host 127.0.0.1 --port 8765
 ```
 
-Consider a Windows service (NSSM) or Task Scheduler to auto-start the backend.
+The backend is auto-started by the native messaging host (`native_host.py`) when the extension connects. No separate service manager is needed.
 
 ### 4. Run as a Low-Privilege Service Account
 
@@ -95,12 +99,12 @@ llama-server --host 127.0.0.1 --port 11436 -m models/nomic-embed-text-v1.5.f16.g
 llama-server has no built-in authentication. The FastAPI backend is the only component
 that should call llama-server.
 
-### 7. Audit Logging (optional enhancement)
+### 7. Audit Logging (Enforced)
 
-The backend does not currently log ticket contents (by design — to minimize data exposure).
-If your security policy requires audit logs, add structured logging middleware that records:
-- Timestamp, client IP, endpoint called, model used, latency
-- Do NOT log ticket subject/description
+The backend uses structured JSON audit logging for security-sensitive actions:
+- Login/logout attempts (success and failure), delete operations, shutdown events
+- Each log entry records: timestamp, client IP, endpoint, and outcome
+- Ticket content is never logged (by design — to minimize data exposure)
 
 ---
 
@@ -119,6 +123,9 @@ If your security policy requires audit logs, add structured logging middleware t
 | Ticket data leak via prompt injection | Input truncation; MS Learn search uses only subject + category (never full description) |
 | Ticket data leak via browser extension | Extension only stores data in memory; nothing persisted to cloud |
 | Unauthorized extension calling backend | CORS + API token combination |
+| Session hijacking (cookie theft) | HttpOnly + SameSite=Strict + 24h expiry; periodic sweep of expired sessions |
+| CSRF on state-changing endpoints | CSRF token validation on all POST/PUT/DELETE routes; pure ASGI middleware |
+| Tampered model download | SHA-256 hash verification on all GGUF model downloads before use |
 | Server identity leak | Security headers strip server banner |
 
 ---
