@@ -105,3 +105,5 @@ async def test_security_headers_present(client: AsyncClient) -> None:
     assert resp.headers["X-Frame-Options"] == "DENY"
     assert resp.headers["Cache-Control"] == "no-store"
     assert resp.headers["Referrer-Policy"] == "no-referrer"
+    assert "default-src 'self'" in resp.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'none'" in resp.headers["Content-Security-Policy"]

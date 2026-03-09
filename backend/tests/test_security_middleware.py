@@ -47,6 +47,8 @@ class _AppClientContext:
         fresh_app.state.chroma_client = MagicMock()
         fresh_app.state.llm_reachable = False
         setup_app_state(fresh_app)
+        # Mock embed so generate endpoint can call embed_svc.embed()
+        fresh_app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
         self.app = fresh_app
 
         self._client = AsyncClient(
@@ -107,6 +109,7 @@ async def test_rate_limit_per_ip_isolation() -> None:
         fresh_app.state.llm_reachable = False
         setup_app_state(fresh_app)
 
+        fresh_app.state.embed_service.embed = AsyncMock(return_value=[0.1] * 768)
         fresh_app.state.rag_service.retrieve = AsyncMock(return_value=[])
         fresh_app.state.llm_service.generate = AsyncMock(return_value="ok")
 

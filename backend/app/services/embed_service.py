@@ -119,7 +119,8 @@ class EmbedService:
         return ConnectionError(str(exc))
 
     async def _embed_async(self, text: str, task: str = "search_query") -> list[float]:
-        assert isinstance(self._client, httpx.AsyncClient)
+        if not isinstance(self._client, httpx.AsyncClient):
+            raise TypeError("_embed_async requires an AsyncClient")
         prefixed = f"{task}: {text}"
         try:
             resp = await self._client.post(
@@ -133,7 +134,8 @@ class EmbedService:
             raise self._handle_request_error(exc) from exc
 
     def _embed_sync(self, text: str, task: str = "search_document") -> list[float]:
-        assert isinstance(self._client, httpx.Client)
+        if not isinstance(self._client, httpx.Client):
+            raise TypeError("_embed_sync requires a sync Client")
         prefixed = f"{task}: {text}"
         try:
             resp = self._client.post(

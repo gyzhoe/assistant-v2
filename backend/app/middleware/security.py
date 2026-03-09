@@ -391,6 +391,12 @@ class SecurityHeadersMiddleware:
         (b"x-frame-options", b"DENY"),
         (b"cache-control", b"no-store"),
         (b"referrer-policy", b"no-referrer"),
+        (
+            b"content-security-policy",
+            b"default-src 'self'; script-src 'self'; "
+            b"style-src 'self' 'unsafe-inline'; "
+            b"img-src 'self' data:; frame-ancestors 'none'",
+        ),
     ]
 
     def __init__(self, app: ASGIApp) -> None:
