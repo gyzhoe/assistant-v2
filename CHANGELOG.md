@@ -5,147 +5,90 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Review Findings Sprint
+## [2.1.0] — Review Findings + Quality Sweep (2026-03-09)
+
+### Added
+
+- **SSE streaming generation** — `POST /generate` with `stream: true` returns `text/event-stream` with four event types: `meta`, `token`, `done`, `error`
+- **`LLMService.generate_stream()`** — async generator streaming tokens from llama-server's OpenAI-compatible SSE endpoint
+- **Global exception handlers** — `ConnectionError` → 503 `LLM_DOWN`, `LLMModelError` → 502 `MODEL_ERROR`; structured `ErrorResponse` with `ErrorCode` StrEnum
+- **`UnhandledExceptionMiddleware`** — outermost ASGI catch-all returns structured JSON 500 instead of plain-text
+- **ChromaDB cold-start warm-up** — `warmup_chromadb()` touches collections at startup to avoid first-query latency
+- **`POST /llm/restart` endpoint** — kills the LLM server, waits for port to free, restarts with current model
+- **Restart LLM button** (extension) — calls `/llm/restart`, shows spinner, polls health until server returns
+- **`modelConfirmed` store field** (extension) — prevents false-positive "Model selected" badges when backend is offline
+- **`/no_think` suffix for Qwen3 models** — skips hidden reasoning tokens
+- **SSE parser** (`sse-parser.ts`) — async generator decoding `ReadableStream` chunks into typed `SSEEvent` objects
+- **`apiClient.generateStream()`** — streams `POST /generate` via Fetch API, returns `AsyncGenerator<SSEEvent>`
+- **Streaming reply UI** — token-by-token display with blinking cursor, RAF-throttled updates, skeleton loader until first token
+- **SSE event types** (`types.ts`) — `SSEMetaEvent`, `SSETokenEvent`, `SSEDoneEvent`, `SSEErrorEvent` discriminated union
+- **Typed `AppState` class for `app.state`** — replaces untyped attribute access with a proper typed class
+- **Notes section scroll indicator** — gradient fade at bottom of `.ticket-notes-list` signals scrollable overflow
+- **SVG rating icons** — `ThumbsUpIcon`/`ThumbsDownIcon` replace emoji for consistent cross-platform rendering
+- **Restart confirmation dialog** — LLM restart button shows a confirmation modal before proceeding
+- **`pruneReplyCache()` unit tests** — 5 test cases covering expiry, retention, truncation, and edge cases
+- **`total_pages` in ArticleListResponse** — `/kb/articles` now returns `total_pages` for pagination UI
+- **72 new backend tests** — SSE streaming (13), exception handlers (4), warm-up (3), SSE errors (5), retry/context (3), test isolation improvements, plus existing process management and cleanup tests
+- **21+ new extension tests** — SSE parser (8), streaming API client (3), `modelConfirmed` lifecycle (4), restart button (3), stop race condition (1), health polling after model switch (2)
 
 ### Changed
 
-#### Track F — Backend Review Cleanup
-
-- **SHA-256 model download verification (S12)** — `ModelDownloadService` computes SHA-256 incrementally during download and verifies against the expected hash; mismatches delete the `.tmp` file and raise an error
-- **Log rotation for native_host.log (S18)** — replaced raw `open(LOG_FILE, "a")` with `RotatingFileHandler` (5 MB, 3 backups) to prevent unbounded log growth
-- **Fix ingestion semaphore TOCTOU race (A23)** — replaced check-then-acquire pattern with atomic `asyncio.wait_for(acquire, timeout=0)` via `acquire_ingestion_lock()` context manager
-- **Public `client` property on EmbedService (A18)** — `health.py` no longer accesses private `_client` attribute
-- **Add `total_pages` to ArticleListResponse (A22)** — `/kb/articles` now returns `total_pages` for pagination UI
-- **Parallelize ChromaDB collection counts (P3)** — `/health/detail` fires `col.count()` calls concurrently via `asyncio.gather` instead of sequential loop
-
-#### Track A — Backend Performance + Cleanup
-
-- **Eliminate redundant embedding in generate endpoint** — share the embed vector between RAG retrieval and few-shot lookup, removing a ~200-500ms duplicate embedding call per generation
-- **Parallelize /health/detail probes** — use `asyncio.gather` for LLM, embed, and ChromaDB health checks instead of sequential awaits
-- **Add asyncio.Lock mutex on process control endpoints** — prevent race conditions from concurrent `/llm/start`, `/llm/stop`, `/llm/switch`, `/llm/restart` calls
-- **Cache `detect_gpu_config()` result at module level** — avoid redundant GPU detection on every LLM start/switch/restart
-- **Gate `kill_legacy_ollama()` behind first-run flag** — skip Ollama cleanup on subsequent starts within the same process lifetime
-- **Add Content-Security-Policy header** — `SecurityHeadersMiddleware` now includes a CSP header for defense-in-depth
+- **Eliminate redundant embedding in generate endpoint** — share embed vector between RAG retrieval and few-shot lookup, removing ~200-500ms per generation
+- **Parallelize `/health/detail` probes** — `asyncio.gather` for LLM, embed, and ChromaDB health checks; collection counts also parallelized
+- **Add `asyncio.Lock` mutex on process control endpoints** — prevent race conditions on concurrent `/llm/start`, `/llm/stop`, `/llm/switch`, `/llm/restart`
+- **Cache `detect_gpu_config()` at module level** — avoid redundant GPU detection on every LLM operation
+- **Gate `kill_legacy_ollama()` behind first-run flag** — skip Ollama cleanup on subsequent starts
+- **Add Content-Security-Policy header** — `SecurityHeadersMiddleware` includes CSP for defense-in-depth
+- **Extract `process_utils.py` shared module** — deduplicate process management between `native_host.py` and `health.py`
+- **Share GPU auto-tune** — `detect_gpu_config()` moved to `process_utils.py`; health endpoints use auto-tuned `--n-gpu-layers` and `--ctx-size`
+- **Fix hardcoded model filenames** — resolve GGUF filenames via `MODEL_GGUF_FILES` mapping and constants
+- **Startup health probes are log-only** — removed stale `app.state.llm_reachable`/`embed_reachable` flags
+- **SHA-256 model download verification** — `ModelDownloadService` computes hash incrementally and verifies against expected value
+- **Log rotation for `native_host.log`** — `RotatingFileHandler` (5 MB, 3 backups) replaces raw `open()`
+- **Public `client` property on EmbedService** — `health.py` no longer accesses private `_client`
+- **Replace `assert isinstance()` with explicit type guards** — proper runtime checks in `EmbedService`
 - **Deduplicate `native_host.py`** — use `process_utils` path constants and `kill_pids()` instead of inline reimplementations
-- **Replace `assert isinstance()` with explicit type guards** — `EmbedService` now uses proper runtime type checks instead of assertions
-
-#### Track B — Frontend Streaming + UX
-
-- **Enable SSE streaming in sidebar** — tokens display incrementally instead of a 10-30s blind wait; uses the backend's existing `stream: true` endpoint
-- **Add contextual error titles to ErrorState component** — error banners now show situation-specific headings instead of generic "Error"
-- **Add arrow key navigation to Knowledge Base tabs** — keyboard users can navigate between tabs with left/right arrow keys per WAI-ARIA tabs pattern
-- **Add `:active` state to primary buttons** — buttons now have a pressed visual state for tactile feedback
-- **Add `.model-select-wrapper` class** — model selector dropdown has a dedicated CSS class for consistent styling
-- **Replace hardcoded `#c57600` with design token** — warning text now uses `var(--warn-text)` for theme consistency
-- **Add restart confirmation dialog** — LLM restart button shows a confirmation modal before proceeding
-
-#### Track C — Documentation
-
-- **Overhaul `api-contract.md` for v2.0.0** — document `/health` vs `/health/detail` split, `embed_reachable` field, SSE streaming protocol (4 event types), auth endpoints (`/auth/login`, `/auth/logout`, `/auth/check`), `notes` field in GenerateRequest, `model_info` in GET /models response, `POST /llm/restart` endpoint, `already_loaded` response from `/llm/switch`, update version to 2.0.0
-- **Document data-at-rest encryption recommendations** — new "Data at Rest" section covering ChromaDB disk storage and BitLocker/LUKS recommendations
-
-#### Track G — Frontend Polish
-
-- **Add `pruneReplyCache()` unit tests** — 5 test cases covering expiry filtering, valid entry retention, max-entries truncation, empty cache, and exact-limit edge case
-- **Add notes section scroll indicator** — gradient fade at the bottom of `.ticket-notes-list` signals scrollable overflow
-- **Replace emoji rating icons with SVGs** — `ThumbsUpIcon` and `ThumbsDownIcon` replace `&#x1F44D;`/`&#x1F44E;` for consistent cross-platform rendering
-- **Replace hardcoded colors in management.css** — `.source-url` badge now uses `var(--accent-subtle)` and `var(--accent)` design tokens instead of hardcoded `#0969da`/`rgba(9,105,218,0.1)`
-
-#### Track D — Error Standardization (planned)
-
-- **Standardize all error responses to `ErrorResponse(message, error_code)` format** — replace inconsistent `{"detail": ...}` patterns across all routers
-- **Fix `POST /feedback` to return `201 Created`** — currently returns 200 for resource creation
-- **Fix `POST /kb/articles` to return `201 Created`** — currently returns 200 for resource creation
+- **Standardize all error responses to `ErrorResponse(message, error_code)`** — replace inconsistent `{"detail": ...}` patterns across all routers
 - **Break circular import in `APITokenMiddleware`** — move session validation import to module level
-- **Add typed `AppState` class for `app.state` services** — replace untyped attribute access with a proper typed class
+- **Generate router refactored** — shared `_prepare_context()` for both streaming and non-streaming paths
+- **Enable SSE streaming in sidebar** — tokens display incrementally instead of a 10-30s blind wait
+- **Contextual error titles in ErrorState** — situation-specific headings instead of generic "Error"
+- **Arrow key navigation for KB tabs** — per WAI-ARIA tabs pattern
+- **`:active` state on primary buttons** — pressed visual state for tactile feedback
+- **Replace hardcoded colors with design tokens** — `var(--warn-text)`, `var(--accent-subtle)`, `var(--accent)` replace hardcoded hex values
+- **`useGenerateReply` rewritten for streaming** — ref-based token accumulation with `requestAnimationFrame` throttle
+- **"Cancel" button renamed to "Stop"** with updated `aria-label`
+- **`BackendControl` LLM action state expanded** — `'idle' | 'starting' | 'stopping' | 'restarting'`
+- **`ModelSelector` tracks switch phase** (`'switching' | 'loading'`) for accurate status text
+- **Fix test isolation in `test_generate.py`** — per-test `create_app()` instead of shared app fixture
+- **Deduplicate mock setup helpers** — extract common mock patterns into shared test utilities
+- **Overhaul `api-contract.md` for v2.0.0** — document SSE streaming, auth endpoints, health split, model info, restart endpoint
+- **Document data-at-rest encryption recommendations** — new "Data at Rest" section
+- Update CLAUDE.md, CI workflows, and templates for llama-server architecture
 
-#### Track E — Test Quality (planned)
+### Fixed
 
-- **Fix test isolation in `test_generate.py`** — use per-test `create_app()` instead of shared app fixture
-- **Deduplicate mock setup helpers across test files** — extract common mock patterns into shared test utilities
-- **Add retry logic and `_prepare_context` unit tests** — cover error paths and edge cases in generation pipeline
-
-## [Unreleased] — Backend Cleanup
-
-### Changed
-
-- **Extract `process_utils.py` shared module** — deduplicate process management code between `native_host.py` and `health.py`: port constants (`LLM_PORT`, `EMBED_PORT`, `BACKEND_PORT`), path helpers (`APP_DIR`, `MODELS_DIR`, `BUNDLED_LLAMA_SERVER`), PID helpers (`find_pids_on_port`, `is_port_listening`, `kill_pids_on_port`), `kill_legacy_ollama`, `kill_llama_server`, `CREATION_FLAGS`, `EMBED_GGUF_FILE`
-- **Share GPU auto-tune** — `detect_gpu_config()` moved to `process_utils.py`; `health.py` endpoints (`/llm/start`, `/llm/switch`, `/llm/restart`) now use auto-tuned `--n-gpu-layers` and `--ctx-size` instead of hardcoded `-1` and `8192`
-- **Fix hardcoded model filenames** — `health.py` resolves GGUF filenames via `MODEL_GGUF_FILES` mapping and `EMBED_GGUF_FILE` constant instead of hardcoded strings; `native_host.py` uses same constants
-- **Startup health probes are log-only** — removed write-only `app.state.llm_reachable` and `app.state.embed_reachable` (health_detail does live probes, stored state was stale immediately)
+- **Fix ingestion semaphore TOCTOU race** — atomic `asyncio.wait_for(acquire, timeout=0)` via `acquire_ingestion_lock()` context manager
+- **`POST /feedback` returns `201 Created`** — was incorrectly returning 200 for resource creation
+- **`POST /kb/articles` returns `201 Created`** — was incorrectly returning 200 for resource creation
+- **Model badge shows "loaded" before backend confirms** — `BackendControl` reads `modelConfirmed` instead of `selectedModel.length > 0`
+- **Race condition in Stop → Start flow** — sidebar polls health until connection error confirms server is down before allowing Start
+- **Model switch shows complete before LLM is ready** — polls `/health` to verify `llm_reachable: true` after `/models` confirms
+- **Port-targeted process kill** — LLM stop/restart kills only the LLM server, preserving the embed server
+- **Duplicate process creation** — port-in-use guards prevent starting a second LLM server
+- **Model state detection** — probes actual server instead of trusting in-memory state
+- **Duplicate `creation_flags` variable** — use module-level `CREATION_FLAGS` from `process_utils`
+- **Screen reader announces generation completion/errors** via `aria-live="polite"` region
+- **Streaming reply container uses `role="log"`** for accessible live content
+- **`prefers-reduced-motion` disables streaming cursor animation**
+- **Partial reply preserved when generation interrupted mid-stream**
+- CI environment variables: `OLLAMA_BASE_URL` → `LLM_BASE_URL`/`EMBED_BASE_URL`
 
 ### Removed
 
 - `config.py`: unused `prompt_template_path` setting
-- `kb.py`: `col._last_result` monkey-patch hack — `_get_article_chunks` now returns the raw ChromaDB result directly as a 4th tuple element
-
-### Fixed
-
-- `health.py`: removed duplicate `creation_flags` local variable (module-level `CREATION_FLAGS` from `process_utils` used instead)
-
-## [Unreleased] — Process Management Fixes + Docs Cleanup
-
-### Added
-
-- **`POST /llm/restart` endpoint** (backend) — kills the LLM server, waits for port to free, and restarts with the current model; returns `{"status": "restarting", "model": "..."}`
-- **Restart LLM button** (extension) — visible when LLM server is online; calls `/llm/restart`, shows "Restarting..." spinner, polls health until the server comes back
-- **`apiClient.llmRestart()`** (extension) — new API client method for the restart endpoint
-- **`modelConfirmed` store field** (extension) — tracks whether the backend has actually confirmed the loaded model, preventing false-positive "Model selected" badges when backend is offline
-- **`/no_think` suffix** (backend) — appended for Qwen3 models to skip hidden reasoning tokens
-
-### Fixed
-
-- **Model badge shows "loaded" before backend confirms** (extension) — `BackendControl` now reads `modelConfirmed` (set only after `/models` succeeds) instead of checking `selectedModel.length > 0`; resets to `false` when backend goes offline or LLM becomes unreachable
-- **Race condition in Stop → Start flow** (extension) — after stopping the backend, the sidebar now polls the health endpoint until a connection error confirms the server is fully down (plus a 2-second minimum delay) before allowing Start; prevents port-binding failures
-- **Model switch shows complete before LLM is ready** (extension) — after `/models` confirms the new model, `ModelSelector` now also polls `/health` to verify `llm_reachable: true` before declaring the switch complete; shows "Loading model..." during this phase
-- **Port-targeted process kill** (backend) — LLM stop/restart now kills only the LLM server process, preserving the embed server
-- **Duplicate process creation** (backend) — port-in-use guards prevent starting a second LLM server when one is already running
-- **Model state detection** (backend) — probes the actual server instead of trusting in-memory state
-- CI environment variables: `OLLAMA_BASE_URL` → `LLM_BASE_URL`/`EMBED_BASE_URL`, `DEFAULT_MODEL` → `qwen3.5:9b`
-
-### Changed
-
-- `BackendControl` LLM action state expanded: `'idle' | 'starting' | 'stopping' | 'restarting'`
-- `ModelSelector` tracks switch phase (`'switching' | 'loading'`) for accurate status text
-- 10 new extension tests: `modelConfirmed` lifecycle (4), restart button (3), stop race condition (1), health polling after model switch (2)
-- Update CLAUDE.md, CI workflows, and templates for llama-server architecture
-
-### Removed
-
+- `kb.py`: `col._last_result` monkey-patch hack — `_get_article_chunks` returns raw ChromaDB result directly
 - Ollama references from docs, CI, templates, and third-party licenses
-
-## [Unreleased] — Sprint A: SSE Streaming + Exception Handlers + ChromaDB Warm-up
-
-### Added
-
-- **SSE streaming generation** — `POST /generate` with `stream: true` returns a `text/event-stream` response with four event types: `meta` (RAG context docs), `token` (incremental text), `done` (latency), and `error` (typed error mid-stream)
-- **`LLMService.generate_stream()`** — async generator that streams tokens from llama-server's OpenAI-compatible SSE endpoint (`/v1/chat/completions` with `stream: true`)
-- **Global exception handlers** — `ConnectionError` → 503 `LLM_DOWN`, `LLMModelError` → 502 `MODEL_ERROR`; structured `ErrorResponse` model with `ErrorCode` StrEnum replaces ad-hoc error dicts
-- **`UnhandledExceptionMiddleware`** — outermost ASGI catch-all returns structured JSON 500 `INTERNAL_ERROR` instead of Starlette's plain-text response; safe when response headers already sent
-- **ChromaDB cold-start warm-up** — `warmup_chromadb()` runs at startup, touches `kb_articles` and `whd_tickets` collections to avoid first-query latency; logs document counts or gracefully handles missing collections
-- **SSE parser** (`sse-parser.ts`) — async generator that decodes `ReadableStream` chunks into typed `SSEEvent` objects with line buffering across chunk boundaries and `AbortSignal` support
-- **`apiClient.generateStream()`** — streams `POST /generate` via Fetch API `ReadableStream` reader, returns `AsyncGenerator<SSEEvent>`
-- **Streaming reply UI** — token-by-token text display with blinking cursor (0.8s blink rate), RAF-throttled state updates, skeleton loader until first token, inline error banner for interrupted streams
-- **SSE event types** (`types.ts`) — `SSEMetaEvent`, `SSETokenEvent`, `SSEDoneEvent`, `SSEErrorEvent` discriminated union
-- 25 new backend tests: SSE streaming endpoint (13), global exception handlers (4), ChromaDB warm-up (3), SSE error scenarios (5)
-- 11 new extension tests: SSE parser (8), streaming API client (3), plus updated `useGenerateReply` tests for streaming
-
-### Changed
-
-- Backend: Generate router refactored — shared `_prepare_context()` extracts RAG retrieval, pinned articles, web docs, and prompt building; used by both streaming and non-streaming paths
-- Backend: Generate router no longer catches `ConnectionError`/`LLMModelError` locally — delegated to global exception handlers (non-streaming) or SSE error events (streaming)
-- Backend: `LLMService._generate_async` uses `self._client.base_url` instead of re-reading `settings.llm_base_url`
-- Extension: `useGenerateReply` rewritten for streaming — ref-based token accumulation with `requestAnimationFrame` throttle instead of single JSON response
-- Extension: "Cancel" button renamed to "Stop" with updated `aria-label`
-- Extension: Skeleton loader only shown before first token arrives (not for entire generation)
-- Extension: Keyboard shortcut hint hidden when there is a generation error
-
-### Fixed
-
-- Extension: Screen reader announces generation completion and errors via `aria-live="polite"` region
-- Extension: Streaming reply container uses `role="log"` for accessible live content
-- Extension: `prefers-reduced-motion` disables streaming cursor animation
-- Extension: Partial reply preserved and displayed when generation is interrupted mid-stream
 
 ## [2.0.0] — llama.cpp Migration + GPU Detection + Multi-Model + Notes (2026-03-07)
 
