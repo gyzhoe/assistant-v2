@@ -13,7 +13,7 @@ from starlette.datastructures import Address
 from app.main import create_app
 from app.process_utils import find_pids_on_port, is_port_listening
 from app.routers.health import _require_localhost
-from tests.helpers import setup_app_state
+from tests.helpers import NETSTAT_SAMPLE_HEALTH, setup_app_state
 
 
 def _make_client() -> AsyncClient:
@@ -143,24 +143,14 @@ def test_require_localhost_blocks_remote_loopback_look_alike() -> None:
 # -- find_pids_on_port / is_port_listening -----------------------------------
 
 
-NETSTAT_SAMPLE = """\
-Active Connections
-
-  Proto  Local Address          Foreign Address        State           PID
-  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1104
-  TCP    127.0.0.1:11435        0.0.0.0:0              LISTENING       5432
-  TCP    0.0.0.0:49664          0.0.0.0:0              LISTENING       788
-"""
-
-
 def test_find_pids_on_port_finds_listening_pid() -> None:
-    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE_HEALTH):
         pids = find_pids_on_port(11435)
     assert pids == [5432]
 
 
 def test_find_pids_on_port_no_match() -> None:
-    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE_HEALTH):
         pids = find_pids_on_port(9999)
     assert pids == []
 
@@ -172,12 +162,12 @@ def test_find_pids_on_port_subprocess_error() -> None:
 
 
 def test_is_port_listening_true() -> None:
-    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE_HEALTH):
         assert is_port_listening(11435) is True
 
 
 def test_is_port_listening_false() -> None:
-    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+    with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE_HEALTH):
         assert is_port_listening(9999) is False
 
 

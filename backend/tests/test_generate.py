@@ -1,33 +1,23 @@
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.main import app
 from app.models.request_models import GenerateRequest, NoteItem
 from app.routers.generate import _build_prompt, _format_notes_section, _relevance_label
 from app.services.microsoft_docs import WebContextDoc
-
-
-def _mock_ms_docs(return_value: list[WebContextDoc] | None = None) -> MagicMock:
-    """Create a mock MicrosoftDocsService instance."""
-    mock_instance = MagicMock()
-    mock_instance.search = AsyncMock(return_value=return_value or [])
-    return mock_instance
+from tests.helpers import apply_services, create_mock_services, mock_ms_docs
 
 
 @pytest.mark.asyncio
-async def test_generate_without_subject_returns_200(client: AsyncClient) -> None:
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+async def test_generate_without_subject_returns_200(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="VPN fix applied.")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_description": "Cannot login to VPN",
@@ -37,16 +27,12 @@ async def test_generate_without_subject_returns_200(client: AsyncClient) -> None
 
 
 @pytest.mark.asyncio
-async def test_generate_without_description_returns_200(client: AsyncClient) -> None:
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+async def test_generate_without_description_returns_200(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="VPN issue resolved.")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "VPN Issue",
@@ -56,16 +42,12 @@ async def test_generate_without_description_returns_200(client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
-async def test_generate_returns_reply(client: AsyncClient) -> None:
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+async def test_generate_returns_reply(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Hi Alex, here is the fix...")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "Cannot access network drive",
@@ -84,18 +66,14 @@ async def test_generate_returns_reply(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_llm_down_returns_503(client: AsyncClient) -> None:
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+async def test_generate_llm_down_returns_503(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(
         side_effect=ConnectionError("LLM server unreachable at http://localhost:11435")
     )
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "Test",
@@ -105,21 +83,17 @@ async def test_generate_llm_down_returns_503(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_with_web_context(client: AsyncClient) -> None:
+async def test_generate_with_web_context(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """MS Learn docs should appear in the prompt sent to the LLM."""
     web_docs = [
         WebContextDoc(title="802.1X Setup Guide", url="https://learn.microsoft.com/802x", content="Enable 802.1X via Group Policy."),
     ]
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Here is the fix.")
-    mock_ms = MagicMock()
-    mock_ms.search = AsyncMock(return_value=web_docs)
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs(return_value=web_docs)
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "802.1X not working",
@@ -136,18 +110,13 @@ async def test_generate_with_web_context(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_web_context_disabled(client: AsyncClient) -> None:
+async def test_generate_web_context_disabled(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """When include_web_context is false, MicrosoftDocsService.search should not be called."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Reply without web context.")
-    mock_ms = MagicMock()
-    mock_ms.search = AsyncMock(return_value=[])
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "Test",
@@ -159,18 +128,13 @@ async def test_generate_web_context_disabled(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_web_context_failure_still_generates(client: AsyncClient) -> None:
+async def test_generate_web_context_failure_still_generates(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """If MS Learn search returns empty (graceful degradation), reply should still be generated."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Reply without web context.")
-    mock_ms = MagicMock()
-    mock_ms.search = AsyncMock(return_value=[])
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "VPN issue",
@@ -181,18 +145,13 @@ async def test_generate_web_context_failure_still_generates(client: AsyncClient)
 
 
 @pytest.mark.asyncio
-async def test_generate_ms_docs_config_disabled(client: AsyncClient) -> None:
+async def test_generate_ms_docs_config_disabled(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """When settings.microsoft_docs_enabled is False, search should not be called."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Reply with config disabled.")
-    mock_ms = MagicMock()
-    mock_ms.search = AsyncMock(return_value=[])
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     with patch("app.routers.generate.settings") as mock_settings:
         mock_settings.microsoft_docs_enabled = False
@@ -212,18 +171,11 @@ async def test_generate_ms_docs_config_disabled(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_generate_does_not_log_ticket_subject(
-    client: AsyncClient, caplog: pytest.LogCaptureFixture,
+    test_app: FastAPI, client: AsyncClient, caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The generate endpoint should NOT log raw ticket subjects (PII)."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
-    mock_llm.generate = AsyncMock(return_value="Reply.")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    mock_rag, mock_llm, mock_ms = create_mock_services()
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     subject = "John Doe cannot access VPN"
     with caplog.at_level(logging.INFO, logger="app.routers.generate"):
@@ -371,17 +323,13 @@ _SAMPLE_NOTES = [
 
 
 @pytest.mark.asyncio
-async def test_generate_with_notes(client: AsyncClient) -> None:
+async def test_generate_with_notes(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """POST /generate with valid notes returns 200."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Fix applied.")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "VPN Issue",
@@ -393,17 +341,12 @@ async def test_generate_with_notes(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_notes_in_prompt(client: AsyncClient) -> None:
+async def test_generate_notes_in_prompt(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """Note text should appear in the prompt sent to the LLM."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
-    mock_llm.generate = AsyncMock(return_value="Reply.")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    mock_rag, mock_llm, mock_ms = create_mock_services()
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "VPN Issue",
@@ -421,17 +364,12 @@ async def test_generate_notes_in_prompt(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_empty_notes(client: AsyncClient) -> None:
+async def test_generate_empty_notes(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """POST /generate with empty notes list is backward-compatible (200)."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
-    mock_llm.generate = AsyncMock(return_value="Reply.")
-    mock_ms = _mock_ms_docs()
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    mock_rag, mock_llm, mock_ms = create_mock_services()
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "Test",
@@ -445,7 +383,9 @@ async def test_generate_empty_notes(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_notes_validation_max_length(client: AsyncClient) -> None:
+async def test_generate_notes_validation_max_length(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """Note text exceeding 4000 chars returns 422."""
     response = await client.post("/generate", json={
         "ticket_subject": "Test",
@@ -455,7 +395,9 @@ async def test_generate_notes_validation_max_length(client: AsyncClient) -> None
 
 
 @pytest.mark.asyncio
-async def test_generate_notes_validation_max_count(client: AsyncClient) -> None:
+async def test_generate_notes_validation_max_count(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """More than 50 notes returns 422."""
     notes = [{"text": f"Note {i}"} for i in range(51)]
     response = await client.post("/generate", json={
@@ -466,7 +408,9 @@ async def test_generate_notes_validation_max_count(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_notes_type_validation(client: AsyncClient) -> None:
+async def test_generate_notes_type_validation(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """Invalid note type value returns 422."""
     response = await client.post("/generate", json={
         "ticket_subject": "Test",

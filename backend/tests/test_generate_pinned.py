@@ -3,9 +3,10 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.main import app
+from tests.helpers import apply_services, create_mock_services
 
 
 def _mock_chroma_with_pinned(article_id: str, text: str, title: str) -> MagicMock:
@@ -24,18 +25,13 @@ def _mock_chroma_with_pinned(article_id: str, text: str, title: str) -> MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_generate_no_pinned_articles_works_normally(client: AsyncClient) -> None:
+async def test_generate_no_pinned_articles_works_normally(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """Sending pinned_article_ids=[] should not change behavior."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Normal reply.")
-    mock_ms = MagicMock()
-    mock_ms.search = AsyncMock(return_value=[])
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
 
     response = await client.post("/generate", json={
         "ticket_subject": "Test ticket",
@@ -48,33 +44,24 @@ async def test_generate_no_pinned_articles_works_normally(client: AsyncClient) -
 
 @pytest.mark.asyncio
 async def test_generate_with_pinned_article_injects_context(
-    client: AsyncClient,
-    monkeypatch: pytest.MonkeyPatch,
+    test_app: FastAPI, client: AsyncClient,
 ) -> None:
     """Pinned article should appear in prompt with PINNED label."""
     pinned_id = "abc123"
     pinned_text = "Reset the VPN credentials using Credential Manager."
     pinned_title = "VPN Reset Guide"
 
-    # Use monkeypatch so app.state.chroma_client is restored after the test
-    monkeypatch.setattr(
-        app.state, "chroma_client",
-        _mock_chroma_with_pinned(pinned_id, pinned_text, pinned_title),
+    test_app.state.chroma_client = _mock_chroma_with_pinned(
+        pinned_id, pinned_text, pinned_title,
     )
 
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, mock_ms = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Reply with pinned context.")
-    mock_ms = MagicMock()
-    mock_ms.search = AsyncMock(return_value=[])
+    apply_services(test_app, mock_rag, mock_llm, mock_ms)
+
     mock_embed = MagicMock()
     mock_embed.embed = AsyncMock(return_value=[0.1] * 768)
-
-    app.state.rag_service = mock_rag
-    app.state.llm_service = mock_llm
-    app.state.ms_docs_service = mock_ms
-    app.state.embed_service = mock_embed
+    test_app.state.embed_service = mock_embed
 
     response = await client.post("/generate", json={
         "ticket_subject": "VPN issue",

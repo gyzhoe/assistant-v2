@@ -6,10 +6,11 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import MODEL_DISPLAY_NAMES, MODEL_GGUF_FILES
-from app.main import app, create_app
+from app.main import create_app
 from app.routers.models import _gguf_display_name, scan_models
 from app.services.model_download_service import ModelDownloadService
 from tests.helpers import setup_app_state
@@ -70,7 +71,9 @@ def test_scan_models_multiple(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_models_returns_list_and_current(client: AsyncClient) -> None:
+async def test_models_returns_list_and_current(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """GET /models returns available models and current model."""
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -78,7 +81,7 @@ async def test_models_returns_list_and_current(client: AsyncClient) -> None:
 
     mock_llm_client = MagicMock()
     mock_llm_client.get = AsyncMock(return_value=mock_resp)
-    app.state.llm_service._client = mock_llm_client
+    test_app.state.llm_service._client = mock_llm_client
 
     resp = await client.get("/models")
     assert resp.status_code == 200
@@ -90,7 +93,9 @@ async def test_models_returns_list_and_current(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_models_falls_back_to_default_when_no_dir(client: AsyncClient) -> None:
+async def test_models_falls_back_to_default_when_no_dir(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """GET /models falls back to [default_model] when models dir is empty."""
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -98,7 +103,7 @@ async def test_models_falls_back_to_default_when_no_dir(client: AsyncClient) -> 
 
     mock_llm_client = MagicMock()
     mock_llm_client.get = AsyncMock(return_value=mock_resp)
-    app.state.llm_service._client = mock_llm_client
+    test_app.state.llm_service._client = mock_llm_client
 
     with patch("app.routers.models._MODELS_DIR", Path("/nonexistent")):
         resp = await client.get("/models")
@@ -109,13 +114,15 @@ async def test_models_falls_back_to_default_when_no_dir(client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
-async def test_models_llm_down_returns_503(client: AsyncClient) -> None:
+async def test_models_llm_down_returns_503(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """GET /models should return 503 with LLM_DOWN when LLM server is unreachable."""
     import httpx as httpx_mod
 
     mock_llm_client = MagicMock()
     mock_llm_client.get = AsyncMock(side_effect=httpx_mod.ConnectError("Connection refused"))
-    app.state.llm_service._client = mock_llm_client
+    test_app.state.llm_service._client = mock_llm_client
 
     resp = await client.get("/models")
     assert resp.status_code == 503
@@ -124,7 +131,9 @@ async def test_models_llm_down_returns_503(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_models_http_error_returns_502(client: AsyncClient) -> None:
+async def test_models_http_error_returns_502(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """GET /models should return 502 with MODEL_ERROR when LLM server returns an HTTP error."""
     import httpx as httpx_mod
 
@@ -134,7 +143,7 @@ async def test_models_http_error_returns_502(client: AsyncClient) -> None:
 
     mock_llm_client = MagicMock()
     mock_llm_client.get = AsyncMock(side_effect=http_err)
-    app.state.llm_service._client = mock_llm_client
+    test_app.state.llm_service._client = mock_llm_client
 
     resp = await client.get("/models")
     assert resp.status_code == 502
@@ -144,13 +153,15 @@ async def test_models_http_error_returns_502(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_models_timeout_returns_503(client: AsyncClient) -> None:
+async def test_models_timeout_returns_503(
+    test_app: FastAPI, client: AsyncClient,
+) -> None:
     """GET /models should return 503 with LLM_DOWN on timeout."""
     import httpx as httpx_mod
 
     mock_llm_client = MagicMock()
     mock_llm_client.get = AsyncMock(side_effect=httpx_mod.ReadTimeout("timed out"))
-    app.state.llm_service._client = mock_llm_client
+    test_app.state.llm_service._client = mock_llm_client
 
     resp = await client.get("/models")
     assert resp.status_code == 503

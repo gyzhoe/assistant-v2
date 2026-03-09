@@ -1,8 +1,9 @@
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.main import app
+from app.main import create_app
 from tests.helpers import setup_app_state
 
 
@@ -12,18 +13,22 @@ def anyio_backend() -> str:
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncClient:
-    """Async httpx client wired to the FastAPI app.
-
-    ASGITransport does not run the FastAPI lifespan, so we manually set
-    app.state attributes that routers depend on.  Tests that exercise
-    the generate router patch service instances at the app.state level, so
-    the mock chroma_client placed here is never forwarded to real ChromaDB.
-    """
+async def test_app() -> FastAPI:
+    """Fresh FastAPI app instance per test — fully isolated from other tests."""
+    app = create_app()
     setup_app_state(app)
+    return app
 
+
+@pytest_asyncio.fixture
+async def client(test_app: FastAPI) -> AsyncClient:
+    """Async httpx client wired to a fresh FastAPI app.
+
+    Each test gets its own app instance via the test_app fixture,
+    so mutations to app.state never leak between tests.
+    """
     async with AsyncClient(
-        transport=ASGITransport(app=app),
+        transport=ASGITransport(app=test_app),
         base_url="http://testserver",
     ) as ac:
         yield ac
