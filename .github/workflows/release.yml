@@ -8,13 +8,11 @@ on:
         required: true
         type: string
       installer_type:
-        description: 'Installer type to build'
+        description: 'Installer type to build (offline disabled — builds locally only)'
         required: true
         type: choice
         options:
           - online
-          - offline
-          - both
         default: online
       bump_version:
         description: 'Commit version bump to main before building?'
