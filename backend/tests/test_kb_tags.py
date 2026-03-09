@@ -10,7 +10,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.routers import kb as kb_mod
+from app.services import kb_cache as kb_cache_mod
 from app.services.embed_service import EmbedService
 from app.services.rag_service import RAGService
 from tests.helpers import setup_app_state
@@ -40,9 +40,9 @@ def _fresh_client(
     setup_app_state(app)
 
     # Reset the module-level cache before each test
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     return AsyncClient(
         transport=ASGITransport(app=app),
@@ -138,12 +138,12 @@ async def test_update_tags_invalidates_cache() -> None:
     }
     async with _fresh_client(col_data) as ac:
         # Pre-warm cache
-        kb_mod._cache_timestamp = 1.0
-        kb_mod._article_cache = {"art1": {"title": "test"}}
+        kb_cache_mod._cache_timestamp = 1.0
+        kb_cache_mod._article_cache = {"art1": {"title": "test"}}
 
         await ac.patch("/kb/articles/art1/tags", json={"tags": ["new"]})
 
-        assert kb_mod._cache_timestamp == 0.0
+        assert kb_cache_mod._cache_timestamp == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +208,9 @@ async def test_create_article_with_tags() -> None:
     mock_sync_embed.embed_fn = _mock_embed
     app.state.sync_embed_service = mock_sync_embed
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

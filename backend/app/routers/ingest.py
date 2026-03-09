@@ -17,9 +17,9 @@ from app.config import settings
 from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, TICKET_COLLECTION, LLMModelError
 from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
-from app.routers.kb import invalidate_article_cache
 from app.routers.shared import acquire_ingestion_lock, get_client_ip
 from app.services.audit import audit_log
+from app.services.kb_cache import invalidate_article_cache
 from ingestion.pipeline import IngestionPipeline
 from ingestion.url_loader import (
     ContentTypeError,
