@@ -39,7 +39,7 @@ def _valid_payload(rating: str = "good") -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_feedback_good_returns_200_with_id() -> None:
+async def test_feedback_good_returns_201_with_id() -> None:
     app = create_app()
     app.state.chroma_client = MagicMock()
     app.state.llm_reachable = False
@@ -51,14 +51,14 @@ async def test_feedback_good_returns_200_with_id() -> None:
         base_url="http://testserver",
     ) as ac:
         resp = await ac.post("/feedback", json=_valid_payload("good"), headers=_EXT_HEADERS)
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     body = resp.json()
     assert "id" in body
     assert body["id"].startswith("rated_")
 
 
 @pytest.mark.asyncio
-async def test_feedback_bad_returns_200_with_id() -> None:
+async def test_feedback_bad_returns_201_with_id() -> None:
     app = create_app()
     app.state.chroma_client = MagicMock()
     app.state.llm_reachable = False
@@ -70,7 +70,7 @@ async def test_feedback_bad_returns_200_with_id() -> None:
         base_url="http://testserver",
     ) as ac:
         resp = await ac.post("/feedback", json=_valid_payload("bad"), headers=_EXT_HEADERS)
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     body = resp.json()
     assert "id" in body
     assert body["id"].startswith("rated_")
@@ -126,7 +126,7 @@ async def test_feedback_stores_in_rated_replies_collection() -> None:
     ) as ac:
         resp = await ac.post("/feedback", json=_valid_payload("good"), headers=_EXT_HEADERS)
 
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     body = resp.json()
     assert body["id"].startswith("rated_")
     mock_chroma.get_or_create_collection.assert_called_once_with(

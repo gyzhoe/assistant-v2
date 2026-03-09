@@ -18,5 +18,8 @@ def require_ingestion_available() -> None:
     if upload_semaphore.locked():
         raise HTTPException(
             status_code=409,
-            detail="Another ingestion is already in progress. Please wait.",
+            detail={
+                "message": "Another ingestion is already in progress. Please wait.",
+                "error_code": "INGESTION_BUSY",
+            },
         )

@@ -93,7 +93,7 @@ async def test_update_tags_not_found() -> None:
         })
 
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    assert "not found" in resp.json()["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -222,7 +222,7 @@ async def test_create_article_with_tags() -> None:
             "tags": ["network", "vpn"],
         })
 
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     data = resp.json()
     assert data["title"] == "Tagged Article"
 

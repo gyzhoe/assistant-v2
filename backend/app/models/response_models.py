@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 
@@ -9,6 +10,16 @@ class ErrorCode(StrEnum):
     LLM_DOWN = "LLM_DOWN"
     MODEL_ERROR = "MODEL_ERROR"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    UNAUTHORIZED = "UNAUTHORIZED"
+    FORBIDDEN = "FORBIDDEN"
+    NOT_FOUND = "NOT_FOUND"
+    CONFLICT = "CONFLICT"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    RATE_LIMITED = "RATE_LIMITED"
+    PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
+    EMBED_DOWN = "EMBED_DOWN"
+    INGESTION_BUSY = "INGESTION_BUSY"
+    SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
 
 class ErrorResponse(BaseModel):
@@ -16,6 +27,16 @@ class ErrorResponse(BaseModel):
 
     message: str
     error_code: ErrorCode
+
+
+def error_response(
+    status_code: int, message: str, error_code: ErrorCode,
+) -> JSONResponse:
+    """Build a standardized JSON error response."""
+    return JSONResponse(
+        status_code=status_code,
+        content=ErrorResponse(message=message, error_code=error_code).model_dump(),
+    )
 
 
 class ContextDoc(BaseModel):

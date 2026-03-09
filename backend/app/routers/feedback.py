@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["feedback"])
 
 
-@router.post("/feedback", status_code=200)
+@router.post("/feedback", status_code=201)
 async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONResponse:
     """Store a rated reply in ChromaDB for future few-shot retrieval."""
     try:
@@ -60,7 +60,7 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> JSONRespon
             detail="Embedding service unavailable. Feedback not stored.",
         )
 
-    return JSONResponse(status_code=200, content={"id": doc_id})
+    return JSONResponse(status_code=201, content={"id": doc_id})
 
 
 _DOC_ID_PATTERN = r"^rated_[a-f0-9]{32}$"

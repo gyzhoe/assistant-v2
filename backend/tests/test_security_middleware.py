@@ -90,7 +90,7 @@ async def test_rate_limit_returns_429_after_limit_exceeded() -> None:
         assert resp.status_code == 429
         body = resp.json()
         assert body["error_code"] == "RATE_LIMITED"
-        assert "Max 3 requests per minute" in body["detail"]
+        assert "Max 3 requests per minute" in body["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ async def test_request_size_rejects_oversized_body() -> None:
         assert resp.status_code == 413
         data = resp.json()
         assert data["error_code"] == "PAYLOAD_TOO_LARGE"
-        assert str(max_bytes) in data["detail"]
+        assert str(max_bytes) in data["message"]
 
 
 @pytest.mark.asyncio

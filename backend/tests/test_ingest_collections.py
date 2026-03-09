@@ -46,7 +46,7 @@ async def test_clear_invalid_collection_returns_422() -> None:
     async with _make_client() as ac:
         resp = await ac.post("/ingest/collections/nonexistent/clear")
         assert resp.status_code == 422
-        assert "Unknown collection" in resp.json()["detail"]
+        assert "Unknown collection" in resp.json()["message"]
 
 
 @pytest.mark.asyncio

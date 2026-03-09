@@ -94,7 +94,7 @@ async def test_create_article_success() -> None:
             "content": "## Introduction\n\nHow to set up VPN.",
         })
 
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     data = resp.json()
     assert data["title"] == "VPN Setup Guide"
     assert data["article_id"]
@@ -163,7 +163,7 @@ async def test_create_article_duplicate() -> None:
         })
 
     assert resp.status_code == 409
-    assert "already exists" in resp.json()["detail"].lower()
+    assert "already exists" in resp.json()["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -204,7 +204,7 @@ async def test_create_article_heading_sections() -> None:
             "content": content,
         })
 
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     data = resp.json()
     assert data["chunks_ingested"] == 4  # Intro + Prerequisites + Steps + Sub-step
 
@@ -257,4 +257,4 @@ async def test_create_article_embed_down() -> None:
         })
 
     assert resp.status_code == 503
-    assert "embedding server" in resp.json()["detail"].lower()
+    assert "embedding server" in resp.json()["message"].lower()
