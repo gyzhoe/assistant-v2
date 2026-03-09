@@ -710,9 +710,9 @@ opentelemetry-exporter-otlp-proto-common==1.39.1 \
     --hash=sha256:08f8a5862d64cc3435105686d0216c1365dc5701f86844a8cd56597d0c764fde \
     --hash=sha256:763370d4737a59741c89a67b50f9e39271639ee4afc999dadfe768541c027464
     # via opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-exporter-otlp-proto-grpc==1.39.1 \
-    --hash=sha256:772eb1c9287485d625e4dbe9c879898e5253fea111d9181140f51291b5fec3ad \
-    --hash=sha256:fa1c136a05c7e9b4c09f739469cbdb927ea20b34088ab1d959a849b5cc589c18
+opentelemetry-exporter-otlp-proto-grpc==1.40.0 \
+    --hash=sha256:2aa0ca53483fe0cf6405087a7491472b70335bc5c7944378a0a8e72e86995c52 \
+    --hash=sha256:bd4015183e40b635b3dab8da528b27161ba83bf4ef545776b196f0fb4ec47740
     # via chromadb
 opentelemetry-proto==1.39.1 \
     --hash=sha256:22cdc78efd3b3765d09e68bfbd010d4fc254c9818afd0b6b423387d9dee46007 \
