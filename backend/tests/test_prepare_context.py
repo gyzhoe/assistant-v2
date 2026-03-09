@@ -126,7 +126,10 @@ async def test_prepare_context_with_web_docs(ctx_app: FastAPI) -> None:
     )
     request = _make_request(ctx_app)
 
-    with patch("app.routers.generate.settings") as mock_settings:
+    with (
+        patch("app.routers.generate.settings") as mock_settings,
+        patch("app.services.prompt_service.settings", mock_settings),
+    ):
         mock_settings.microsoft_docs_enabled = True
         mock_settings.environment_context = ""
         context_docs, prompt, web_count = await _prepare_context(body, request)
@@ -193,7 +196,10 @@ async def test_prepare_context_web_disabled_by_settings(ctx_app: FastAPI) -> Non
     )
     request = _make_request(ctx_app)
 
-    with patch("app.routers.generate.settings") as mock_settings:
+    with (
+        patch("app.routers.generate.settings") as mock_settings,
+        patch("app.services.prompt_service.settings", mock_settings),
+    ):
         mock_settings.microsoft_docs_enabled = False
         mock_settings.environment_context = ""
         _, _, web_count = await _prepare_context(body, request)

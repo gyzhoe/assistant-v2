@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # -- Process-level state (module singletons) ---------------------------------
 
-_process_lock = asyncio.Lock()
+process_lock = asyncio.Lock()
 _legacy_ollama_checked = False
 
 

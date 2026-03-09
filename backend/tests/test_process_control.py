@@ -92,14 +92,13 @@ async def test_check_legacy_ollama_sets_flag() -> None:
         # Reset module-level flag for test isolation
         import app.services.process_control as pc
         pc._legacy_ollama_checked = False
-
-        assert is_legacy_ollama_checked() is False
-        await check_legacy_ollama()
-        assert is_legacy_ollama_checked() is True
-        mock_kill.assert_called_once()
-
-        # Reset after test
-        pc._legacy_ollama_checked = False
+        try:
+            assert is_legacy_ollama_checked() is False
+            await check_legacy_ollama()
+            assert is_legacy_ollama_checked() is True
+            mock_kill.assert_called_once()
+        finally:
+            pc._legacy_ollama_checked = False
 
 
 # -- probe_loaded_model ------------------------------------------------------
