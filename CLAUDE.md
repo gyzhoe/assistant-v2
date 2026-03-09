@@ -51,15 +51,16 @@ python -m uv run mypy app/ ingestion/   # type check
 
 **Important:** Use `python -m uv`, not bare `uv`. Backend requires Python 3.13 — version 3.14 breaks chromadb/pydantic v1.
 
-### Environment (WSL2)
+### Environment (Windows 11 + Git Bash)
 
-This repo runs under WSL2 on Windows 11. Critical rules for agents:
+This repo runs on **native Windows 11**. Claude Code uses **Git Bash** (not WSL2, not PowerShell).
 
-- **NEVER run `find /` or `find /mnt/c`** — scanning the Windows C: drive through WSL2 takes 30+ minutes. Use `which`, `command -v`, or targeted paths instead.
-- Python 3.14 (for MCP/tools): `~/.local/bin/python3.14` (on PATH)
-- Python 3.13 (for backend): `python -m uv run` inside `backend/` — do NOT search for it
-- `uvx` and `uv`: `~/.local/bin/uvx`, `~/.local/bin/uv` (on PATH)
-- Installer scripts are PowerShell (Windows-only) — do not attempt to run `.ps1` files in WSL2
+- **Shell:** Git Bash — use Unix syntax (`/dev/null`, forward slashes), but paths resolve to Windows locations (`/c/Users/...` = `C:\Users\...`)
+- **NEVER run broad `find /` commands** — scanning the entire filesystem is extremely slow. Use `which`, `command -v`, Glob, or Grep instead.
+- **Python 3.14** (default, for MCP/tools): `/c/Python314/python` (on PATH)
+- **Python 3.13** (for backend): use `python -m uv run` inside `backend/` — do NOT search for it or use Python 3.14
+- **uv**: installed as a Python package — always `python -m uv`, never bare `uv`
+- **PowerShell scripts** (`.ps1`): installer scripts require PowerShell. Use `powershell.exe -File script.ps1` from Git Bash if needed.
 
 ### Running Services
 
@@ -227,21 +228,21 @@ Enterprise environment handling sensitive data. Security is not optional.
 
 ### Code Quality Gates
 
-- **TypeScript:** `strict: true`, no `any`, no `// @ts-ignore`, no `console.log` (use `debugLog`)
-- **Python:** type hints on all functions, `mypy --strict`, `ruff` clean, line length ≤ 100
-- **Security:** validate all inputs, sanitize outputs, no secrets in code, CORS locked, follow OWASP top 10
-- **Tests:** all CI checks must pass — backend (ruff + mypy + pytest) and extension (typecheck + lint + test + build)
+- **All CI checks must pass** before merging — backend (ruff + mypy + pytest) and extension (typecheck + lint + test + build)
 - **Tests for every change** — not just happy path. Test edge cases, error states, and the interaction between old and new code.
 - **No dead code, no commented-out code, no TODOs.** Ship clean or don't ship.
-
-### Performance Standards
-
 - **No unnecessary work.** Don't poll when nothing is listening. Don't fetch when cached. Don't re-render when props haven't changed.
-- **Async by default.** Never block the event loop (backend) or the main thread (frontend). Use `asyncio.gather` for independent I/O, `AbortController` for cancellable requests.
-- **Match existing patterns.** Singleton services, Zustand selectors, Radix primitives — if there's an established pattern, use it. Don't invent new ones.
+- **Async by default.** Never block the event loop (backend) or the main thread (frontend).
+- **Match existing patterns.** Singleton services, Zustand selectors, Radix primitives — if there's an established pattern, use it.
 
 ### After Development
 
 - **Run full CI locally** before pushing when possible
 - **PR description** must explain what changed and why
 - **Clean up** branches after merge, worktrees after PR completion
+
+---
+
+## Conventions
+
+**Before writing any code, read [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).** It is the single source of truth for all coding patterns — error responses, test conventions, API schemas, service layer patterns, logging, versioning, constants, and design tokens. Agents MUST follow these in every PR.
