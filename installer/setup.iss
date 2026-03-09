@@ -46,7 +46,7 @@ AppendDefaultDirName=no
 UsePreviousAppDir=yes
 LicenseFile=assets\license.txt
 UninstallDisplayName={#MyAppName}
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Local AI assistant for SolarWinds Web Help Desk
 
