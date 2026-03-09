@@ -36,7 +36,7 @@ When a technician opens a WHD ticket, the assistant:
 1. **Reads** the ticket subject, description, requester, category, and status from the page automatically
 2. **Retrieves** relevant context from past resolved tickets and KB articles via RAG (ChromaDB)
 3. **Searches** [Microsoft Learn](https://learn.microsoft.com) for relevant documentation in parallel
-4. **Generates** a professional reply suggestion using a local LLM (default: `qwen3.5:9b`)
+4. **Generates** a professional reply suggestion using a local LLM (default: `qwen3.5:9b`), streaming tokens to the sidebar in real time via Server-Sent Events (SSE)
 5. **Inserts** the reply into the WHD reply textarea with one click
 
 ### Knowledge Base
@@ -58,8 +58,11 @@ Edge Extension
 ├── Background SW ──── relays messages, native messaging lifecycle
 └── Sidebar UI ─────── React + Zustand, calls backend API
         ↕ fetch → http://localhost:8765
+        ↕ chrome.runtime.connectNative
+native_host.py ─────── manages llama-server + backend processes
+        ↕ start/stop via native messaging
 FastAPI Backend (async, pure ASGI middleware)
-├── /generate ───── LLM reply generation with RAG context
+├── /generate ───── LLM reply generation with RAG context (SSE streaming)
 ├── /ingest ─────── file upload + URL ingestion pipeline
 ├── /kb ─────────── article CRUD, tagging, management
 ├── /auth ───────── HttpOnly cookie sessions
@@ -71,7 +74,7 @@ FastAPI Backend (async, pure ASGI middleware)
    llama-server (LLM + embed)  ChromaDB (vector store)
 ```
 
-The extension uses a three-layer message relay: content script ↔ background service worker ↔ sidebar. Messages are typed via discriminated unions in `src/shared/messages.ts`. The backend runs pure ASGI middleware (no `BaseHTTPMiddleware`) for streaming-safe request handling.
+The extension uses a three-layer message relay: content script ↔ background service worker ↔ sidebar. Messages are typed via discriminated unions in `src/shared/messages.ts`. The background service worker manages process lifecycle via Chrome native messaging — sending `start_backend` / `stop_backend` commands to `native_host.py`, which spawns and monitors llama-server and the FastAPI backend. The backend runs pure ASGI middleware (no `BaseHTTPMiddleware`) for streaming-safe request handling.
 
 See [Architecture Guide](docs/architecture.md) and [API Contract](docs/api-contract.md) for details.
 
@@ -144,10 +147,10 @@ python -m uv run python -m ingestion.cli status
 ### Testing
 
 ```bash
-# Extension unit tests (186 tests)
+# Extension unit tests (~237 tests)
 npx --workspace=extension vitest run
 
-# Backend tests (362 tests)
+# Backend tests (~459 tests)
 cd backend && python -m uv run pytest tests/ -v --tb=short
 
 # E2E tests — Management SPA (16 tests)
@@ -238,6 +241,7 @@ MAX_UPLOAD_BYTES=52428800
 - SSRF prevention for URL ingestion: private IP blocking, redirect validation, scheme whitelist
 - Input validation via Pydantic on all endpoints
 - Audit logging for security-sensitive actions
+- SHA-256 hash verification for model downloads
 - See [Security Guide](docs/security.md) for production hardening
 
 ## License
@@ -254,6 +258,10 @@ This project is built on excellent open-source software. Key dependencies includ
 - **[React](https://react.dev)** — UI library
 - **[Radix UI](https://www.radix-ui.com)** — accessible component primitives
 - **[Tailwind CSS](https://tailwindcss.com)** — utility-first CSS framework
+- **[Zustand](https://github.com/pmndrs/zustand)** — lightweight state management
 - **[Vite](https://vitejs.dev)** — build tool and dev server
+- **[Qwen 3.5](https://huggingface.co/Qwen)** — default language model (via GGUF)
+- **[nomic-embed-text](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF)** — embedding model
+- **[Inno Setup](https://jrsoftware.org/isinfo.php)** — Windows installer framework
 
 See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the full list of dependencies and their licenses.
