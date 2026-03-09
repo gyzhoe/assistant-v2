@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.routers.generate import (
+from app.services.prompt_service import (
     _HARDCODED_EXAMPLES,
     _MIN_FEWSHOT_SIMILARITY,
     _build_examples_section,

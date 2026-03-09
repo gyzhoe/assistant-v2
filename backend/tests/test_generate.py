@@ -6,8 +6,12 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.models.request_models import GenerateRequest, NoteItem
-from app.routers.generate import _build_prompt, _format_notes_section, _relevance_label
 from app.services.microsoft_docs import WebContextDoc
+from app.services.prompt_service import (
+    _build_prompt,
+    _format_notes_section,
+    _relevance_label,
+)
 from tests.helpers import apply_services, create_mock_services, mock_ms_docs
 
 
