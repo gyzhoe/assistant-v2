@@ -9,7 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.routers import kb as kb_mod
+from app.services import kb_cache as kb_cache_mod
 from tests.helpers import setup_app_state
 
 
@@ -47,9 +47,9 @@ def _fresh_client(
     app.state.sync_embed_service = mock_sync_embed
 
     # Reset the module-level cache before each test
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     return AsyncClient(
         transport=ASGITransport(app=app),
@@ -81,9 +81,9 @@ async def test_create_article_success() -> None:
     mock_sync_embed.embed_fn = _mock_embed
     app.state.sync_embed_service = mock_sync_embed
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -149,9 +149,9 @@ async def test_create_article_duplicate() -> None:
     app.state.llm_reachable = False
     setup_app_state(app)
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -184,9 +184,9 @@ async def test_create_article_heading_sections() -> None:
     mock_sync_embed.embed_fn = _mock_embed
     app.state.sync_embed_service = mock_sync_embed
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     content = (
         "Intro paragraph before headings.\n\n"
@@ -243,9 +243,9 @@ async def test_create_article_embed_down() -> None:
     mock_sync_embed.embed_fn = embed_raises
     app.state.sync_embed_service = mock_sync_embed
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

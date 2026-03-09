@@ -9,7 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.routers import kb as kb_mod
+from app.services import kb_cache as kb_cache_mod
 from tests.helpers import setup_app_state
 
 
@@ -62,9 +62,9 @@ def _setup_app(
     mock_sync_embed.embed_fn = _mock_embed
     app.state.sync_embed_service = mock_sync_embed
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     return mock_chroma, mock_col, AsyncClient(
         transport=ASGITransport(app=app),
@@ -328,9 +328,9 @@ async def test_update_article_collection_not_found() -> None:
     app.state.llm_reachable = False
     setup_app_state(app)
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

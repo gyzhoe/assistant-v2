@@ -9,7 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
-from app.routers import kb as kb_mod
+from app.services import kb_cache as kb_cache_mod
 
 
 def _fresh_client(
@@ -40,9 +40,9 @@ def _fresh_client(
     app.state.llm_reachable = False
 
     # Reset the module-level cache before each test
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     return AsyncClient(
         transport=ASGITransport(app=app),
@@ -321,13 +321,13 @@ async def test_delete_invalidates_cache() -> None:
     }
     async with _fresh_client(delete_data) as ac:
         # Pre-warm cache
-        kb_mod._cache_timestamp = 1.0
-        kb_mod._article_cache = {"art1": {"title": "test"}}
+        kb_cache_mod._cache_timestamp = 1.0
+        kb_cache_mod._article_cache = {"art1": {"title": "test"}}
 
         await ac.delete("/kb/articles/art1", headers=_EXT_HEADERS)
 
         # Cache should be invalidated
-        assert kb_mod._cache_timestamp == 0.0
+        assert kb_cache_mod._cache_timestamp == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -434,9 +434,9 @@ async def test_cache_is_reused_on_second_call() -> None:
     app.state.chroma_client = mock_chroma
     app.state.llm_reachable = False
 
-    kb_mod._article_cache = {}
-    kb_mod._cache_timestamp = 0.0
-    kb_mod._total_chunks_cached = 0
+    kb_cache_mod._article_cache = {}
+    kb_cache_mod._cache_timestamp = 0.0
+    kb_cache_mod._total_chunks_cached = 0
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
