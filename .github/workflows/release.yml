@@ -82,6 +82,21 @@ jobs:
           git tag "v$VERSION"
           git push origin "v$VERSION"
 
+  # Job 0.5: Resolve installer matrix (fromJson can't use inputs directly)
+  resolve-matrix:
+    name: Resolve Installer Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      installer_types: ${{ steps.set.outputs.types }}
+    steps:
+      - id: set
+        run: |
+          if [ "${{ inputs.installer_type }}" = "both" ]; then
+            echo 'types=["online","offline"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'types=["${{ inputs.installer_type }}"]' >> "$GITHUB_OUTPUT"
+          fi
+
   # Job 1: Build the extension on Ubuntu (fast, has Node)
   extension-build:
     name: Build Extension
@@ -113,10 +128,10 @@ jobs:
   build-installer:
     name: Build Windows Installer (${{ matrix.type }})
     runs-on: windows-latest
-    needs: extension-build
+    needs: [extension-build, resolve-matrix]
     strategy:
       matrix:
-        type: ${{ fromJson(inputs.installer_type == 'both' && '["online","offline"]' || format('["{0}"]', inputs.installer_type)) }}
+        type: ${{ fromJson(needs.resolve-matrix.outputs.installer_types) }}
     steps:
       - uses: actions/checkout@v6
         with:
