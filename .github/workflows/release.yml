@@ -129,6 +129,7 @@ jobs:
     name: Build Windows Installer (${{ matrix.type }})
     runs-on: windows-latest
     needs: [extension-build, resolve-matrix]
+    if: always() && needs.extension-build.result == 'success' && needs.resolve-matrix.result == 'success'
     strategy:
       matrix:
         type: ${{ fromJson(needs.resolve-matrix.outputs.installer_types) }}
@@ -459,6 +460,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [build-installer, extension-build]
+    if: always() && needs.build-installer.result == 'success' && needs.extension-build.result == 'success'
     steps:
       - uses: actions/checkout@v6
         with:
