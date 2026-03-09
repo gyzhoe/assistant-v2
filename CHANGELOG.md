@@ -5,6 +5,20 @@ All notable changes to AI Helpdesk Assistant will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Module Refactoring
+
+### Changed
+- **Backend module extraction** — extracted `KBCacheService` from `kb.py`, `PromptService` from `generate.py`, `ProcessControlService` from `health.py` into dedicated service modules
+- **Frontend component decomposition** — split `OptionsPage.tsx` into 6 child components, `BackendControl.tsx` into 3 hooks + 2 components
+- **`create_app()` cleanup** — extracted `_setup_middleware()` and `_setup_exception_handlers()` helpers in `main.py`
+- **`ArticleEditor.tsx` cleanup** — extracted `TagsSection` component for tag management UI
+- **Ingestion pipeline dedup** — shared `_create_pipeline()` helper in `ingest.py`
+
+### Fixed
+- **Mock path in `test_prepare_context.py`** — patch now covers both `generate.settings` and `prompt_service.settings`
+- **Private export** — renamed `_process_lock` to `process_lock` in `process_control.py`
+- **Test isolation** — `test_process_control.py` legacy flag test uses `try/finally` for cleanup
+
 ## [2.1.0] — Review Findings + Quality Sweep (2026-03-09)
 
 ### Added

@@ -22,11 +22,11 @@ from app.process_utils import (
 )
 from app.services.audit import audit_log
 from app.services.process_control import (
-    _process_lock,
     check_legacy_ollama,
     is_legacy_ollama_checked,
     launch_llama_server,
     probe_loaded_model,
+    process_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,7 +151,7 @@ async def start_llm(request: Request) -> dict[str, str]:
     Checks each server independently so the embed server is not restarted
     if it is already running (and vice versa).
     """
-    async with _process_lock:
+    async with process_lock:
         llm_running = False
         embed_running = False
 
@@ -222,7 +222,7 @@ async def start_llm(request: Request) -> dict[str, str]:
 )
 async def stop_llm(request: Request) -> dict[str, str]:
     """Stop the LLM server on port 11435 only. Leaves embed server alive."""
-    async with _process_lock:
+    async with process_lock:
         killed = await asyncio.to_thread(kill_pids_on_port, LLM_PORT)
         if killed:
             logger.info("Stopped LLM server (PIDs: %s)", killed)
@@ -242,7 +242,7 @@ async def switch_llm(
     Uses port-targeted kill (port 11435 only) so the embed server on 11436
     is never affected.
     """
-    async with _process_lock:
+    async with process_lock:
         display_name = body.model
 
         # Probe the actual running model to detect state mismatch
@@ -315,7 +315,7 @@ async def restart_llm(request: Request) -> dict[str, str]:
     Kills the existing LLM process, waits for the port to free, then starts
     a new instance. The embed server on 11436 is not affected.
     """
-    async with _process_lock:
+    async with process_lock:
         current_display: str = getattr(
             request.app.state,
             "current_llm_model",

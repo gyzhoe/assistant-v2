@@ -37,6 +37,14 @@ ALLOWED_COLLECTIONS = {TICKET_COLLECTION, KB_COLLECTION}
 _CHUNK_SIZE = 8192  # 8 KB read chunks for streaming upload
 
 
+def _create_pipeline(request: Request) -> IngestionPipeline:
+    """Create an ingestion pipeline from request app state."""
+    return IngestionPipeline(
+        chroma_client=request.app.state.chroma_client,
+        embed_fn=request.app.state.sync_embed_service.embed_fn,
+    )
+
+
 @router.post("/ingest/upload", response_model=IngestUploadResponse)
 async def upload_file(request: Request, file: UploadFile) -> IngestUploadResponse:
     """Upload a single file for ingestion into ChromaDB."""
@@ -73,12 +81,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
                 )
 
             # Run ingestion in thread pool
-            chroma_client = request.app.state.chroma_client
-            embed_service = request.app.state.sync_embed_service
-            pipeline = IngestionPipeline(
-                chroma_client=chroma_client,
-                embed_fn=embed_service.embed_fn,
-            )
+            pipeline = _create_pipeline(request)
 
             collection_name, chunks = await asyncio.to_thread(
                 pipeline.ingest_file, tmp_path,
@@ -188,15 +191,10 @@ async def ingest_url(
             title = chunks_list[0][2].get("title")
 
             # Run ingestion pipeline
-            chroma_client = request.app.state.chroma_client
-            embed_service = request.app.state.sync_embed_service
-            pipeline = IngestionPipeline(
-                chroma_client=chroma_client,
-                embed_fn=embed_service.embed_fn,
-            )
+            pipeline = _create_pipeline(request)
 
             col = await asyncio.to_thread(
-                chroma_client.get_or_create_collection,
+                request.app.state.chroma_client.get_or_create_collection,
                 KB_COLLECTION,
                 metadata=COSINE_COLLECTION_META,
             )

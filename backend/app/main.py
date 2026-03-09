@@ -158,18 +158,14 @@ _STATUS_TO_ERROR_CODE: dict[int, str] = {
 }
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(
-        title="AI Helpdesk Assistant Backend",
-        version=settings.version,
-        lifespan=lifespan,
-    )
+def _setup_middleware(app: FastAPI) -> None:
+    """Register all middleware on *app* in the correct order.
 
-    # Middleware is applied in reverse order (last added = outermost wrapper).
-    # Execution order for a request:
-    #   SecurityHeaders → CORS → SizeLimit → RateLimit → APIToken → CSRF → router
-    # So we add them in reverse: CSRF first (innermost), SecurityHeaders last (outermost).
-
+    Middleware is applied in reverse order (last added = outermost wrapper).
+    Execution order for a request:
+      SecurityHeaders -> CORS -> SizeLimit -> RateLimit -> APIToken -> CSRF -> router
+    So we add them in reverse: CSRF first (innermost), SecurityHeaders last.
+    """
     # CSRF protection — innermost, runs after auth verifies the session
     app.add_middleware(CSRFMiddleware)
 
@@ -191,7 +187,11 @@ def create_app() -> FastAPI:
         allow_origins=[settings.cors_origin],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "X-Extension-Token", "X-CSRF-Token"],
+        allow_headers=[
+            "Content-Type",
+            "X-Extension-Token",
+            "X-CSRF-Token",
+        ],
     )
 
     app.add_middleware(SecurityHeadersMiddleware)
@@ -200,7 +200,9 @@ def create_app() -> FastAPI:
     # so it catches anything that slips past all other layers.
     app.add_middleware(UnhandledExceptionMiddleware)
 
-    # --- Global exception handlers ---
+
+def _setup_exception_handlers(app: FastAPI) -> None:
+    """Register global exception handlers on *app*."""
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(
@@ -211,7 +213,9 @@ def create_app() -> FastAPI:
 
         # Already a dict with error_code — use it directly
         if isinstance(detail, dict) and "error_code" in detail:
-            message = str(detail.get("message") or detail.get("detail", ""))
+            message = str(
+                detail.get("message") or detail.get("detail", ""),
+            )
             code = str(detail["error_code"])
             return JSONResponse(
                 status_code=exc.status_code,
@@ -232,7 +236,9 @@ def create_app() -> FastAPI:
     async def connection_error_handler(
         request: Request, exc: ConnectionError,
     ) -> JSONResponse:
-        logger.error("LLM connection error on %s: %s", request.url.path, exc)
+        logger.error(
+            "LLM connection error on %s: %s", request.url.path, exc,
+        )
         return JSONResponse(
             status_code=503,
             content=ErrorResponse(
@@ -245,7 +251,9 @@ def create_app() -> FastAPI:
     async def llm_model_error_handler(
         request: Request, exc: LLMModelError,
     ) -> JSONResponse:
-        logger.error("LLM model error on %s: %s", request.url.path, exc)
+        logger.error(
+            "LLM model error on %s: %s", request.url.path, exc,
+        )
         return JSONResponse(
             status_code=502,
             content=ErrorResponse(
@@ -253,6 +261,17 @@ def create_app() -> FastAPI:
                 error_code=ErrorCode.MODEL_ERROR,
             ).model_dump(),
         )
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="AI Helpdesk Assistant Backend",
+        version=settings.version,
+        lifespan=lifespan,
+    )
+
+    _setup_middleware(app)
+    _setup_exception_handlers(app)
 
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(health.router)
