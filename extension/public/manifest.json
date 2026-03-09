@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkxZuoIauAsPpm5FdJF38zXDtSANzd8lV+Mcp1Q87zBOrvBYXbB0owTJ+wGn8T2xHUiVObYVYJty5eVoZXMIXRliJKYseS7+ocOmSXaaM3GOZWepXZQUUgV7jw2XUw4I1mRVwd7TgZDHU5KRbB7GBNT49iz1M8AJkhIyg6m62Wyng8d5xYUloZMu8zAYc5pkE335JoTdbfkYhE2ytdFwq/RT1dILQLokz8/OugcN7K6hvEqZDpyZPg9h8+Rb9QNMgiCSgZrjoFglhN58QgpMFVWwb5GY/yp5JB6TCtKkZnyf8UACrNGMAcmR0lFar0/np2nPgnSiXOvWrW4RsLQaSpwIDAQAB",
   "name": "AI Helpdesk Assistant",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Local AI assistant for SolarWinds Web Help Desk — powered by llama.cpp",
   "permissions": [
     "sidePanel",
