@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import urllib.request
 from dataclasses import dataclass
@@ -130,6 +131,7 @@ class ModelDownloadService:
                 self._blocking_download,
                 model.url,
                 tmp,
+                model.sha256,
             )
             # Atomic rename
             if dest.exists():
@@ -145,12 +147,15 @@ class ModelDownloadService:
                     pass
             raise
 
-    def _blocking_download(self, url: str, tmp_path: Path) -> None:
+    def _blocking_download(
+        self, url: str, tmp_path: Path, expected_sha256: str = "",
+    ) -> None:
         """Synchronous download with progress tracking (runs in thread)."""
         req = urllib.request.Request(
             url,
             headers={"User-Agent": "AIHelpdeskAssistant/1.0"},
         )
+        digest = hashlib.sha256()
         with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
             total = int(resp.headers.get("Content-Length", 0))
             self._state.bytes_total = total
@@ -165,8 +170,19 @@ class ModelDownloadService:
                     if not chunk:
                         break
                     f.write(chunk)
+                    digest.update(chunk)
                     self._state.bytes_downloaded += len(chunk)
 
         if tmp_path.stat().st_size == 0:
             msg = f"Downloaded file is empty: {tmp_path.name}"
             raise RuntimeError(msg)
+
+        if expected_sha256:
+            actual = digest.hexdigest()
+            if actual != expected_sha256:
+                tmp_path.unlink(missing_ok=True)
+                msg = (
+                    f"SHA-256 mismatch for {tmp_path.name}: "
+                    f"expected {expected_sha256}, got {actual}"
+                )
+                raise RuntimeError(msg)

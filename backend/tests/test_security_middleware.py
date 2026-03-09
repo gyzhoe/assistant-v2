@@ -432,9 +432,9 @@ async def test_ingest_upload_rate_limited_at_5_per_minute() -> None:
 
             import asyncio
 
-            import app.routers.ingest as ingest_mod
+            import app.routers.shared as shared_mod
 
-            ingest_mod._upload_semaphore = asyncio.Semaphore(1)
+            shared_mod.upload_semaphore = asyncio.Semaphore(1)
 
             content = b'[{"id":"1","subject":"A","description":"B"}]'
             # First 5 requests should succeed

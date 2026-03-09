@@ -18,6 +18,7 @@ class ArticleSummary(BaseModel):
 class ArticleListResponse(BaseModel):
     articles: list[ArticleSummary]
     total_articles: int
+    total_pages: int
     page: int
     page_size: int
 

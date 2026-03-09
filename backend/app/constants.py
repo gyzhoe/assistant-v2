@@ -29,6 +29,7 @@ class GGUFModelInfo:
     url: str
     description: str
     is_embed: bool
+    sha256: str = ""
 
 
 GGUF_MODELS: list[GGUFModelInfo] = [
@@ -38,6 +39,7 @@ GGUF_MODELS: list[GGUFModelInfo] = [
         url="https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf",
         description="~262 MB",
         is_embed=True,
+        sha256="7a4a4680f8ff582040e854e4fc27e5b057a8e5ab77df97d5a09412b6d75cff04",
     ),
     GGUFModelInfo(
         name="Qwen3.5-9B-Q4_K_M.gguf",
@@ -45,6 +47,7 @@ GGUF_MODELS: list[GGUFModelInfo] = [
         url="https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
         description="~5.3 GB",
         is_embed=False,
+        sha256="e1e2bc40c25bfdd65a2c42b7eb21ccb9f9b790c0ef2b4fbb24fddbb3e3d3a86c",
     ),
     GGUFModelInfo(
         name="Qwen3-14B-Q4_K_M.gguf",
@@ -52,6 +55,7 @@ GGUF_MODELS: list[GGUFModelInfo] = [
         url="https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf",
         description="~9 GB (optional, better language control)",
         is_embed=False,
+        sha256="72e77a7e2e26c13a71a85f0531ba42369ec7890a6ab03fa1e36bce8a0d7ae59e",
     ),
 ]
 """All known GGUF models with download URLs."""

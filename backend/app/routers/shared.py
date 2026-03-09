@@ -1,6 +1,8 @@
 """Shared state and helpers for ingest/kb routers."""
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import HTTPException, Request
 
@@ -13,8 +15,13 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else ""
 
 
-def require_ingestion_available() -> None:
-    """Raise 409 if another ingestion is already in progress."""
+@asynccontextmanager
+async def acquire_ingestion_lock() -> AsyncIterator[None]:
+    """Acquire the ingestion semaphore atomically, or raise 409.
+
+    Checks ``locked()`` and acquires in a single atomic step: if the
+    semaphore is already held, reject immediately instead of queuing.
+    """
     if upload_semaphore.locked():
         raise HTTPException(
             status_code=409,
@@ -23,3 +30,8 @@ def require_ingestion_available() -> None:
                 "error_code": "INGESTION_BUSY",
             },
         )
+    await upload_semaphore.acquire()
+    try:
+        yield
+    finally:
+        upload_semaphore.release()

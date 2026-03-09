@@ -81,7 +81,7 @@ async def health_detail(request: Request) -> dict[str, object]:
 
     async def _probe_embed() -> bool:
         try:
-            embed_client = request.app.state.embed_service._client
+            embed_client = request.app.state.embed_service.client
             if hasattr(embed_client, "get"):
                 resp = await embed_client.get("/health", timeout=5.0)
                 return bool(resp.status_code == 200)
@@ -95,9 +95,11 @@ async def health_detail(request: Request) -> dict[str, object]:
             collections = await asyncio.to_thread(
                 chroma_client.list_collections,
             )
-            counts: dict[str, int] = {}
-            for col in collections:
-                counts[col.name] = await asyncio.to_thread(col.count)
+            count_tasks = [asyncio.to_thread(col.count) for col in collections]
+            results = await asyncio.gather(*count_tasks)
+            counts = dict(zip(
+                [c.name for c in collections], results,
+            ))
             return True, counts
         except Exception:
             return False, {}

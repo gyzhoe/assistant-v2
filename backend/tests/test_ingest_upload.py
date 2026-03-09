@@ -291,9 +291,9 @@ async def test_concurrent_upload_returns_409() -> None:
     )
 
     # Reset the module-level semaphore for this test
-    import app.routers.ingest as ingest_mod
+    import app.routers.shared as shared_mod
 
-    ingest_mod._upload_semaphore = asyncio.Semaphore(1)
+    shared_mod.upload_semaphore = asyncio.Semaphore(1)
 
     slow_event = asyncio.Event()
 

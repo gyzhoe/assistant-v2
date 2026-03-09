@@ -35,6 +35,11 @@ class EmbedService:
         self._client = client
 
     @property
+    def client(self) -> httpx.AsyncClient | httpx.Client:
+        """Public accessor for the underlying httpx client."""
+        return self._client
+
+    @property
     def embed_fn(self) -> Callable[[str], list[float]]:
         """Synchronous embed function for document ingestion.
 
