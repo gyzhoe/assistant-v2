@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import { apiClient } from '../../lib/api-client'
 import { useSidebarStore } from '../store/sidebarStore'
 import { ImportTab } from './ImportTab'
@@ -7,6 +7,8 @@ import { ManageTab } from './ManageTab'
 export function KnowledgePanel(): React.ReactElement {
   const [collapsed, setCollapsed] = useState(true)
   const [activeTab, setActiveTab] = useState<'import' | 'manage'>('import')
+  const importTabRef = useRef<HTMLButtonElement>(null)
+  const manageTabRef = useRef<HTMLButtonElement>(null)
   const docCounts = useSidebarStore((s) => s.chromaDocCounts)
   const setChromaDocCounts = useSidebarStore((s) => s.setChromaDocCounts)
 
@@ -42,22 +44,40 @@ export function KnowledgePanel(): React.ReactElement {
         <div id="kb-panel-body" className="collapsible-body">
           <div className="kb-tab-strip" role="tablist" aria-label="Knowledge base tabs" aria-orientation="horizontal">
             <button
+              ref={importTabRef}
               id="kb-tab-import"
               role="tab"
               className={`kb-tab ${activeTab === 'import' ? 'active' : ''}`}
               aria-selected={activeTab === 'import'}
               aria-controls="kb-tab-panel-import"
+              tabIndex={activeTab === 'import' ? 0 : -1}
               onClick={() => setActiveTab('import')}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                  e.preventDefault()
+                  setActiveTab('manage')
+                  manageTabRef.current?.focus()
+                }
+              }}
             >
               Import
             </button>
             <button
+              ref={manageTabRef}
               id="kb-tab-manage"
               role="tab"
               className={`kb-tab ${activeTab === 'manage' ? 'active' : ''}`}
               aria-selected={activeTab === 'manage'}
               aria-controls="kb-tab-panel-manage"
+              tabIndex={activeTab === 'manage' ? 0 : -1}
               onClick={() => setActiveTab('manage')}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                  e.preventDefault()
+                  setActiveTab('import')
+                  importTabRef.current?.focus()
+                }
+              }}
             >
               Manage
             </button>

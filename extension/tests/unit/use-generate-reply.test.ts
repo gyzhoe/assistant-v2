@@ -28,10 +28,13 @@ vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
 // Stub scrollIntoView (jsdom lacks it)
 Element.prototype.scrollIntoView = vi.fn()
 
-const mockGenerate = vi.fn()
+import type { SSEEvent } from '../../src/shared/types'
+
+const mockGenerateStream = vi.fn()
 vi.mock('../../src/lib/api-client', () => ({
   apiClient: {
-    generate: (...args: unknown[]) => mockGenerate(...args),
+    generate: vi.fn(),
+    generateStream: (...args: unknown[]) => mockGenerateStream(...args),
     models: vi.fn().mockResolvedValue({ models: ['qwen3.5:9b'], current: 'qwen3.5:9b' }),
     health: vi.fn().mockResolvedValue({ status: 'ok' }),
   },
@@ -48,6 +51,13 @@ vi.mock('../../src/lib/api-client', () => ({
 }))
 
 import { useSidebarStore } from '../../src/sidebar/store/sidebarStore'
+
+/** Helper: create an async generator from SSE events */
+async function* mockSSEStream(events: SSEEvent[]): AsyncGenerator<SSEEvent> {
+  for (const event of events) {
+    yield event
+  }
+}
 
 const ticketData = {
   subject: 'VPN issue',
@@ -90,8 +100,13 @@ describe('useGenerateReply', () => {
   })
 
   it('sets isGenerating to true during generation', async () => {
-    let resolveGenerate: (v: { reply: string; model_used: string; context_docs: never[]; latency_ms: number }) => void
-    mockGenerate.mockImplementation(() => new Promise((resolve) => { resolveGenerate = resolve }))
+    let resolveStream: () => void
+    const waitPromise = new Promise<void>((resolve) => { resolveStream = resolve })
+    async function* slowStream(): AsyncGenerator<SSEEvent> {
+      await waitPromise
+      yield { type: 'done', latency_ms: 100 }
+    }
+    mockGenerateStream.mockReturnValue(slowStream())
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -105,23 +120,17 @@ describe('useGenerateReply', () => {
     expect(useSidebarStore.getState().isGenerating).toBe(true)
 
     await act(async () => {
-      resolveGenerate!({
-        reply: 'Done',
-        model_used: 'qwen3.5:9b',
-        context_docs: [],
-        latency_ms: 100,
-      })
+      resolveStream!()
       await generatePromise!
     })
   })
 
   it('sends correct payload fields in API call', async () => {
-    mockGenerate.mockResolvedValueOnce({
-      reply: 'Hi',
-      model_used: 'qwen3.5:9b',
-      context_docs: [],
-      latency_ms: 50,
-    })
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: [] },
+      { type: 'token', content: 'Hi' },
+      { type: 'done', latency_ms: 50 },
+    ]))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -131,7 +140,7 @@ describe('useGenerateReply', () => {
       await result.current.generate()
     })
 
-    expect(mockGenerate).toHaveBeenCalledWith(
+    expect(mockGenerateStream).toHaveBeenCalledWith(
       expect.objectContaining({
         ticket_subject: 'VPN issue',
         ticket_description: 'Cannot connect to VPN',
@@ -139,20 +148,20 @@ describe('useGenerateReply', () => {
         category: 'Network',
         status: 'Open',
         model: 'qwen3.5:9b',
-        stream: false,
+        stream: true,
         include_web_context: true,
       }),
       expect.any(AbortSignal),
     )
   })
 
-  it('sets reply from response', async () => {
-    mockGenerate.mockResolvedValueOnce({
-      reply: 'Try restarting.',
-      model_used: 'qwen3.5:9b',
-      context_docs: [],
-      latency_ms: 50,
-    })
+  it('sets reply from streamed tokens', async () => {
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: [] },
+      { type: 'token', content: 'Try ' },
+      { type: 'token', content: 'restarting.' },
+      { type: 'done', latency_ms: 50 },
+    ]))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -167,12 +176,11 @@ describe('useGenerateReply', () => {
 
   it('stores context docs and latency in lastResponse', async () => {
     const docs = [{ content: 'KB article', source: 'kb', score: 0.9, metadata: {} }]
-    mockGenerate.mockResolvedValueOnce({
-      reply: 'Hello',
-      model_used: 'qwen3.5:9b',
-      context_docs: docs,
-      latency_ms: 250,
-    })
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: docs },
+      { type: 'token', content: 'Hello' },
+      { type: 'done', latency_ms: 250 },
+    ]))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -190,7 +198,9 @@ describe('useGenerateReply', () => {
 
   it('classifies LLM_DOWN on 503 error', async () => {
     const { ApiError } = await import('../../src/lib/api-client')
-    mockGenerate.mockRejectedValueOnce(new ApiError(503, { error_code: 'LLM_DOWN' }))
+    mockGenerateStream.mockImplementation(() => {
+      throw new ApiError(503, { error_code: 'LLM_DOWN' })
+    })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -200,12 +210,15 @@ describe('useGenerateReply', () => {
       await result.current.generate()
     })
 
-    expect(useSidebarStore.getState().generateError).toBe('LLM server is not running. Please start it and try again.')
+    const error = useSidebarStore.getState().generateError
+    expect(error).toContain('LLM server is not running')
   })
 
   it('does not show LLM message for 503 without LLM_DOWN error_code', async () => {
     const { ApiError } = await import('../../src/lib/api-client')
-    mockGenerate.mockRejectedValueOnce(new ApiError(503, { detail: 'Service temporarily unavailable' }))
+    mockGenerateStream.mockImplementation(() => {
+      throw new ApiError(503, { detail: 'Service temporarily unavailable' })
+    })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -217,12 +230,14 @@ describe('useGenerateReply', () => {
 
     const error = useSidebarStore.getState().generateError
     expect(error).not.toContain('Ollama is not running')
-    expect(error).toBe('Service temporarily unavailable')
+    expect(error).toContain('Service temporarily unavailable')
   })
 
   it('does not show Ollama message for 502 MODEL_ERROR', async () => {
     const { ApiError } = await import('../../src/lib/api-client')
-    mockGenerate.mockRejectedValueOnce(new ApiError(502, { error_code: 'MODEL_ERROR', detail: 'model "foo" not found' }))
+    mockGenerateStream.mockImplementation(() => {
+      throw new ApiError(502, { error_code: 'MODEL_ERROR', detail: 'model "foo" not found' })
+    })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -238,7 +253,9 @@ describe('useGenerateReply', () => {
   })
 
   it('classifies network TypeError as connection error', async () => {
-    mockGenerate.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    mockGenerateStream.mockImplementation(() => {
+      throw new TypeError('Failed to fetch')
+    })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -253,7 +270,9 @@ describe('useGenerateReply', () => {
 
   it('silently handles AbortError (user cancellation)', async () => {
     const abortError = new DOMException('The operation was aborted.', 'AbortError')
-    mockGenerate.mockRejectedValueOnce(abortError)
+    mockGenerateStream.mockImplementation(() => {
+      throw abortError
+    })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -267,7 +286,9 @@ describe('useGenerateReply', () => {
   })
 
   it('resets isGenerating in finally block after error', async () => {
-    mockGenerate.mockRejectedValueOnce(new Error('Something broke'))
+    mockGenerateStream.mockImplementation(() => {
+      throw new Error('Something broke')
+    })
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -278,7 +299,7 @@ describe('useGenerateReply', () => {
     })
 
     expect(useSidebarStore.getState().isGenerating).toBe(false)
-    expect(useSidebarStore.getState().generateError).toBe('Something broke')
+    expect(useSidebarStore.getState().generateError).toContain('Something broke')
   })
 
   it('sends INSERT_REPLY when autoInsert is enabled', async () => {
@@ -288,12 +309,11 @@ describe('useGenerateReply', () => {
         autoInsert: true,
       },
     })
-    mockGenerate.mockResolvedValueOnce({
-      reply: 'Auto-inserted reply',
-      model_used: 'qwen3.5:9b',
-      context_docs: [],
-      latency_ms: 50,
-    })
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: [] },
+      { type: 'token', content: 'Auto-inserted reply' },
+      { type: 'done', latency_ms: 50 },
+    ]))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -312,12 +332,11 @@ describe('useGenerateReply', () => {
   })
 
   it('does not send INSERT_REPLY when autoInsert is disabled', async () => {
-    mockGenerate.mockResolvedValueOnce({
-      reply: 'Normal reply',
-      model_used: 'qwen3.5:9b',
-      context_docs: [],
-      latency_ms: 50,
-    })
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: [] },
+      { type: 'token', content: 'Normal reply' },
+      { type: 'done', latency_ms: 50 },
+    ]))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -334,12 +353,11 @@ describe('useGenerateReply', () => {
   })
 
   it('saves reply to session storage after successful generation', async () => {
-    mockGenerate.mockResolvedValueOnce({
-      reply: 'Cached reply',
-      model_used: 'qwen3.5:9b',
-      context_docs: [],
-      latency_ms: 50,
-    })
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: [] },
+      { type: 'token', content: 'Cached reply' },
+      { type: 'done', latency_ms: 50 },
+    ]))
 
     const { renderHook, act } = await import('@testing-library/react')
     const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
@@ -350,5 +368,22 @@ describe('useGenerateReply', () => {
     })
 
     expect(chrome.storage.session.set).toHaveBeenCalled()
+  })
+
+  it('handles SSE error event from stream', async () => {
+    mockGenerateStream.mockReturnValue(mockSSEStream([
+      { type: 'meta', context_docs: [] },
+      { type: 'error', error_code: 'LLM_DOWN', message: 'LLM server is unreachable' },
+    ]))
+
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useGenerateReply } = await import('../../src/sidebar/hooks/useGenerateReply')
+    const { result } = renderHook(() => useGenerateReply())
+
+    await act(async () => {
+      await result.current.generate()
+    })
+
+    expect(useSidebarStore.getState().generateError).toContain('LLM server is not running')
   })
 })

@@ -4,6 +4,7 @@ import { useSettings } from './useSettings'
 import { apiClient, ApiError } from '../../lib/api-client'
 import { parseErrorDetail } from '../../lib/error-utils'
 import { debugLog, debugError } from '../../shared/constants'
+import type { GenerateRequest } from '../../shared/types'
 
 export function useGenerateReply() {
   const ticketData = useSidebarStore((s) => s.ticketData)
@@ -32,75 +33,105 @@ export function useGenerateReply() {
     setIsEditingReply(false)
     setReplyRating(null)
 
+    const req: GenerateRequest = {
+      ticket_subject: ticketData.subject,
+      ticket_description: ticketData.description,
+      requester_name: ticketData.requesterName,
+      category: ticketData.category,
+      status: ticketData.status,
+      model: selectedModel,
+      max_context_docs: 5,
+      stream: true,
+      include_web_context: true,
+      prompt_suffix: settings.promptSuffix,
+      custom_fields: ticketData.customFields,
+      pinned_article_ids: pinnedArticles.map((a) => a.article_id),
+      notes: ticketData.notes.slice(0, 20).map((n) => ({
+        author: n.author,
+        text: n.text,
+        type: n.type,
+        date: n.date,
+        note_id: n.noteId,
+        time_spent: n.timeSpent,
+      })),
+    }
+
     try {
-      const response = await apiClient.generate({
-        ticket_subject: ticketData.subject,
-        ticket_description: ticketData.description,
-        requester_name: ticketData.requesterName,
-        category: ticketData.category,
-        status: ticketData.status,
-        model: selectedModel,
-        max_context_docs: 5,
-        stream: false,
-        include_web_context: true,
-        prompt_suffix: settings.promptSuffix,
-        custom_fields: ticketData.customFields,
-        pinned_article_ids: pinnedArticles.map((a) => a.article_id),
-        notes: ticketData.notes.slice(0, 20).map((n) => ({
-          author: n.author,
-          text: n.text,
-          type: n.type,
-          date: n.date,
-          note_id: n.noteId,
-          time_spent: n.timeSpent,
-        })),
-      }, ctrl.signal)
+      for await (const event of apiClient.generateStream(req, ctrl.signal)) {
+        if (ctrl.signal.aborted) return
 
-      if (ctrl.signal.aborted) return
+        switch (event.type) {
+          case 'meta':
+            setLastResponse({
+              reply: '',
+              model_used: selectedModel,
+              context_docs: event.context_docs,
+              latency_ms: 0,
+            })
+            break
+          case 'token': {
+            const current = useSidebarStore.getState().reply
+            setReply(current + event.content)
+            break
+          }
+          case 'done': {
+            const finalReply = useSidebarStore.getState().reply
+            const lastResp = useSidebarStore.getState().lastResponse
+            setLastResponse({
+              reply: finalReply,
+              model_used: lastResp?.model_used ?? selectedModel,
+              context_docs: lastResp?.context_docs ?? [],
+              latency_ms: event.latency_ms,
+            })
+            debugLog('Generation complete:', event.latency_ms, 'ms')
 
-      setReply(response.reply)
-      setLastResponse({
-        reply: response.reply,
-        model_used: response.model_used,
-        context_docs: response.context_docs,
-        latency_ms: response.latency_ms,
-      })
+            if (ticketData.ticketUrl) {
+              saveReplyForTicket(ticketData.ticketUrl)
+            }
 
-      debugLog('Generation complete:', response.latency_ms, 'ms')
-
-      // Persist reply for this ticket so it survives navigation
-      if (ticketData.ticketUrl) {
-        saveReplyForTicket(ticketData.ticketUrl)
-      }
-
-      // Auto-insert: send INSERT_REPLY message to content script after successful generation
-      if (settings.autoInsert && response.reply) {
-        debugLog('Auto-insert enabled, sending INSERT_REPLY')
-        chrome.runtime.sendMessage({ type: 'INSERT_REPLY', payload: { text: response.reply } }).catch((err: unknown) => {
-          debugError('Auto-insert failed:', err)
-        })
+            if (settings.autoInsert && finalReply) {
+              debugLog('Auto-insert enabled, sending INSERT_REPLY')
+              chrome.runtime.sendMessage({ type: 'INSERT_REPLY', payload: { text: finalReply } }).catch((err: unknown) => {
+                debugError('Auto-insert failed:', err)
+              })
+            }
+            break
+          }
+          case 'error':
+            setGenerateError(
+              event.error_code === 'LLM_DOWN'
+                ? 'LLM server is not running. Please start it and try again.'
+                : event.message || 'Generation failed'
+            )
+            break
+        }
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return
       }
       let message = 'Failed to generate reply'
+      let title: string | undefined
       if (err instanceof ApiError) {
         const body = err.body as Record<string, unknown>
         if (body?.['error_code'] === 'LLM_DOWN') {
           message = 'LLM server is not running. Please start it and try again.'
+          title = 'LLM Server Offline'
         } else {
           const parsed = parseErrorDetail(body)
           message = parsed !== 'An unexpected error occurred'
             ? parsed
             : `Generation failed (${err.status})`
+          title = 'Generation Failed'
         }
       } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
         message = 'Network error — check connection and backend status'
+        title = 'Connection Error'
       } else if (err instanceof Error) {
         message = err.message
+        title = 'Generation Failed'
       }
-      setGenerateError(message)
+      setGenerateError(title ? `${title}|${message}` : message)
     } finally {
       setIsGenerating(false)
       setAbortController(null)

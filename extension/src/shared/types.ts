@@ -88,6 +88,30 @@ export interface ContextDoc {
   metadata: Record<string, unknown>
 }
 
+/** SSE event types from the streaming generate endpoint */
+export type SSEMetaEvent = {
+  type: 'meta'
+  context_docs: ContextDoc[]
+}
+
+export type SSETokenEvent = {
+  type: 'token'
+  content: string
+}
+
+export type SSEDoneEvent = {
+  type: 'done'
+  latency_ms: number
+}
+
+export type SSEErrorEvent = {
+  type: 'error'
+  error_code: string
+  message: string
+}
+
+export type SSEEvent = SSEMetaEvent | SSETokenEvent | SSEDoneEvent | SSEErrorEvent
+
 /** Generate API response */
 export interface GenerateResponse {
   reply: string
