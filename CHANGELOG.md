@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Overhaul `api-contract.md` for v2.0.0** — document `/health` vs `/health/detail` split, `embed_reachable` field, SSE streaming protocol (4 event types), auth endpoints (`/auth/login`, `/auth/logout`, `/auth/check`), `notes` field in GenerateRequest, `model_info` in GET /models response, `POST /llm/restart` endpoint, `already_loaded` response from `/llm/switch`, update version to 2.0.0
 - **Document data-at-rest encryption recommendations** — new "Data at Rest" section covering ChromaDB disk storage and BitLocker/LUKS recommendations
 
+#### Track G — Frontend Polish
+
+- **Add `pruneReplyCache()` unit tests** — 5 test cases covering expiry filtering, valid entry retention, max-entries truncation, empty cache, and exact-limit edge case
+- **Add notes section scroll indicator** — gradient fade at the bottom of `.ticket-notes-list` signals scrollable overflow
+- **Replace emoji rating icons with SVGs** — `ThumbsUpIcon` and `ThumbsDownIcon` replace `&#x1F44D;`/`&#x1F44E;` for consistent cross-platform rendering
+- **Replace hardcoded colors in management.css** — `.source-url` badge now uses `var(--accent-subtle)` and `var(--accent)` design tokens instead of hardcoded `#0969da`/`rgba(9,105,218,0.1)`
+
 #### Track D — Error Standardization (planned)
 
 - **Standardize all error responses to `ErrorResponse(message, error_code)` format** — replace inconsistent `{"detail": ...}` patterns across all routers

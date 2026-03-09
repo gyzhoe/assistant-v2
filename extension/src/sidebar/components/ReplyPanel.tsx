@@ -9,7 +9,7 @@ import { ModelSelector } from './ModelSelector'
 import { SkeletonLoader } from './SkeletonLoader'
 import { InsertButton } from './InsertButton'
 import { ErrorState } from './ErrorState'
-import { CopyIcon } from '../../shared/components/Icons'
+import { CopyIcon, ThumbsUpIcon, ThumbsDownIcon } from '../../shared/components/Icons'
 
 export function ReplyPanel(): React.ReactElement {
   useTicketData()
@@ -156,7 +156,7 @@ export function ReplyPanel(): React.ReactElement {
                     aria-label="Rate as helpful"
                     aria-pressed={replyRating === 'good'}
                   >
-                    &#x1F44D;
+                    <ThumbsUpIcon />
                   </button>
                   <button
                     type="button"
@@ -165,7 +165,7 @@ export function ReplyPanel(): React.ReactElement {
                     aria-label="Rate as unhelpful"
                     aria-pressed={replyRating === 'bad'}
                   >
-                    &#x1F44E;
+                    <ThumbsDownIcon />
                   </button>
                 </div>
                 <div aria-live="polite" className="rating-feedback-region">

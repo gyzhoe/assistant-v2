@@ -437,6 +437,18 @@ body {
   margin-top: 6px;
   max-height: 20rem;
   overflow-y: auto;
+  position: relative;
+}
+
+.ticket-notes-list::after {
+  content: '';
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 24px;
+  background: linear-gradient(transparent, var(--bg));
+  pointer-events: none;
+  flex-shrink: 0;
 }
 
 .ticket-note {

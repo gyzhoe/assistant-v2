@@ -14,13 +14,13 @@ interface ReplyCacheEntry {
 type ReplyCache = Record<string, ReplyCacheEntry>
 
 /** Maximum number of cached replies before evicting oldest */
-const REPLY_CACHE_MAX_ENTRIES = 50
+export const REPLY_CACHE_MAX_ENTRIES = 50
 
 /** Maximum age of a cached reply in milliseconds (1 hour) */
-const REPLY_CACHE_TTL_MS = 60 * 60 * 1000
+export const REPLY_CACHE_TTL_MS = 60 * 60 * 1000
 
 /** Prune expired and excess entries from the reply cache */
-function pruneReplyCache(cache: ReplyCache): ReplyCache {
+export function pruneReplyCache(cache: ReplyCache): ReplyCache {
   const now = Date.now()
   const entries = Object.entries(cache).filter(
     ([, entry]) => now - entry.timestamp < REPLY_CACHE_TTL_MS

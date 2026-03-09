@@ -49,6 +49,20 @@ export const SearchIcon = (): React.ReactElement => (
   </svg>
 )
 
+/* ── Rating icons (16x16, stroke-based) ────────────────────────────── */
+
+export const ThumbsUpIcon = (): React.ReactElement => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 14H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h2m0 7V7m0 7h6.4a1.5 1.5 0 0 0 1.48-1.25l.88-5A1.5 1.5 0 0 0 12.28 6H10V3.5A1.5 1.5 0 0 0 8.5 2L5 7" />
+  </svg>
+)
+
+export const ThumbsDownIcon = (): React.ReactElement => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M11 2h2a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-2m0-7v7m0-7H4.6a1.5 1.5 0 0 0-1.48 1.25l-.88 5A1.5 1.5 0 0 0 3.72 10H6v2.5A1.5 1.5 0 0 0 7.5 14L11 9" />
+  </svg>
+)
+
 /* ── Misc icons ─────────────────────────────────────────────────────── */
 
 export const GearIcon = (): React.ReactElement => (
