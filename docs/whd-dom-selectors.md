@@ -48,6 +48,13 @@ chrome.storage.sync.set({
 | WHD Version | Tested | Notes |
 |---|---|---|
 | 12.x | Pending | Initial target version |
+| 2026.1 | Yes | Production-verified; all selectors confirmed working |
+
+## Fallback Chain Implementation
+
+All selectors use fallback chains defined in `extension/src/shared/constants.ts` (`DEFAULT_SELECTORS`).
+The content script tries each selector in order and uses the first match. This ensures compatibility
+across WHD versions where element IDs or class names may differ.
 
 ## Known Issues
 
