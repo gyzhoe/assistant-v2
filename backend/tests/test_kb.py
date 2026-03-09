@@ -115,6 +115,7 @@ async def test_list_articles_returns_all() -> None:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_articles"] == 3
+        assert data["total_pages"] == 1
         assert data["page"] == 1
         assert data["page_size"] == 20
         assert len(data["articles"]) == 3
@@ -147,6 +148,7 @@ async def test_list_articles_pagination() -> None:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_articles"] == 3
+        assert data["total_pages"] == 2
         assert len(data["articles"]) == 2
         assert data["page"] == 1
 
@@ -154,6 +156,7 @@ async def test_list_articles_pagination() -> None:
         data2 = resp2.json()
         assert len(data2["articles"]) == 1
         assert data2["page"] == 2
+        assert data2["total_pages"] == 2
 
 
 @pytest.mark.asyncio
@@ -163,6 +166,7 @@ async def test_list_articles_empty_collection() -> None:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_articles"] == 0
+        assert data["total_pages"] == 0
         assert data["articles"] == []
 
 

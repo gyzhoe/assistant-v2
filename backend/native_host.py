@@ -9,6 +9,8 @@ Registered via installer/scripts/register-native-host.ps1.
 """
 
 import json
+import logging
+import logging.handlers
 import os
 import struct
 import subprocess
@@ -34,10 +36,17 @@ from app.process_utils import (
 
 LOG_FILE = os.path.join(str(BACKEND_DIR), "native_host.log")
 
+_logger = logging.getLogger("native_host")
+_logger.setLevel(logging.INFO)
+_handler = logging.handlers.RotatingFileHandler(
+    LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8",
+)
+_handler.setFormatter(logging.Formatter("%(message)s"))
+_logger.addHandler(_handler)
+
 
 def log(msg: str) -> None:
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(msg + "\n")
+    _logger.info("%s", msg)
 
 
 def read_message() -> dict | None:

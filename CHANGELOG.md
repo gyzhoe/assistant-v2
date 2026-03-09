@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+#### Track F — Backend Review Cleanup
+
+- **SHA-256 model download verification (S12)** — `ModelDownloadService` computes SHA-256 incrementally during download and verifies against the expected hash; mismatches delete the `.tmp` file and raise an error
+- **Log rotation for native_host.log (S18)** — replaced raw `open(LOG_FILE, "a")` with `RotatingFileHandler` (5 MB, 3 backups) to prevent unbounded log growth
+- **Fix ingestion semaphore TOCTOU race (A23)** — replaced check-then-acquire pattern with atomic `asyncio.wait_for(acquire, timeout=0)` via `acquire_ingestion_lock()` context manager
+- **Public `client` property on EmbedService (A18)** — `health.py` no longer accesses private `_client` attribute
+- **Add `total_pages` to ArticleListResponse (A22)** — `/kb/articles` now returns `total_pages` for pagination UI
+- **Parallelize ChromaDB collection counts (P3)** — `/health/detail` fires `col.count()` calls concurrently via `asyncio.gather` instead of sequential loop
+
 #### Track A — Backend Performance + Cleanup
 
 - **Eliminate redundant embedding in generate endpoint** — share the embed vector between RAG retrieval and few-shot lookup, removing a ~200-500ms duplicate embedding call per generation

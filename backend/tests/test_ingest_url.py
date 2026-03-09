@@ -217,9 +217,9 @@ async def test_ingest_url_concurrent_returns_409() -> None:
     fresh_app = create_app()
     _setup_app_state(fresh_app)
 
-    import app.routers.ingest as ingest_mod
+    import app.routers.shared as shared_mod
 
-    ingest_mod._upload_semaphore = asyncio.Semaphore(1)
+    shared_mod.upload_semaphore = asyncio.Semaphore(1)
 
     slow_event = asyncio.Event()
 

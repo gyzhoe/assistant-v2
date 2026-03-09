@@ -1,10 +1,19 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
+from app.routers import shared as shared_mod
 from tests.helpers import setup_app_state
+
+
+@pytest.fixture(autouse=True)
+def _reset_ingestion_semaphore() -> None:
+    """Reset the module-level ingestion semaphore before each test."""
+    shared_mod.upload_semaphore = asyncio.Semaphore(1)
 
 
 @pytest.fixture

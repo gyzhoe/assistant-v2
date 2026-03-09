@@ -18,7 +18,7 @@ from app.constants import COSINE_COLLECTION_META, KB_COLLECTION, TICKET_COLLECTI
 from app.models.request_models import IngestUrlRequest
 from app.models.response_models import IngestUploadResponse, IngestUrlResponse
 from app.routers.kb import invalidate_article_cache
-from app.routers.shared import get_client_ip, require_ingestion_available, upload_semaphore
+from app.routers.shared import acquire_ingestion_lock, get_client_ip
 from app.services.audit import audit_log
 from ingestion.pipeline import IngestionPipeline
 from ingestion.url_loader import (
@@ -57,9 +57,7 @@ async def upload_file(request: Request, file: UploadFile) -> IngestUploadRespons
             ),
         )
 
-    require_ingestion_available()
-
-    async with upload_semaphore:
+    async with acquire_ingestion_lock():
         tmp_path: Path | None = None
         try:
             start = time.perf_counter()
@@ -170,9 +168,7 @@ async def ingest_url(
     """Fetch a URL, extract content, and ingest into ChromaDB."""
     url_str = str(body.url)
 
-    require_ingestion_available()
-
-    async with upload_semaphore:
+    async with acquire_ingestion_lock():
         try:
             start = time.perf_counter()
 

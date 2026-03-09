@@ -40,9 +40,8 @@ from app.models.request_models import (
     UpdateTagsRequest,
 )
 from app.routers.shared import (
+    acquire_ingestion_lock,
     get_client_ip,
-    require_ingestion_available,
-    upload_semaphore,
 )
 from app.services.audit import audit_log
 from app.utils.chunker import chunk_by_markdown_headings
@@ -258,9 +257,12 @@ async def list_articles(
     end = start + page_size
     page_articles = articles[start:end]
 
+    total_pages = -(-total // page_size)  # ceiling division
+
     return ArticleListResponse(
         articles=[ArticleSummary(**a) for a in page_articles],
         total_articles=total,
+        total_pages=total_pages,
         page=page,
         page_size=page_size,
     )
@@ -311,9 +313,7 @@ async def create_article(
     except (ValueError, Exception):
         pass  # Collection doesn't exist yet — fine
 
-    require_ingestion_available()
-
-    async with upload_semaphore:
+    async with acquire_ingestion_lock():
         try:
             start_t = time.perf_counter()
 
@@ -418,9 +418,7 @@ async def update_article(
 
     original_imported_at = first_meta.get("imported_at", "")
 
-    require_ingestion_available()
-
-    async with upload_semaphore:
+    async with acquire_ingestion_lock():
         try:
             start_t = time.perf_counter()
 
