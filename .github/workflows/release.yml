@@ -447,7 +447,9 @@ jobs:
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: installer/setup.iss
-          options: /DMyAppVersion=${{ env.APP_VERSION }} /DInstallerType=${{ matrix.type }}
+          options: |
+            /DMyAppVersion=${{ env.APP_VERSION }}
+            /DInstallerType=${{ matrix.type }}
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
