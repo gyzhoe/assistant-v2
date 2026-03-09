@@ -14,6 +14,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import native_host  # noqa: E402
+from tests.helpers import NETSTAT_MULTI_PID, NETSTAT_SAMPLE_NATIVE  # noqa: E402
 
 
 @pytest.fixture()
@@ -71,30 +72,9 @@ class TestGetToken:
         assert "not found" in result["error"]
 
 
-# --- netstat output samples for find_pids_on_port tests ---
-
-NETSTAT_SAMPLE = """\
-Active Connections
-
-  Proto  Local Address          Foreign Address        State           PID
-  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1104
-  TCP    127.0.0.1:8765         0.0.0.0:0              LISTENING       5432
-  TCP    127.0.0.1:8765         127.0.0.1:54321        ESTABLISHED     5432
-  TCP    0.0.0.0:49664          0.0.0.0:0              LISTENING       788
-"""
-
-NETSTAT_MULTI_PID = """\
-Active Connections
-
-  Proto  Local Address          Foreign Address        State           PID
-  TCP    127.0.0.1:8765         0.0.0.0:0              LISTENING       5432
-  TCP    0.0.0.0:8765           0.0.0.0:0              LISTENING       9999
-"""
-
-
 class TestFindPidsOnPort:
     def test_finds_listening_pid(self):
-        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE_NATIVE):
             from app.process_utils import find_pids_on_port
             pids = find_pids_on_port(8765)
         assert pids == [5432]
@@ -112,7 +92,7 @@ class TestFindPidsOnPort:
         assert pids == []
 
     def test_no_match_on_different_port(self):
-        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE):
+        with patch("app.process_utils.subprocess.check_output", return_value=NETSTAT_SAMPLE_NATIVE):
             from app.process_utils import find_pids_on_port
             pids = find_pids_on_port(9999)
         assert pids == []

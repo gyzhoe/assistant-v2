@@ -2,24 +2,17 @@
 
 import json
 import logging
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import LLMModelError
 from app.main import create_app
 from app.models.response_models import ErrorCode
-from app.services.microsoft_docs import WebContextDoc
-from tests.helpers import setup_app_state
-
-
-def _mock_ms_docs(return_value: list[WebContextDoc] | None = None) -> MagicMock:
-    mock_instance = MagicMock()
-    mock_instance.search = AsyncMock(return_value=return_value or [])
-    return mock_instance
+from tests.helpers import apply_services, create_mock_services, mock_ms_docs, setup_app_state
 
 
 def _parse_sse_events(text: str) -> list[dict[str, object]]:
@@ -33,7 +26,7 @@ def _parse_sse_events(text: str) -> list[dict[str, object]]:
 
 
 @pytest_asyncio.fixture
-async def stream_app() -> Any:
+async def stream_app() -> FastAPI:
     """Fresh app instance for stream tests — avoids rate-limit collisions."""
     app = create_app()
     setup_app_state(app)
@@ -41,7 +34,7 @@ async def stream_app() -> Any:
 
 
 @pytest_asyncio.fixture
-async def stream_client(stream_app: Any) -> AsyncClient:
+async def stream_client(stream_app: FastAPI) -> AsyncClient:
     async with AsyncClient(
         transport=ASGITransport(app=stream_app),
         base_url="http://testserver",
@@ -56,23 +49,18 @@ async def stream_client(stream_app: Any) -> AsyncClient:
 
 @pytest.mark.asyncio
 async def test_stream_returns_sse_events(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """POST /generate with stream=true returns SSE meta, token, done events."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def fake_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         yield "Hello"
         yield " world"
 
     mock_llm.generate_stream = fake_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "VPN Issue",
@@ -105,23 +93,18 @@ async def test_stream_returns_sse_events(
 
 @pytest.mark.asyncio
 async def test_stream_connection_error_yields_error_event(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """If LLM connection fails during streaming, an error SSE event is emitted."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def failing_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         yield "partial"
         raise ConnectionError("LLM server unreachable")
 
     mock_llm.generate_stream = failing_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "Test",
@@ -141,23 +124,18 @@ async def test_stream_connection_error_yields_error_event(
 
 @pytest.mark.asyncio
 async def test_stream_model_error_yields_error_event(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """LLMModelError during streaming yields an error SSE event."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def failing_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         raise LLMModelError("Model not found", status_code=404)
         yield  # make it a generator  # pragma: no cover
 
     mock_llm.generate_stream = failing_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "Test",
@@ -178,23 +156,18 @@ async def test_stream_model_error_yields_error_event(
 
 @pytest.mark.asyncio
 async def test_stream_empty_response(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """If LLM yields no tokens, stream contains meta + done only."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def empty_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         return
         yield  # make it a generator  # pragma: no cover
 
     mock_llm.generate_stream = empty_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "Test",
@@ -216,7 +189,7 @@ async def test_stream_empty_response(
 
 @pytest.mark.asyncio
 async def test_stream_meta_contains_context_docs(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """The meta SSE event contains the RAG context documents."""
     from app.models.response_models import ContextDoc
@@ -231,11 +204,8 @@ async def test_stream_meta_contains_context_docs(
         yield "Fix"
 
     mock_llm.generate_stream = fake_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "VPN Issue",
@@ -257,18 +227,13 @@ async def test_stream_meta_contains_context_docs(
 
 @pytest.mark.asyncio
 async def test_non_streaming_still_returns_json(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """POST /generate with stream=false returns JSON (backward compat)."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
     mock_llm.generate = AsyncMock(return_value="Fix applied.")
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "VPN Issue",
@@ -287,24 +252,19 @@ async def test_non_streaming_still_returns_json(
 
 @pytest.mark.asyncio
 async def test_stream_log_includes_stream_flag(
-    stream_app: Any,
+    stream_app: FastAPI,
     stream_client: AsyncClient,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Generate request log should include stream=True."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def fake_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         yield "token"
 
     mock_llm.generate_stream = fake_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     with caplog.at_level(logging.INFO, logger="app.routers.generate"):
         await stream_client.post("/generate", json={
@@ -323,22 +283,17 @@ async def test_stream_log_includes_stream_flag(
 
 @pytest.mark.asyncio
 async def test_stream_response_headers(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """SSE response should have correct cache and buffering headers."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def fake_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         yield "x"
 
     mock_llm.generate_stream = fake_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "Test",
@@ -355,7 +310,7 @@ async def test_stream_response_headers(
 
 @pytest.mark.asyncio
 async def test_stream_context_prep_failure_returns_sse_error(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """If _prepare_context fails, streaming returns SSE error, not JSON 503."""
     mock_rag = MagicMock()
@@ -363,11 +318,8 @@ async def test_stream_context_prep_failure_returns_sse_error(
         side_effect=ConnectionError("Embed server down"),
     )
     mock_llm = MagicMock()
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "Test",
@@ -391,23 +343,18 @@ async def test_stream_context_prep_failure_returns_sse_error(
 
 @pytest.mark.asyncio
 async def test_stream_unexpected_error_yields_internal_error(
-    stream_app: Any, stream_client: AsyncClient,
+    stream_app: FastAPI, stream_client: AsyncClient,
 ) -> None:
     """An unexpected exception during streaming yields INTERNAL_ERROR SSE event."""
-    mock_rag = MagicMock()
-    mock_rag.retrieve = AsyncMock(return_value=[])
-    mock_llm = MagicMock()
+    mock_rag, mock_llm, _ = create_mock_services()
 
     async def exploding_stream(prompt: str, model: str):  # noqa: ANN202, ARG001
         yield "partial"
         raise RuntimeError("something unexpected broke")
 
     mock_llm.generate_stream = exploding_stream
-    mock_ms = _mock_ms_docs()
-
-    stream_app.state.rag_service = mock_rag
-    stream_app.state.llm_service = mock_llm
-    stream_app.state.ms_docs_service = mock_ms
+    mock_ms = mock_ms_docs()
+    apply_services(stream_app, mock_rag, mock_llm, mock_ms)
 
     response = await stream_client.post("/generate", json={
         "ticket_subject": "Test",
