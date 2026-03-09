@@ -117,7 +117,7 @@ async def test_update_article_not_found() -> None:
         })
 
     assert resp.status_code == 404
-    assert "not found" in resp.json()["detail"].lower()
+    assert "not found" in resp.json()["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -146,7 +146,7 @@ async def test_update_article_non_manual() -> None:
         })
 
     assert resp.status_code == 403
-    assert "manual" in resp.json()["detail"].lower()
+    assert "manual" in resp.json()["message"].lower()
 
 
 @pytest.mark.asyncio

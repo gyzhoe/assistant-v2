@@ -266,7 +266,7 @@ async def list_articles(
     )
 
 
-@router.post("/articles", response_model=CreateArticleResponse)
+@router.post("/articles", response_model=CreateArticleResponse, status_code=201)
 async def create_article(
     request: Request, body: CreateArticleRequest,
 ) -> CreateArticleResponse:

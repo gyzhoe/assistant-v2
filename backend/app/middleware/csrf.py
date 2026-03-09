@@ -113,7 +113,10 @@ class CSRFMiddleware:
                 "CSRF validation failed on %s %s — missing token",
                 method, path,
             )
-            await send_json_error(send, 403, {"detail": "CSRF token missing."})
+            await send_json_error(
+                send, 403,
+                {"message": "CSRF token missing.", "error_code": "FORBIDDEN"},
+            )
             return
 
         if not secrets.compare_digest(csrf_cookie, csrf_header):
@@ -121,7 +124,10 @@ class CSRFMiddleware:
                 "CSRF validation failed on %s %s — token mismatch",
                 method, path,
             )
-            await send_json_error(send, 403, {"detail": "CSRF token mismatch."})
+            await send_json_error(
+                send, 403,
+                {"message": "CSRF token mismatch.", "error_code": "FORBIDDEN"},
+            )
             return
 
         await self.app(scope, receive, send)

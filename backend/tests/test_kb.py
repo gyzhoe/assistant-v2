@@ -257,7 +257,7 @@ async def test_get_article_not_found() -> None:
     async with _fresh_client(empty) as ac:
         resp = await ac.get("/kb/articles/nonexistent")
         assert resp.status_code == 404
-        assert "not found" in resp.json()["detail"].lower()
+        assert "not found" in resp.json()["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -297,7 +297,7 @@ async def test_delete_article_not_found() -> None:
     async with _fresh_client(empty) as ac:
         resp = await ac.delete("/kb/articles/nonexistent", headers=_EXT_HEADERS)
         assert resp.status_code == 404
-        assert "not found" in resp.json()["detail"].lower()
+        assert "not found" in resp.json()["message"].lower()
 
 
 @pytest.mark.asyncio

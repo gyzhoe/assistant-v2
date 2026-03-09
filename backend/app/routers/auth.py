@@ -61,7 +61,10 @@ async def login(request: Request) -> JSONResponse:
     except (ValueError, TypeError):
         return JSONResponse(
             status_code=422,
-            content={"detail": "Request body must be valid JSON."},
+            content={
+                "message": "Request body must be valid JSON.",
+                "error_code": "VALIDATION_ERROR",
+            },
         )
     provided_token: str = body.get("token", "") if isinstance(body, dict) else ""
 
@@ -78,7 +81,10 @@ async def login(request: Request) -> JSONResponse:
             audit_log("login", client_ip=client_ip, outcome="failure")
             return JSONResponse(
                 status_code=401,
-                content={"detail": "Invalid API token."},
+                content={
+                    "message": "Invalid API token.",
+                    "error_code": "UNAUTHORIZED",
+                },
             )
 
     max_age = settings.session_max_age

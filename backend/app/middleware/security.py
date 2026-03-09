@@ -23,6 +23,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
 from app.middleware.asgi_utils import get_client_ip, get_header, send_json_error
+from app.routers.auth import get_session_id_from_headers, session_store
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +78,6 @@ class APITokenMiddleware:
             return
 
         # Method 2: Valid session cookie (management SPA)
-        from app.routers.auth import get_session_id_from_headers, session_store
-
         raw_headers: list[tuple[bytes, bytes]] = scope.get("headers", [])
         session_id = get_session_id_from_headers(raw_headers)
         if session_id:
@@ -92,7 +91,10 @@ class APITokenMiddleware:
         await send_json_error(
             send,
             401,
-            {"detail": "Unauthorized. Missing or invalid credentials."},
+            {
+                "message": "Unauthorized. Missing or invalid credentials.",
+                "error_code": "UNAUTHORIZED",
+            },
         )
 
 
@@ -206,7 +208,7 @@ class RateLimitMiddleware:
                     send,
                     429,
                     {
-                        "detail": f"Rate limit exceeded. Max {limit} requests per minute.",
+                        "message": f"Rate limit exceeded. Max {limit} requests per minute.",
                         "error_code": "RATE_LIMITED",
                     },
                 )
@@ -313,7 +315,7 @@ class RequestSizeLimitMiddleware:
             send,
             413,
             {
-                "detail": f"Request body too large. Max {self._max_bytes} bytes.",
+                "message": f"Request body too large. Max {self._max_bytes} bytes.",
                 "error_code": "PAYLOAD_TOO_LARGE",
             },
         )

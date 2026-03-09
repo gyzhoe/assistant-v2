@@ -120,7 +120,7 @@ async def test_models_llm_down_returns_503(client: AsyncClient) -> None:
     resp = await client.get("/models")
     assert resp.status_code == 503
     data = resp.json()
-    assert data["detail"]["error_code"] == "LLM_DOWN"
+    assert data["error_code"] == "LLM_DOWN"
 
 
 @pytest.mark.asyncio
@@ -139,8 +139,8 @@ async def test_models_http_error_returns_502(client: AsyncClient) -> None:
     resp = await client.get("/models")
     assert resp.status_code == 502
     data = resp.json()
-    assert data["detail"]["error_code"] == "MODEL_ERROR"
-    assert "500" in data["detail"]["message"]
+    assert data["error_code"] == "MODEL_ERROR"
+    assert "500" in data["message"]
 
 
 @pytest.mark.asyncio
@@ -155,7 +155,7 @@ async def test_models_timeout_returns_503(client: AsyncClient) -> None:
     resp = await client.get("/models")
     assert resp.status_code == 503
     data = resp.json()
-    assert data["detail"]["error_code"] == "LLM_DOWN"
+    assert data["error_code"] == "LLM_DOWN"
 
 
 # ── GET /models includes model_info ──────────────────────────────

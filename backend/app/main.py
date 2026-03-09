@@ -5,7 +5,7 @@ from pathlib import Path
 
 import chromadb
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -143,6 +143,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     sync_embed_client.close()
 
 
+_STATUS_TO_ERROR_CODE: dict[int, str] = {
+    400: ErrorCode.VALIDATION_ERROR,
+    401: ErrorCode.UNAUTHORIZED,
+    403: ErrorCode.FORBIDDEN,
+    404: ErrorCode.NOT_FOUND,
+    409: ErrorCode.CONFLICT,
+    413: ErrorCode.PAYLOAD_TOO_LARGE,
+    422: ErrorCode.VALIDATION_ERROR,
+    429: ErrorCode.RATE_LIMITED,
+    500: ErrorCode.INTERNAL_ERROR,
+    502: ErrorCode.MODEL_ERROR,
+    503: ErrorCode.SERVICE_UNAVAILABLE,
+}
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="AI Helpdesk Assistant Backend",
@@ -186,6 +201,32 @@ def create_app() -> FastAPI:
     app.add_middleware(UnhandledExceptionMiddleware)
 
     # --- Global exception handlers ---
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request, exc: HTTPException,
+    ) -> JSONResponse:
+        """Normalize all HTTPException responses to {message, error_code}."""
+        detail = exc.detail
+
+        # Already a dict with error_code — use it directly
+        if isinstance(detail, dict) and "error_code" in detail:
+            message = str(detail.get("message") or detail.get("detail", ""))
+            code = str(detail["error_code"])
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"message": message, "error_code": code},
+            )
+
+        # Plain string detail — map status code to error code
+        message = str(detail) if detail else "An error occurred"
+        code = _STATUS_TO_ERROR_CODE.get(
+            exc.status_code, ErrorCode.INTERNAL_ERROR,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"message": message, "error_code": code},
+        )
 
     @app.exception_handler(ConnectionError)
     async def connection_error_handler(

@@ -108,7 +108,7 @@ async def test_ingest_url_ssrf_returns_422() -> None:
             )
 
     assert resp.status_code == 422
-    assert "private IP" in resp.json()["detail"]
+    assert "private IP" in resp.json()["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ async def test_ingest_url_invalid_content_type_returns_422() -> None:
             )
 
     assert resp.status_code == 422
-    assert "image/png" in resp.json()["detail"]
+    assert "image/png" in resp.json()["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +148,8 @@ async def test_ingest_url_too_large_returns_413() -> None:
             )
 
     assert resp.status_code == 413
-    detail = resp.json()["detail"]
-    assert "PAYLOAD_TOO_LARGE" in detail.get("error_code", "")
+    data = resp.json()
+    assert data["error_code"] == "PAYLOAD_TOO_LARGE"
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ async def test_ingest_url_embed_down_returns_503() -> None:
             )
 
     assert resp.status_code == 503
-    assert "Embedding server" in resp.json()["detail"]
+    assert "Embedding server" in resp.json()["message"]
 
 
 # ---------------------------------------------------------------------------

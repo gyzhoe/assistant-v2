@@ -119,7 +119,7 @@ async def test_post_to_kb_without_csrf_token_is_rejected() -> None:
             json={"title": "Test", "content": "Test content"},
         )
         assert resp.status_code == 403
-        assert "CSRF" in resp.json()["detail"]
+        assert "CSRF" in resp.json()["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +155,8 @@ async def test_post_to_feedback_with_valid_csrf_passes() -> None:
             },
             headers={"X-CSRF-Token": csrf_token},
         )
-        # Should reach the router (200) not be blocked by CSRF (403)
-        assert resp.status_code == 200
+        # Should reach the router (201) not be blocked by CSRF (403)
+        assert resp.status_code == 201
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +176,7 @@ async def test_post_with_mismatched_csrf_token_is_rejected() -> None:
             headers={"X-CSRF-Token": "wrong-token-value"},
         )
         assert resp.status_code == 403
-        assert "mismatch" in resp.json()["detail"].lower()
+        assert "mismatch" in resp.json()["message"].lower()
 
 
 # ---------------------------------------------------------------------------

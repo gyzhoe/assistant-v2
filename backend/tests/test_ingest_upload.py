@@ -142,7 +142,7 @@ async def test_upload_invalid_extension_returns_422() -> None:
             files={"file": ("doc.docx", io.BytesIO(b"fake"), "application/octet-stream")},
         )
         assert resp.status_code == 422
-        assert "Unsupported file type" in resp.json()["detail"]
+        assert "Unsupported file type" in resp.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -153,7 +153,7 @@ async def test_upload_empty_file_returns_422() -> None:
             files={"file": ("empty.json", io.BytesIO(b""), "application/json")},
         )
         assert resp.status_code == 422
-        assert "empty" in resp.json()["detail"].lower()
+        assert "empty" in resp.json()["message"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -173,8 +173,8 @@ async def test_upload_oversized_file_returns_413() -> None:
                 files={"file": ("big.json", io.BytesIO(big_content), "application/json")},
             )
             assert resp.status_code == 413
-            detail = resp.json()["detail"]
-            assert "PAYLOAD_TOO_LARGE" in detail.get("error_code", "")
+            data = resp.json()
+            assert data["error_code"] == "PAYLOAD_TOO_LARGE"
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ async def test_upload_embed_down_returns_503() -> None:
                 files={"file": ("tickets.json", io.BytesIO(content), "application/json")},
             )
             assert resp.status_code == 503
-            assert "Embedding server" in resp.json()["detail"]
+            assert "Embedding server" in resp.json()["message"]
 
 
 @pytest.mark.asyncio
@@ -241,7 +241,7 @@ async def test_upload_corrupt_file_returns_422() -> None:
                 files={"file": ("bad.json", io.BytesIO(b"not json"), "application/json")},
             )
             assert resp.status_code == 422
-            assert "Bad JSON" in resp.json()["detail"]
+            assert "Bad JSON" in resp.json()["message"]
 
 
 # ---------------------------------------------------------------------------
