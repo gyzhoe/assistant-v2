@@ -492,13 +492,13 @@ body {
 
 .source-pdf  { background: rgba(209,36,47,0.08);  color: #a8262f; }
 .source-html { background: rgba(26,127,55,0.1);   color: #1a7f37; }
-.source-url  { background: rgba(9,105,218,0.1);   color: #0969da; }
+.source-url  { background: var(--accent-subtle);   color: var(--accent); }
 .source-json { background: rgba(154,103,0,0.1);   color: #9a6700; }
 .source-csv  { background: rgba(130,80,223,0.1);  color: #8250df; }
 
 [data-theme='dark'] .source-pdf  { background: rgba(248,81,73,0.12);  color: #f85149; }
 [data-theme='dark'] .source-html { background: rgba(63,185,80,0.12);  color: #3fb950; }
-[data-theme='dark'] .source-url  { background: rgba(68,147,248,0.12); color: #4493f8; }
+[data-theme='dark'] .source-url  { background: var(--accent-subtle); color: var(--accent); }
 [data-theme='dark'] .source-json { background: rgba(210,153,34,0.12); color: #d29922; }
 [data-theme='dark'] .source-csv  { background: rgba(188,140,255,0.12);color: #bc8cff; }
 
