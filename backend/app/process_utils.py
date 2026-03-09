@@ -140,7 +140,7 @@ def _get_system_ram_gb() -> float:
 
         stat = MEMORYSTATUSEX()
         stat.dwLength = ctypes.sizeof(stat)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))  # type: ignore[attr-defined]
         return float(stat.ullTotalPhys) / (1024 ** 3)
     except Exception:
         return 0.0
