@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from app.services.embed_service import EmbedService
 from app.services.llm_service import LLMService
@@ -28,7 +28,9 @@ def setup_app_state(app: Any) -> None:
         app.state.current_llm_model = "qwen3.5:9b"
 
     app.state.llm_service = LLMService(client=mock_llm_client)
-    app.state.embed_service = EmbedService(client=mock_embed_client)
+    embed_svc = EmbedService(client=mock_embed_client)
+    embed_svc.embed = AsyncMock(return_value=[0.1] * 768)
+    app.state.embed_service = embed_svc
     app.state.sync_embed_service = EmbedService(client=mock_sync_embed_client)
     app.state.ms_docs_service = MicrosoftDocsService(client=mock_llm_client)
     app.state.rag_service = RAGService(

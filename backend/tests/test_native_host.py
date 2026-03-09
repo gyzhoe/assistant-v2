@@ -28,7 +28,7 @@ def _write_env(env_dir, content: str) -> None:
 
 def _get_token(env_dir):
     """Call get_token with patched BACKEND_DIR."""
-    with patch("native_host.BACKEND_DIR", str(env_dir)):
+    with patch("native_host.BACKEND_DIR", env_dir):
         return native_host.get_token()
 
 
@@ -165,7 +165,7 @@ class TestStopBackend:
     def test_kills_found_pids_and_llm(self):
         with (
             patch("native_host.find_pids_on_port") as mock_find,
-            patch("native_host.subprocess.run") as mock_run,
+            patch("native_host.kill_pids") as mock_kill_pids,
             patch("native_host.kill_llama_server") as mock_kill_llm,
         ):
             # First call for port 8765
@@ -176,15 +176,15 @@ class TestStopBackend:
         assert result["status"] == "stopped"
         assert result["pids"] == [5432]
         assert result["llm_stopped"] is True
-        # Backend PID killed via subprocess.run
-        assert mock_run.call_count == 1
+        # Backend PIDs killed via kill_pids
+        mock_kill_pids.assert_called_once_with([5432])
         # LLM killed via kill_llama_server
         mock_kill_llm.assert_called_once()
 
     def test_still_kills_llm_when_no_backend_pids(self):
         with (
             patch("native_host.find_pids_on_port", return_value=[]),
-            patch("native_host.subprocess.run") as mock_run,
+            patch("native_host.kill_pids") as mock_kill_pids,
             patch("native_host.kill_llama_server") as mock_kill_llm,
         ):
             result = native_host.stop_backend()
@@ -194,7 +194,7 @@ class TestStopBackend:
         assert result["pids"] == []
         assert result["llm_stopped"] is True
         # No backend PID kills
-        assert mock_run.call_count == 0
+        mock_kill_pids.assert_not_called()
         mock_kill_llm.assert_called_once()
 
 

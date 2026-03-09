@@ -233,7 +233,7 @@ async def test_llm_start_starts_only_embed_when_llm_up() -> None:
     ) as ac:
         with (
             patch("app.routers.health.is_port_listening", return_value=False),
-            patch("app.routers.health.kill_legacy_ollama"),
+            patch("app.routers.health._legacy_ollama_checked", True),
             patch("app.routers.health.subprocess.Popen") as mock_popen,
             patch("app.routers.health.resolve_llama_exe", return_value="llama-server"),
             patch("app.routers.health.detect_gpu_config", return_value=("-1", "8192")),

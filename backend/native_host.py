@@ -15,23 +15,24 @@ import subprocess
 import sys
 
 from app.process_utils import (
+    APP_DIR,
+    BACKEND_DIR,
     BACKEND_PORT,
+    BUNDLED_LLAMA_SERVER,
     CREATION_FLAGS,
     EMBED_GGUF_FILE,
     EMBED_PORT,
     LLM_PORT,
+    MODELS_DIR,
     detect_gpu_config,
     find_pids_on_port,
     is_port_listening,
     kill_legacy_ollama,
     kill_llama_server,
+    kill_pids,
 )
 
-BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-APP_DIR = os.path.dirname(BACKEND_DIR)
-LLAMA_SERVER_EXE = os.path.join(APP_DIR, "tools", "llama-server.exe")
-MODELS_DIR = os.path.join(APP_DIR, "models")
-LOG_FILE = os.path.join(BACKEND_DIR, "native_host.log")
+LOG_FILE = os.path.join(str(BACKEND_DIR), "native_host.log")
 
 
 def log(msg: str) -> None:
@@ -56,7 +57,8 @@ def send_message(msg: dict) -> None:
 
 
 def start_backend() -> dict:
-    venv_python = os.path.join(BACKEND_DIR, ".venv", "Scripts", "python.exe")
+    backend_dir = str(BACKEND_DIR)
+    venv_python = os.path.join(backend_dir, ".venv", "Scripts", "python.exe")
     if not os.path.exists(venv_python):
         log(f"venv not found at {venv_python}")
         return {"ok": False, "error": "Backend venv not found. Run setup first."}
@@ -74,16 +76,16 @@ def start_backend() -> dict:
     if not is_port_listening(LLM_PORT):
         llm_started = _start_llama_servers()
 
-    log_out = os.path.join(BACKEND_DIR, "backend_stdout.log")
-    log_err = os.path.join(BACKEND_DIR, "backend_stderr.log")
-    log(f"Starting backend with {venv_python}, cwd={BACKEND_DIR}")
+    log_out = os.path.join(backend_dir, "backend_stdout.log")
+    log_err = os.path.join(backend_dir, "backend_stderr.log")
+    log(f"Starting backend with {venv_python}, cwd={backend_dir}")
 
     try:
         with open(log_out, "w") as fout, open(log_err, "w") as ferr:
             proc = subprocess.Popen(
                 [venv_python, "-m", "uvicorn", "app.main:app",
                  "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
-                cwd=BACKEND_DIR,
+                cwd=backend_dir,
                 stdout=fout,
                 stderr=ferr,
                 creationflags=CREATION_FLAGS,
@@ -107,12 +109,12 @@ def _start_llama_servers(
         skip_llm: If True, skip starting the LLM server (already running).
         skip_embed: If True, skip starting the embed server (already running).
     """
-    llama_exe = LLAMA_SERVER_EXE if os.path.exists(LLAMA_SERVER_EXE) else "llama-server"
+    llama_exe = str(BUNDLED_LLAMA_SERVER) if BUNDLED_LLAMA_SERVER.exists() else "llama-server"
     log(f"Starting llama-server instances: {llama_exe} (skip_llm={skip_llm}, skip_embed={skip_embed})")
 
     n_gpu_layers, ctx_size = detect_gpu_config(log_fn=log)
-    logs_dir = os.path.join(APP_DIR, "logs")
-    os.makedirs(logs_dir, exist_ok=True)
+    logs_dir = APP_DIR / "logs"
+    logs_dir.mkdir(exist_ok=True)
 
     llm_log = None
     embed_log = None
@@ -122,8 +124,8 @@ def _start_llama_servers(
             from app.config import settings
             from app.constants import MODEL_GGUF_FILES
             gguf_name = MODEL_GGUF_FILES.get(settings.default_model, "Qwen3.5-9B-Q4_K_M.gguf")
-            llm_model = os.path.join(MODELS_DIR, gguf_name)
-            llm_log = open(os.path.join(logs_dir, "llm_server.log"), "w")  # noqa: SIM115
+            llm_model = str(MODELS_DIR / gguf_name)
+            llm_log = open(str(logs_dir / "llm_server.log"), "w")  # noqa: SIM115
             subprocess.Popen(
                 [
                     llama_exe, "-m", llm_model,
@@ -138,8 +140,8 @@ def _start_llama_servers(
 
         if not skip_embed:
             # Embed server (small model — always offload same as LLM)
-            embed_model = os.path.join(MODELS_DIR, EMBED_GGUF_FILE)
-            embed_log = open(os.path.join(logs_dir, "embed_server.log"), "w")  # noqa: SIM115
+            embed_model = str(MODELS_DIR / EMBED_GGUF_FILE)
+            embed_log = open(str(logs_dir / "embed_server.log"), "w")  # noqa: SIM115
             subprocess.Popen(
                 [
                     llama_exe, "-m", embed_model,
@@ -163,7 +165,7 @@ def _start_llama_servers(
 
 def get_token() -> dict:
     """Read API_TOKEN from backend/.env for extension auto-configuration."""
-    env_path = os.path.join(BACKEND_DIR, ".env")
+    env_path = str(BACKEND_DIR / ".env")
     if not os.path.exists(env_path):
         log(f".env not found at {env_path}")
         return {"ok": False, "error": ".env file not found"}
@@ -213,16 +215,7 @@ def stop_backend() -> dict:
         log("stop_backend: no process found on port 8765")
     else:
         log(f"stop_backend: killing PIDs {pids}")
-        for pid in pids:
-            try:
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=CREATION_FLAGS,
-                )
-            except Exception as e:
-                log(f"stop_backend: failed to kill PID {pid}: {e}")
+        kill_pids(pids)
 
     log("stop_backend: also killing llama-server (symmetric with start_backend)")
     kill_llama_server()

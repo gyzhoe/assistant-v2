@@ -40,23 +40,30 @@ async def _prepare_context(
     ms_docs: MicrosoftDocsService = request.app.state.ms_docs_service
 
     query = f"{body.ticket_subject}\n\n{body.ticket_description}".strip()
+    effective_query = query or "general helpdesk inquiry"
     web_search_keywords = f"{body.ticket_subject} {body.category}".strip()
     include_web = body.include_web_context and settings.microsoft_docs_enabled
+
+    # Embed the query ONCE and reuse for RAG + few-shot retrieval
+    embed_svc: EmbedService = request.app.state.embed_service
+    embedding = await embed_svc.embed(effective_query)
 
     if include_web:
         context_docs, web_docs = await asyncio.gather(
             rag.retrieve(
-                query=query or "general helpdesk inquiry",
+                query=effective_query,
                 max_docs=body.max_context_docs,
                 category=body.category,
+                embedding=embedding,
             ),
             ms_docs.search(web_search_keywords),
         )
     else:
         context_docs = await rag.retrieve(
-            query=query or "general helpdesk inquiry",
+            query=effective_query,
             max_docs=body.max_context_docs,
             category=body.category,
+            embedding=embedding,
         )
         web_docs = []
 
@@ -82,9 +89,8 @@ async def _prepare_context(
         else:
             context_text = web_context
 
-    embed_svc: EmbedService = request.app.state.embed_service
     few_shot_examples = await _get_dynamic_examples(
-        chroma_client, query, body.category, embed_svc,
+        chroma_client, effective_query, body.category, embedding,
     )
 
     prompt = _build_prompt(body, context_text, few_shot_examples)
@@ -218,10 +224,11 @@ async def _get_dynamic_examples(
     chroma_client: ClientAPI,
     query: str,
     category: str,
-    embed_svc: EmbedService,
+    embedding: list[float],
 ) -> list[dict[str, str]]:
     """Retrieve good-rated replies from ChromaDB for dynamic few-shot prompting.
 
+    Accepts a pre-computed *embedding* vector to avoid redundant embed calls.
     Returns a list of dicts with 'ticket_subject' and 'reply' keys (max 2).
     Falls back to empty list on any error (collection missing, empty, etc.).
     """
@@ -233,7 +240,6 @@ async def _get_dynamic_examples(
         if count == 0:
             return []
 
-        embedding = await embed_svc.embed(query)
         n_results = min(2, count)
 
         results = await asyncio.to_thread(

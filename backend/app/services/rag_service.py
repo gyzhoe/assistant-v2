@@ -20,15 +20,23 @@ class RAGService:
         self.embed_svc = embed_svc
 
     async def retrieve(
-        self, query: str, max_docs: int = 5, category: str = "",
+        self,
+        query: str,
+        max_docs: int = 5,
+        category: str = "",
+        embedding: list[float] | None = None,
     ) -> list[ContextDoc]:
-        """Embed query, search both collections, merge and rank by score.
+        """Search both collections, merge and rank by score.
+
+        If *embedding* is provided, it is used directly (skipping the embed
+        call).  Otherwise the query is embedded via ``self.embed_svc``.
 
         If *category* is non-empty, KB retrieval uses a two-phase approach:
         phase 1 queries with a tag filter, phase 2 fills remaining slots
         without a filter (deduplicating against phase 1).
         """
-        embedding = await self.embed_svc.embed(query)
+        if embedding is None:
+            embedding = await self.embed_svc.embed(query)
 
         kb_target = max_docs - max_docs // 2  # KB gets slightly more
         ticket_target = max_docs // 2 + 1
