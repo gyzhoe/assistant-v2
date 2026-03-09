@@ -116,10 +116,7 @@ jobs:
     needs: extension-build
     strategy:
       matrix:
-        type: ${{ fromJson(
-          inputs.installer_type == 'both' && '["online", "offline"]' ||
-          format('["{0}"]', inputs.installer_type)
-          ) }}
+        type: ${{ fromJson(inputs.installer_type == 'both' && '["online","offline"]' || format('["{0}"]', inputs.installer_type)) }}
     steps:
       - uses: actions/checkout@v6
         with:
