@@ -155,7 +155,7 @@ jobs:
 
       - name: Cache installer dependencies
         id: deps-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: installer/deps
           key: installer-deps-llama-b8215-cuda124-vulkan-cpu-uv-0.10.6-py-3.13.2-${{ hashFiles('backend/requirements-lock.txt') }}
